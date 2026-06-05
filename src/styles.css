@@ -391,3 +391,13 @@ button.danger {
   .ai-generator-grid { grid-template-columns: 1fr; }
   .filming-requirements-heading-actions { justify-content: flex-start; }
 }
+
+.reference-links-section {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.reference-links-section li {
+  overflow-wrap: anywhere;
+}
