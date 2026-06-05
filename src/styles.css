@@ -296,3 +296,67 @@ button.danger {
   white-space: nowrap;
   padding: 9px 12px;
 }
+
+.filming-requirements-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.ai-status {
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.ai-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.ai-generator-panel {
+  border: 1px solid #ccfbf1;
+  border-radius: 18px;
+  background: #f8fffd;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.ai-generator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.ai-generator-grid label {
+  color: #475569;
+  display: grid;
+  font-weight: 800;
+  gap: 8px;
+}
+
+.ai-generator-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.ai-generator-grid input,
+.ai-generator-grid textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .ai-generator-grid { grid-template-columns: 1fr; }
+  .filming-requirements-heading-actions { justify-content: flex-start; }
+}

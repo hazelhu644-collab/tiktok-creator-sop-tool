@@ -33,6 +33,34 @@ const priorityLabel: Record<Priority, string> = {
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = 'tiktokCreatorSop.filmingRequirements';
 
+type AiFilmingRequirementsForm = {
+  productName: string;
+  sellingPoints: string;
+  videoCount: string;
+  durationRequirement: string;
+  targetPetOrScene: string;
+  mustShowShots: string;
+  avoidShots: string;
+  referenceLinks: string;
+};
+
+type AiFilmingRequirementsResponse = {
+  productName: string;
+  requirements: string[];
+  priorities: string[];
+};
+
+const emptyAiFilmingRequirementsForm: AiFilmingRequirementsForm = {
+  productName: '',
+  sellingPoints: '',
+  videoCount: '',
+  durationRequirement: '',
+  targetPetOrScene: '',
+  mustShowShots: '',
+  avoidShots: '',
+  referenceLinks: '',
+};
+
 const scenarioLabel: Record<string, string> = {
   'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
   'Sample Delivered Follow-up': '样品到货后催拍',
@@ -96,6 +124,11 @@ function App() {
   const [filmingProductNameDraft, setFilmingProductNameDraft] = useState(() => defaultCreatorFilmingRequirements.productName);
   const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.requirements));
   const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
+  const [isAiFormOpen, setIsAiFormOpen] = useState(false);
+  const [aiForm, setAiForm] = useState<AiFilmingRequirementsForm>(() => emptyAiFilmingRequirementsForm);
+  const [aiStatusMessage, setAiStatusMessage] = useState('');
+  const [aiErrorMessage, setAiErrorMessage] = useState('');
+  const [isGeneratingAiDraft, setIsGeneratingAiDraft] = useState(false);
 
   const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
   const videoProgressHint = useMemo(() => buildVideoProgressHint(requiredVideos), [requiredVideos]);
@@ -163,6 +196,71 @@ function App() {
     setMessage(null);
   }
 
+  function handleOpenAiForm() {
+    setAiForm({
+      ...emptyAiFilmingRequirementsForm,
+      productName: filmingProductNameDraft.trim() || filmingRequirements.productName,
+      videoCount: String(requiredVideos),
+    });
+    setAiStatusMessage('');
+    setAiErrorMessage('');
+    setIsAiFormOpen(true);
+  }
+
+  function handleCancelAiForm() {
+    setIsAiFormOpen(false);
+    setAiStatusMessage('');
+    setAiErrorMessage('');
+  }
+
+  function updateAiFormField(field: keyof AiFilmingRequirementsForm, value: string) {
+    setAiForm((currentForm) => ({ ...currentForm, [field]: value }));
+  }
+
+  async function handleGenerateAiFilmingRequirementsDraft() {
+    setIsGeneratingAiDraft(true);
+    setAiStatusMessage('AI 正在生成拍摄要求...');
+    setAiErrorMessage('');
+
+    try {
+      const response = await fetch('/api/generate-filming-requirements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiForm),
+      });
+      const responseBody = await response.json() as Partial<AiFilmingRequirementsResponse> & { error?: string };
+
+      if (!response.ok) {
+        throw new Error(responseBody.error || 'AI 生成失败：请稍后重试。');
+      }
+
+      const nextProductName = typeof responseBody.productName === 'string' ? responseBody.productName : aiForm.productName;
+      const nextRequirements = Array.isArray(responseBody.requirements)
+        ? responseBody.requirements.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : [];
+      const nextPriorities = Array.isArray(responseBody.priorities)
+        ? responseBody.priorities.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : [];
+
+      if (nextRequirements.length === 0 || nextPriorities.length === 0) {
+        throw new Error('AI 生成失败：返回内容缺少拍摄要求或内容重点。');
+      }
+
+      setFilmingProductNameDraft(nextProductName);
+      setFilmingRequirementsDraft(toRequirementsText(nextRequirements));
+      setKeyContentPointsDraft(toRequirementsText(nextPriorities));
+      setIsEditingFilmingRequirements(true);
+      setIsAiFormOpen(false);
+      setAiStatusMessage('已生成拍摄要求草稿，你可以手动修改后保存。');
+      setMessage(null);
+    } catch (error) {
+      setAiStatusMessage('');
+      setAiErrorMessage(error instanceof Error ? error.message : 'AI 生成失败：请稍后重试。');
+    } finally {
+      setIsGeneratingAiDraft(false);
+    }
+  }
+
   function handleAddCreator() {
     const newRow = createBlankCreatorRow(filmingRequirements.productName, requiredVideos);
 
@@ -217,10 +315,59 @@ function App() {
         <div className="brief-card">
           <div className="filming-requirements-heading">
             <h2>达人拍摄要求</h2>
-            {!isEditingFilmingRequirements && (
-              <button type="button" className="secondary compact" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button>
-            )}
+            <div className="filming-requirements-heading-actions">
+              <button type="button" className="secondary compact" onClick={handleOpenAiForm}>AI 生成拍摄要求</button>
+              {!isEditingFilmingRequirements && (
+                <button type="button" className="secondary compact" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button>
+              )}
+            </div>
           </div>
+          {aiStatusMessage && <p className="ai-status">{aiStatusMessage}</p>}
+          {aiErrorMessage && <p className="error ai-error">{aiErrorMessage}</p>}
+          {isAiFormOpen && (
+            <div className="ai-generator-panel">
+              <h3>AI 拍摄要求草稿生成</h3>
+              <p className="muted">填写产品信息后生成草稿。草稿只会填入下方编辑框，不会自动保存。</p>
+              <div className="ai-generator-grid">
+                <label>
+                  产品名称
+                  <input value={aiForm.productName} onChange={(event) => updateAiFormField('productName', event.target.value)} />
+                </label>
+                <label>
+                  目标视频数量
+                  <input value={aiForm.videoCount} onChange={(event) => updateAiFormField('videoCount', event.target.value)} />
+                </label>
+                <label>
+                  单条视频时长要求
+                  <input value={aiForm.durationRequirement} onChange={(event) => updateAiFormField('durationRequirement', event.target.value)} placeholder="例如：60 秒以上" />
+                </label>
+                <label>
+                  目标宠物 / 使用场景
+                  <input value={aiForm.targetPetOrScene} onChange={(event) => updateAiFormField('targetPetOrScene', event.target.value)} />
+                </label>
+                <label className="wide">
+                  产品卖点
+                  <textarea value={aiForm.sellingPoints} onChange={(event) => updateAiFormField('sellingPoints', event.target.value)} rows={3} />
+                </label>
+                <label className="wide">
+                  必须展示的画面
+                  <textarea value={aiForm.mustShowShots} onChange={(event) => updateAiFormField('mustShowShots', event.target.value)} rows={3} />
+                </label>
+                <label className="wide">
+                  不希望达人这样拍
+                  <textarea value={aiForm.avoidShots} onChange={(event) => updateAiFormField('avoidShots', event.target.value)} rows={3} />
+                </label>
+                <label className="wide">
+                  参考视频链接（可选）
+                  <textarea value={aiForm.referenceLinks} onChange={(event) => updateAiFormField('referenceLinks', event.target.value)} rows={2} />
+                </label>
+              </div>
+              <div className="filming-requirements-actions">
+                <button type="button" onClick={handleGenerateAiFilmingRequirementsDraft} disabled={isGeneratingAiDraft}>生成草稿</button>
+                <button type="button" className="secondary" onClick={handleCancelAiForm} disabled={isGeneratingAiDraft}>取消</button>
+              </div>
+            </div>
+          )}
           {isEditingFilmingRequirements ? (
             <div className="filming-requirements-editor">
               <label>
