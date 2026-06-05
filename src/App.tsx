@@ -33,8 +33,7 @@ const priorityLabel: Record<Priority, string> = {
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = 'tiktokCreatorSop.filmingRequirements';
 
-type AiFilmingRequirementsForm = {
-  productName: string;
+type ChatGptPromptHelperForm = {
   sellingPoints: string;
   videoCount: string;
   durationRequirement: string;
@@ -44,8 +43,7 @@ type AiFilmingRequirementsForm = {
   referenceLinks: string;
 };
 
-const emptyAiFilmingRequirementsForm: AiFilmingRequirementsForm = {
-  productName: '',
+const emptyChatGptPromptHelperForm: ChatGptPromptHelperForm = {
   sellingPoints: '',
   videoCount: '',
   durationRequirement: '',
@@ -129,8 +127,8 @@ function App() {
   const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.requirements));
   const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
   const [referenceLinksDraft, setReferenceLinksDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.referenceLinks ?? []));
-  const [isAiFormOpen, setIsAiFormOpen] = useState(false);
-  const [aiForm, setAiForm] = useState<AiFilmingRequirementsForm>(() => emptyAiFilmingRequirementsForm);
+  const [isPromptHelperOpen, setIsPromptHelperOpen] = useState(false);
+  const [promptHelperForm, setPromptHelperForm] = useState<ChatGptPromptHelperForm>(() => emptyChatGptPromptHelperForm);
   const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState('');
   const [promptCopyStatus, setPromptCopyStatus] = useState('');
 
@@ -203,42 +201,47 @@ function App() {
     setMessage(null);
   }
 
-  function handleOpenAiForm() {
-    setAiForm({
-      ...emptyAiFilmingRequirementsForm,
-      productName: filmingProductNameDraft.trim() || filmingRequirements.productName,
+  function handleOpenPromptHelper() {
+    setPromptHelperForm({
+      ...emptyChatGptPromptHelperForm,
       videoCount: String(requiredVideos),
       referenceLinks: toRequirementsText(filmingRequirements.referenceLinks ?? []),
     });
     setGeneratedChatGptPrompt('');
     setPromptCopyStatus('');
-    setIsAiFormOpen(true);
+    setIsPromptHelperOpen(true);
   }
 
-  function handleCancelAiForm() {
-    setIsAiFormOpen(false);
+  function handleClosePromptHelper() {
+    setIsPromptHelperOpen(false);
     setGeneratedChatGptPrompt('');
     setPromptCopyStatus('');
   }
 
-  function updateAiFormField(field: keyof AiFilmingRequirementsForm, value: string) {
-    setAiForm((currentForm) => ({ ...currentForm, [field]: value }));
+  function updatePromptHelperField(field: keyof ChatGptPromptHelperForm, value: string) {
+    setPromptHelperForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
-  function buildChatGptPrompt(form: AiFilmingRequirementsForm): string {
+  function getCurrentProductNameForPromptHelper() {
+    return isEditingFilmingRequirements
+      ? filmingProductNameDraft.trim() || filmingRequirements.productName
+      : filmingRequirements.productName;
+  }
+
+  function buildChatGptPrompt(form: ChatGptPromptHelperForm): string {
     const fieldValue = (value: string) => value.trim() || '请根据常见 TikTok Shop 达人合作需求补充';
 
     return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。
 
 【产品信息】
-- 产品名称：${fieldValue(form.productName)}
+- 产品名称：${fieldValue(getCurrentProductNameForPromptHelper())}
 - 产品卖点：${fieldValue(form.sellingPoints)}
 - 目标视频数量：${fieldValue(form.videoCount)}
 - 单条视频时长要求：${fieldValue(form.durationRequirement)}
 - 目标宠物 / 使用场景：${fieldValue(form.targetPetOrScene)}
 - 必须展示的画面：${fieldValue(form.mustShowShots)}
 - 不希望达人这样拍：${fieldValue(form.avoidShots)}
-- 参考视频链接（可选）：${form.referenceLinks.trim() || '无'}
+- 对标视频链接（可选）：${form.referenceLinks.trim() || '无'}
 
 请按以下结构输出，全部使用简体中文：
 1. 产品名称
@@ -254,7 +257,7 @@ function App() {
   }
 
   function handleGenerateChatGptPrompt() {
-    setGeneratedChatGptPrompt(buildChatGptPrompt(aiForm));
+    setGeneratedChatGptPrompt(buildChatGptPrompt(promptHelperForm));
     setPromptCopyStatus('');
   }
 
@@ -324,69 +327,11 @@ function App() {
           <div className="filming-requirements-heading">
             <h2>达人拍摄要求</h2>
             <div className="filming-requirements-heading-actions">
-              <button type="button" className="secondary compact" onClick={handleOpenAiForm}>生成 ChatGPT 提示词</button>
               {!isEditingFilmingRequirements && (
                 <button type="button" className="secondary compact" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button>
               )}
             </div>
           </div>
-          {isAiFormOpen && (
-            <div className="ai-generator-panel">
-              <h3>ChatGPT 提示词生成</h3>
-              <p className="muted">填写产品信息后，在浏览器本地生成可复制的 ChatGPT 提示词。</p>
-              <p className="ai-cost-note">当前版本不调用 API，不产生额外费用。你可以复制提示词到 ChatGPT 生成拍摄要求，再手动粘贴回来保存。</p>
-              <div className="ai-generator-grid">
-                <label>
-                  产品名称
-                  <input value={aiForm.productName} onChange={(event) => updateAiFormField('productName', event.target.value)} />
-                </label>
-                <label>
-                  目标视频数量
-                  <input value={aiForm.videoCount} onChange={(event) => updateAiFormField('videoCount', event.target.value)} />
-                </label>
-                <label>
-                  单条视频时长要求
-                  <input value={aiForm.durationRequirement} onChange={(event) => updateAiFormField('durationRequirement', event.target.value)} placeholder="例如：60 秒以上" />
-                </label>
-                <label>
-                  目标宠物 / 使用场景
-                  <input value={aiForm.targetPetOrScene} onChange={(event) => updateAiFormField('targetPetOrScene', event.target.value)} />
-                </label>
-                <label className="wide">
-                  产品卖点
-                  <textarea value={aiForm.sellingPoints} onChange={(event) => updateAiFormField('sellingPoints', event.target.value)} rows={3} />
-                </label>
-                <label className="wide">
-                  必须展示的画面
-                  <textarea value={aiForm.mustShowShots} onChange={(event) => updateAiFormField('mustShowShots', event.target.value)} rows={3} />
-                </label>
-                <label className="wide">
-                  不希望达人这样拍
-                  <textarea value={aiForm.avoidShots} onChange={(event) => updateAiFormField('avoidShots', event.target.value)} rows={3} />
-                </label>
-                <label className="wide">
-                  参考视频链接（可选）
-                  <textarea value={aiForm.referenceLinks} onChange={(event) => updateAiFormField('referenceLinks', event.target.value)} rows={2} />
-                </label>
-              </div>
-              <div className="filming-requirements-actions">
-                <button type="button" onClick={handleGenerateChatGptPrompt}>生成 ChatGPT 提示词</button>
-                <button type="button" className="secondary" onClick={handleCancelAiForm}>取消</button>
-              </div>
-              {generatedChatGptPrompt && (
-                <div className="chatgpt-prompt-output">
-                  <label>
-                    ChatGPT 提示词
-                    <textarea value={generatedChatGptPrompt} readOnly rows={14} />
-                  </label>
-                  <div className="filming-requirements-actions">
-                    <button type="button" onClick={handleCopyChatGptPrompt}>复制提示词</button>
-                  </div>
-                  {promptCopyStatus && <p className="ai-status">{promptCopyStatus}</p>}
-                </div>
-              )}
-            </div>
-          )}
           {isEditingFilmingRequirements ? (
             <div className="filming-requirements-editor">
               <label>
@@ -442,6 +387,73 @@ function App() {
               )}
             </>
           )}
+
+          <section className="prompt-helper-section" aria-labelledby="prompt-helper-title">
+            <div className="prompt-helper-heading">
+              <div>
+                <h3 id="prompt-helper-title">用 ChatGPT 辅助生成拍摄要求（可选）</h3>
+                <p className="muted">这个功能只会生成可复制的提示词，不会自动修改或保存拍摄要求。复制到 ChatGPT 生成结果后，再粘贴到上方「达人拍摄要求」里保存。</p>
+              </div>
+              {isPromptHelperOpen ? (
+                <button type="button" className="secondary compact" onClick={handleClosePromptHelper}>收起辅助生成</button>
+              ) : (
+                <button type="button" className="secondary compact" onClick={handleOpenPromptHelper}>展开辅助生成</button>
+              )}
+            </div>
+
+            {isPromptHelperOpen && (
+              <div className="ai-generator-panel">
+                <p className="ai-cost-note">当前版本不调用 API，不产生额外费用。提示词会使用上方「产品名称」作为产品名称。</p>
+                <div className="ai-generator-grid">
+                  <label className="wide">
+                    产品卖点
+                    <textarea value={promptHelperForm.sellingPoints} onChange={(event) => updatePromptHelperField('sellingPoints', event.target.value)} rows={3} />
+                  </label>
+                  <label>
+                    目标视频数量
+                    <input value={promptHelperForm.videoCount} onChange={(event) => updatePromptHelperField('videoCount', event.target.value)} />
+                  </label>
+                  <label>
+                    单条视频时长要求
+                    <input value={promptHelperForm.durationRequirement} onChange={(event) => updatePromptHelperField('durationRequirement', event.target.value)} placeholder="例如：60 秒以上" />
+                  </label>
+                  <label className="wide">
+                    目标宠物 / 使用场景
+                    <input value={promptHelperForm.targetPetOrScene} onChange={(event) => updatePromptHelperField('targetPetOrScene', event.target.value)} />
+                  </label>
+                  <label className="wide">
+                    必须展示的画面
+                    <textarea value={promptHelperForm.mustShowShots} onChange={(event) => updatePromptHelperField('mustShowShots', event.target.value)} rows={3} />
+                  </label>
+                  <label className="wide">
+                    不希望达人这样拍
+                    <textarea value={promptHelperForm.avoidShots} onChange={(event) => updatePromptHelperField('avoidShots', event.target.value)} rows={3} />
+                  </label>
+                  <label className="wide">
+                    对标视频链接（可选，每行一个）
+                    <textarea value={promptHelperForm.referenceLinks} onChange={(event) => updatePromptHelperField('referenceLinks', event.target.value)} rows={2} />
+                  </label>
+                </div>
+                <div className="filming-requirements-actions">
+                  <button type="button" onClick={handleGenerateChatGptPrompt}>生成可复制提示词</button>
+                </div>
+                {generatedChatGptPrompt && (
+                  <div className="chatgpt-prompt-output">
+                    <p className="ai-status">提示词已生成。请复制到 ChatGPT 使用。</p>
+                    <p className="prompt-next-step">下一步：复制提示词到 ChatGPT，生成结果后，把适合的内容粘贴到上方「拍摄要求」和「内容重点」里，再点击保存。</p>
+                    <label>
+                      ChatGPT 提示词
+                      <textarea value={generatedChatGptPrompt} readOnly rows={14} />
+                    </label>
+                    <div className="filming-requirements-actions">
+                      <button type="button" onClick={handleCopyChatGptPrompt}>复制提示词</button>
+                    </div>
+                    {promptCopyStatus && <p className="ai-status">{promptCopyStatus}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
         </div>
       </header>
 
