@@ -1,7 +1,8 @@
 import type { CreatorRow } from './types';
+import { withVideoProgressWarning } from './localData';
 import { normalizeText } from './sopRules';
 
-const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount'>, string[]> = {
+const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning'>, string[]> = {
   username: ['creator username', 'username', 'creator', 'creator handle'],
   profileLink: ['creator profile link', 'profile link', 'creator link', 'profile'],
   contactMethod: ['contact method', 'contact', 'channel'],
@@ -31,7 +32,7 @@ export function normalizeRecord(record: Record<string, unknown>, index: number):
   const lastFollowUpValue = pickValue(record, FOLLOW_UP_ALIASES);
   const followUpCount = Number.parseInt(lastFollowUpValue || '0', 10);
 
-  return {
+  return withVideoProgressWarning({
     id: `${index}-${pickValue(record, COLUMN_ALIASES.username) || 'creator'}`,
     username: pickValue(record, COLUMN_ALIASES.username) || `Creator ${index + 1}`,
     profileLink: pickValue(record, COLUMN_ALIASES.profileLink),
@@ -45,7 +46,7 @@ export function normalizeRecord(record: Record<string, unknown>, index: number):
     lastContactDate: pickValue(record, COLUMN_ALIASES.lastContactDate),
     lastFollowUpCount: Number.isNaN(followUpCount) ? 0 : followUpCount,
     notes: pickValue(record, COLUMN_ALIASES.notes),
-  };
+  });
 }
 
 export async function parseCreatorFile(file: File): Promise<CreatorRow[]> {
@@ -69,5 +70,5 @@ export async function parseCreatorFile(file: File): Promise<CreatorRow[]> {
     return records.map(normalizeRecord).filter((row) => row.username);
   }
 
-  throw new Error('Please upload a CSV, XLS, or XLSX file.');
+  throw new Error('请上传 CSV、XLS 或 XLSX 文件。');
 }
