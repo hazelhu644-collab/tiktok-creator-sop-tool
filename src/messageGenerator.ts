@@ -1,3 +1,4 @@
+import { normalizeVideoProgress, parseRequiredVideos } from './sopRules';
 import type { Channel, GeneratedMessage, Task } from './types';
 
 export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message', 'Email', 'WhatsApp'];
@@ -82,6 +83,9 @@ export function generateMessage(
   const product = task.product || 'the product';
   const filmingRequirementsReminder = filmingRequirementsLine(task, filmingRequirements);
   const keyContentPointText = joinEnglishList(filmingRequirements.keyContentPoints.map(toEnglishContentPoint).filter(Boolean));
+  const requiredVideos = parseRequiredVideos(filmingRequirements);
+  const progress = normalizeVideoProgress(task.videoProgress, requiredVideos);
+  const missingVideos = typeof progress.postedCount === 'number' ? Math.max(0, requiredVideos - progress.postedCount) : null;
 
   let english = '';
 
@@ -89,7 +93,7 @@ export function generateMessage(
     const request = `Just checking in now that the ${product} sample has been delivered. When you film, please focus on the main usage shots from the creator filming requirements (达人拍摄要求)${keyContentPointText ? `: ${keyContentPointText}` : ''}. Please let us know your expected posting date for the first video.`;
     english = byChannel(channel, name, request, filmingRequirementsReminder);
   } else if (scenario === 'Second Video Reminder') {
-    const request = `Thanks for posting the first video for ${product}. Since this collaboration includes 2 videos, could you let us know when you plan to post the second one? ${filmingRequirementsReminder || 'Please keep the second video aligned with the current creator filming requirements (达人拍摄要求) and add the product link.'}`;
+    const request = `Thanks for posting ${progress.postedCount ?? 'part of'} ${typeof progress.postedCount === 'number' && progress.postedCount === 1 ? 'video' : 'videos'} for ${product}. Since this collaboration includes ${requiredVideos} ${requiredVideos === 1 ? 'video' : 'videos'}${missingVideos !== null && missingVideos > 0 ? ` and ${missingVideos} ${missingVideos === 1 ? 'video is' : 'videos are'} still missing` : ''}, could you let us know when you plan to post the remaining content? ${filmingRequirementsReminder || 'Please keep the remaining video content aligned with the current creator filming requirements (达人拍摄要求) and add the product link.'}`;
     english = byChannel(channel, name, request, filmingRequirementsReminder);
   } else if (scenario === 'Second Follow-up') {
     const request = `Just following up again on ${product}. Could you send us a quick update on whether you are still moving forward and your expected timeline? If anything is blocking filming or posting, please let us know so we can plan the next step.`;

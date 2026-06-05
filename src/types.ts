@@ -9,6 +9,9 @@ export type Channel =
 export type VideoProgressNormalization = {
   normalized: string;
   warning?: string;
+  postedCount?: number;
+  requiredVideos?: number;
+  isOverRequired?: boolean;
 };
 
 export type CreatorRow = {

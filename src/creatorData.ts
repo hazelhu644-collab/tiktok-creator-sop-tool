@@ -75,17 +75,17 @@ export function clearSavedCreatorRows(): void {
   getBrowserStorage()?.removeItem(CREATOR_ROWS_STORAGE_KEY);
 }
 
-export function updateCreatorField(row: CreatorRow, field: EditableCreatorField, rawValue: string): CreatorRow {
+export function updateCreatorField(row: CreatorRow, field: EditableCreatorField, rawValue: string, requiredVideos = 2): CreatorRow {
   if (field === 'lastFollowUpCount') {
     const parsed = Number.parseInt(rawValue, 10);
     return { ...row, lastFollowUpCount: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) };
   }
 
   if (field === 'videoProgress') {
-    const progressResult = normalizeVideoProgress(rawValue);
+    const progressResult = normalizeVideoProgress(rawValue, requiredVideos);
     return {
       ...row,
-      videoProgress: rawValue,
+      videoProgress: progressResult.warning && !progressResult.isOverRequired ? rawValue : progressResult.normalized,
       videoProgressWarning: progressResult.warning,
     };
   }
