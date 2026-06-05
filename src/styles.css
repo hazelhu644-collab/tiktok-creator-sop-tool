@@ -167,3 +167,74 @@ pre {
   font-weight: 700;
   margin: 6px 0 0;
 }
+
+.upload-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.data-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+button.secondary {
+  background: white;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
+button.danger {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.hint {
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin: 0;
+  font-size: .88rem;
+  font-weight: 800;
+  max-width: 360px;
+}
+
+.editable-table-wrap table {
+  min-width: 1500px;
+}
+
+.editable-table td {
+  padding: 8px;
+}
+
+.editable-table input,
+.editable-table textarea {
+  width: 100%;
+  min-width: 130px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #fff;
+  color: #172026;
+  resize: vertical;
+}
+
+.editable-table textarea {
+  min-width: 220px;
+}
+
+@media (max-width: 900px) {
+  .section-heading, .data-actions { grid-template-columns: 1fr; display: grid; }
+  .hint { max-width: none; }
+}
