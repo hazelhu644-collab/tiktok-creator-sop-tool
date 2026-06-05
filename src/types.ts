@@ -47,6 +47,16 @@ export type Summary = {
   failedWarnings: number;
 };
 
+
+export type CreatorFilmingRequirements = {
+  productName: string;
+  videoCount: number;
+  videoDurationRequirement: string;
+  brandTagRequirement: string;
+  productLinkRequirement: string;
+  keyContentPoints: string[];
+};
+
 export type GeneratedMessage = {
   english: string;
   chineseExplanation: string;

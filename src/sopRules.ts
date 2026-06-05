@@ -134,7 +134,7 @@ export function analyzeCreator(row: CreatorRow, today = new Date()): Task {
   if (isDelivered(row.sampleShippingStatus) && progress === '0/2' && deliveredDays !== null && deliveredDays >= 2) {
     priority = 'Highest';
     triggerReason = `样品已到货 ${deliveredDays} 天，但达人还没有发布视频。`;
-    suggestedAction = '发送第一次拍摄跟进，提醒达人按照 Brief 拍摄。';
+    suggestedAction = '发送第一次拍摄跟进，提醒达人按照拍摄要求完成内容。';
   } else if (progress === '1/2' && normalizeText(row.firstVideoPostedDate)) {
     priority = 'High';
     triggerReason = '达人只发布了 1 条视频，但本次合作要求 2 条视频。';
