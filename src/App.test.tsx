@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { CREATOR_ROWS_STORAGE_KEY } from './creatorData';
@@ -86,7 +86,7 @@ describe('filming requirements reference links UI', () => {
     });
   });
 
-  it('prefills saved reference links in the ChatGPT prompt form', async () => {
+  it('prefills saved reference links in the optional ChatGPT helper form', async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify({
       productName: '蒸汽梳毛器',
@@ -97,54 +97,60 @@ describe('filming requirements reference links UI', () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
+    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
 
-    expect(screen.getByLabelText('参考视频链接（可选）')).toHaveValue('https://tiktok.com/prefill-reference');
+    expect(screen.getByLabelText('对标视频链接（可选，每行一个）')).toHaveValue('https://tiktok.com/prefill-reference');
   });
 });
 
 
 describe('ChatGPT prompt generator UI', () => {
-  it('opens and closes the local ChatGPT prompt form', async () => {
+  it('opens and closes the optional helper form', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
+    expect(screen.getByText('用 ChatGPT 辅助生成拍摄要求（可选）')).toBeInTheDocument();
+    expect(screen.getByText('这个功能只会生成可复制的提示词，不会自动修改或保存拍摄要求。复制到 ChatGPT 生成结果后，再粘贴到上方「达人拍摄要求」里保存。')).toBeInTheDocument();
+    expect(screen.queryByLabelText('产品卖点')).not.toBeInTheDocument();
 
-    expect(screen.getByText('ChatGPT 提示词生成')).toBeInTheDocument();
-    expect(screen.getByText('当前版本不调用 API，不产生额外费用。你可以复制提示词到 ChatGPT 生成拍摄要求，再手动粘贴回来保存。')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
+
     expect(screen.getByLabelText('产品卖点')).toBeInTheDocument();
-    expect(screen.getByLabelText('参考视频链接（可选）')).toBeInTheDocument();
+    expect(screen.getByLabelText('对标视频链接（可选，每行一个）')).toBeInTheDocument();
+    expect(screen.queryByLabelText('产品名称')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '取消' }));
+    await user.click(screen.getByRole('button', { name: '收起辅助生成' }));
 
-    expect(screen.queryByText('ChatGPT 提示词生成')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('产品卖点')).not.toBeInTheDocument();
   });
 
-  it('generates a Chinese ChatGPT prompt locally without calling the API', async () => {
+  it('generates a Chinese ChatGPT prompt locally without calling the API or auto-saving', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
-    await user.clear(screen.getByLabelText('产品名称'));
-    await user.type(screen.getByLabelText('产品名称'), '智能宠物饮水机');
+    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
     await user.type(screen.getByLabelText('产品卖点'), '静音循环水，容易清洗，鼓励猫咪喝水');
     await user.type(screen.getByLabelText('单条视频时长要求'), '45 秒以上');
     await user.type(screen.getByLabelText('目标宠物 / 使用场景'), '美国养猫家庭厨房或客厅');
     await user.type(screen.getByLabelText('必须展示的画面'), '猫咪主动喝水\n拆洗水箱');
     await user.type(screen.getByLabelText('不希望达人这样拍'), '不要像硬广念稿');
-    await user.click(screen.getAllByRole('button', { name: '生成 ChatGPT 提示词' })[1]);
+    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), 'https://tiktok.com/helper-reference');
+    await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
 
     const prompt = screen.getByLabelText('ChatGPT 提示词') as HTMLTextAreaElement;
-    expect(prompt.value).toContain('智能宠物饮水机');
+    expect(prompt.value).toContain('蒸汽梳毛器');
+    expect(prompt.value).toContain('静音循环水');
+    expect(prompt.value).toContain('https://tiktok.com/helper-reference');
     expect(prompt.value).toContain('适合美国 TikTok 达人沟通');
     expect(prompt.value).toContain('不要太像合同');
     expect(prompt.value).toContain('全部使用简体中文');
     expect(prompt.value).toContain('达人拍摄要求');
     expect(prompt.value).toContain('重点拍摄内容');
+    expect(screen.getByText('下一步：复制提示词到 ChatGPT，生成结果后，把适合的内容粘贴到上方「拍摄要求」和「内容重点」里，再点击保存。')).toBeInTheDocument();
+    expect(screen.getByText('提示词已生成。请复制到 ChatGPT 使用。')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY)).toBeNull();
   });
@@ -159,22 +165,24 @@ describe('ChatGPT prompt generator UI', () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
+    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
     await user.type(screen.getByLabelText('产品卖点'), '静音循环水');
-    await user.click(screen.getAllByRole('button', { name: '生成 ChatGPT 提示词' })[1]);
+    await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
     await user.click(screen.getByRole('button', { name: '复制提示词' }));
 
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('静音循环水'));
     expect(screen.getByText('已复制提示词。')).toBeInTheDocument();
   });
 
-  it('keeps manual editing and saving available after generating a prompt', async () => {
+  it('keeps manual editing and saving as the only source of truth after generating a prompt', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
-    await user.click(screen.getAllByRole('button', { name: '生成 ChatGPT 提示词' })[1]);
+    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
+    await user.type(screen.getByLabelText('产品卖点'), 'helper-only selling point');
+    await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
     expect(screen.getByLabelText('ChatGPT 提示词')).toBeInTheDocument();
+    expect(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY)).toBeNull();
 
     await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
     const requirementsDraft = screen.getByLabelText('拍摄要求（每行一条）');
@@ -188,20 +196,32 @@ describe('ChatGPT prompt generator UI', () => {
     });
   });
 
-  it('uses manually saved requirements in the existing message generator', async () => {
+  it('uses saved filming requirements and reference links, not unsaved helper content, in the existing message generator', async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify([creatorRow({ sampleDeliveredDate: '2020-01-01', lastContactDate: '2020-01-01' })]));
+    window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify({
+      productName: '智能宠物饮水机',
+      requirements: ['每位达人 2 条视频'],
+      keyContentPoints: ['saved quiet fountain shot', 'saved easy-clean tank shot'],
+      referenceLinks: ['https://tiktok.com/saved-reference'],
+    }));
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
-    await user.clear(screen.getByLabelText('内容重点（每行一条）'));
-    await user.type(screen.getByLabelText('内容重点（每行一条）'), 'quiet fountain shot\neasy-clean tank shot\ncat drinking naturally');
-    await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
+    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
+    await user.type(screen.getByLabelText('产品卖点'), 'unsaved helper-only selling point');
+    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), '\nhttps://tiktok.com/unsaved-helper-reference');
+    await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
     await user.click(screen.getByRole('button', { name: '生成话术' }));
 
-    expect(screen.getByText('英文话术')).toBeInTheDocument();
-    expect(screen.getByText('中文解释')).toBeInTheDocument();
-    expect(screen.getAllByText(/quiet fountain shot/).length).toBeGreaterThan(0);
+    const messageOutput = screen.getByText('英文话术').closest('.message-output');
+    expect(messageOutput).not.toBeNull();
+    const messageArea = within(messageOutput as HTMLElement);
+    expect(messageArea.getByText('英文话术')).toBeInTheDocument();
+    expect(messageArea.getByText('中文解释')).toBeInTheDocument();
+    expect(messageArea.getAllByText(/saved quiet fountain shot/).length).toBeGreaterThan(0);
+    expect(messageArea.getAllByText(/https:\/\/tiktok.com\/saved-reference/).length).toBeGreaterThan(0);
+    expect(messageArea.queryByText(/unsaved helper-only selling point/)).not.toBeInTheDocument();
+    expect(messageArea.queryByText(/https:\/\/tiktok.com\/unsaved-helper-reference/)).not.toBeInTheDocument();
   });
 });
