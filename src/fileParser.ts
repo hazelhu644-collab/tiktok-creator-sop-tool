@@ -1,7 +1,7 @@
 import type { CreatorRow } from './types';
-import { normalizeText } from './sopRules';
+import { normalizeText, normalizeVideoProgress } from './sopRules';
 
-const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount'>, string[]> = {
+const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning'>, string[]> = {
   username: ['creator username', 'username', 'creator', 'creator handle'],
   profileLink: ['creator profile link', 'profile link', 'creator link', 'profile'],
   contactMethod: ['contact method', 'contact', 'channel'],
@@ -30,6 +30,8 @@ function pickValue(record: Record<string, unknown>, aliases: string[]): string {
 export function normalizeRecord(record: Record<string, unknown>, index: number): CreatorRow {
   const lastFollowUpValue = pickValue(record, FOLLOW_UP_ALIASES);
   const followUpCount = Number.parseInt(lastFollowUpValue || '0', 10);
+  const rawVideoProgress = pickValue(record, COLUMN_ALIASES.videoProgress) || '0/2';
+  const progressResult = normalizeVideoProgress(rawVideoProgress);
 
   return {
     id: `${index}-${pickValue(record, COLUMN_ALIASES.username) || 'creator'}`,
@@ -40,7 +42,8 @@ export function normalizeRecord(record: Record<string, unknown>, index: number):
     currentStatus: pickValue(record, COLUMN_ALIASES.currentStatus),
     sampleShippingStatus: pickValue(record, COLUMN_ALIASES.sampleShippingStatus),
     sampleDeliveredDate: pickValue(record, COLUMN_ALIASES.sampleDeliveredDate),
-    videoProgress: pickValue(record, COLUMN_ALIASES.videoProgress) || '0/2',
+    videoProgress: rawVideoProgress,
+    videoProgressWarning: progressResult.warning,
     firstVideoPostedDate: pickValue(record, COLUMN_ALIASES.firstVideoPostedDate),
     lastContactDate: pickValue(record, COLUMN_ALIASES.lastContactDate),
     lastFollowUpCount: Number.isNaN(followUpCount) ? 0 : followUpCount,
@@ -69,5 +72,5 @@ export async function parseCreatorFile(file: File): Promise<CreatorRow[]> {
     return records.map(normalizeRecord).filter((row) => row.username);
   }
 
-  throw new Error('Please upload a CSV, XLS, or XLSX file.');
+  throw new Error('请上传 CSV、XLS 或 XLSX 文件。');
 }
