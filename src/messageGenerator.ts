@@ -3,12 +3,12 @@ import type { Channel, GeneratedMessage, Task } from './types';
 export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message', 'Email', 'WhatsApp'];
 
 export const steamGroomingBrushBrief = {
-  productName: 'Steam Grooming Brush',
+  productName: '蒸汽梳毛器',
   requirements: [
-    '2 videos per creator',
-    'Each video should be 60 seconds or longer',
-    'Must tag the brand account',
-    'Must add the TikTok Shop product link',
+    '每位达人 2 条视频',
+    '每条视频 60 秒以上',
+    '必须 tag 品牌账号',
+    '必须挂 TikTok Shop 产品链接',
   ],
   priorities: ['Loose hair removed', 'Mist feature', 'Pet’s real reaction', 'Natural daily pet-care scene', 'Easy cleanup'],
 };

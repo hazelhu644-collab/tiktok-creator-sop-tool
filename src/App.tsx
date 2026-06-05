@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, buildSummary, daysSince } from './sopRules';
 import { CHANNELS, generateMessage, steamGroomingBrushBrief } from './messageGenerator';
-import type { Channel, CreatorRow, GeneratedMessage, Task } from './types';
+import type { Channel, CreatorRow, GeneratedMessage, Priority } from './types';
 import './styles.css';
 
 const priorityClass: Record<string, string> = {
@@ -11,6 +11,22 @@ const priorityClass: Record<string, string> = {
   Medium: 'priority medium',
   Low: 'priority low',
   None: 'priority none',
+};
+
+const priorityLabel: Record<Priority, string> = {
+  Highest: '最高',
+  High: '高',
+  Medium: '中',
+  Low: '低',
+  None: '无',
+};
+
+const scenarioLabel: Record<string, string> = {
+  'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
+  'Sample Delivered Follow-up': '样品到货后催拍',
+  'Second Video Reminder': '第二条视频提醒',
+  'Second Follow-up': '第二次跟进',
+  'Light Follow-up': '轻量跟进',
 };
 
 function App() {
@@ -38,10 +54,10 @@ function App() {
       setFileName(file.name);
       setSelectedCreatorId('');
       if (parsedRows.length === 0) {
-        setError('No creator rows were found. Please check the spreadsheet headers and data.');
+        setError('没有找到达人数据。请检查表头和表格内容。');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to parse this file.');
+      setError(err instanceof Error ? err.message : '无法解析该文件。');
       setRows([]);
       setFileName('');
     }
@@ -57,15 +73,14 @@ function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">TikTok Creator SOP Tool MVP</p>
-          <h1>Know who to follow up with today — and why.</h1>
+          <h1>今天应该跟进谁，为什么？</h1>
           <p className="hero-copy">
-            Upload a CSV or Excel creator collaboration sheet. The app analyzes each creator against the MVP SOP rules,
-            sorts follow-up tasks by priority, flags failed-candidate warnings, and drafts one channel-specific message at a time.
+            上传达人合作表格，系统会根据 SOP 规则分析每个达人的合作状态，自动生成今日跟进清单、优先级、失败风险提醒，并支持按渠道生成达人沟通话术。
           </p>
         </div>
         <div className="brief-card">
-          <h2>Built-in brief</h2>
-          <strong>{steamGroomingBrushBrief.productName}</strong>
+          <h2>内置拍摄 Brief</h2>
+          <strong>蒸汽梳毛器</strong>
           <ul>
             {steamGroomingBrushBrief.requirements.map((item) => (
               <li key={item}>{item}</li>
@@ -76,13 +91,13 @@ function App() {
 
       <section className="panel upload-panel">
         <div>
-          <h2>1. Upload spreadsheet</h2>
-          <p>Accepted formats: .csv, .xls, .xlsx. Data stays in this browser session; no login or database is used.</p>
+          <h2>1. 上传达人表格</h2>
+          <p>支持格式：.csv、.xls、.xlsx。数据仅在当前浏览器会话中处理；第一版不需要登录，也不保存数据库。</p>
         </div>
         <label className="upload-box">
           <input type="file" accept=".csv,.xls,.xlsx" onChange={(event) => handleFile(event.target.files?.[0])} />
-          <span>Choose CSV or Excel file</span>
-          {fileName && <small>Loaded: {fileName}</small>}
+          <span>选择 CSV 或 Excel 文件</span>
+          {fileName && <small>已加载：{fileName}</small>}
         </label>
         {error && <p className="error">{error}</p>}
       </section>
@@ -90,18 +105,18 @@ function App() {
       {rows.length > 0 && (
         <>
           <section className="panel">
-            <h2>2. Data preview</h2>
+            <h2>2. 数据预览</h2>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Creator</th>
-                    <th>Product</th>
-                    <th>Status</th>
-                    <th>Shipping</th>
-                    <th>Delivered</th>
-                    <th>Video progress</th>
-                    <th>Last contact</th>
+                    <th>达人</th>
+                    <th>产品</th>
+                    <th>当前状态</th>
+                    <th>物流状态</th>
+                    <th>到货时间</th>
+                    <th>视频进度</th>
+                    <th>最后联系时间</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -112,50 +127,53 @@ function App() {
                       <td>{row.currentStatus || '—'}</td>
                       <td>{row.sampleShippingStatus || '—'}</td>
                       <td>{row.sampleDeliveredDate || '—'}</td>
-                      <td>{row.videoProgress}</td>
+                      <td>
+                        {row.videoProgress || '—'}
+                        {row.videoProgressWarning && <p className="cell-warning">{row.videoProgressWarning}</p>}
+                      </td>
                       <td>{row.lastContactDate || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {rows.length > 8 && <p className="muted">Showing first 8 of {rows.length} rows.</p>}
+            {rows.length > 8 && <p className="muted">当前显示前 8 行，共 {rows.length} 行。</p>}
           </section>
 
           <section className="panel">
-            <h2>3. Daily task summary</h2>
+            <h2>3. 今日跟进概览</h2>
             <div className="summary-grid">
-              <SummaryCard label="Total creators" value={summary.totalCreators} />
-              <SummaryCard label="Need follow-up today" value={summary.needsFollowUp} />
-              <SummaryCard label="Highest" value={summary.highest} />
-              <SummaryCard label="High" value={summary.high} />
-              <SummaryCard label="Medium" value={summary.medium} />
-              <SummaryCard label="Low" value={summary.low} />
-              <SummaryCard label="Failed warnings" value={summary.failedWarnings} warning />
+              <SummaryCard label="达人总数" value={summary.totalCreators} />
+              <SummaryCard label="今日需跟进" value={summary.needsFollowUp} />
+              <SummaryCard label="最高优先级" value={summary.highest} />
+              <SummaryCard label="高优先级" value={summary.high} />
+              <SummaryCard label="中优先级" value={summary.medium} />
+              <SummaryCard label="低优先级" value={summary.low} />
+              <SummaryCard label="失败风险提醒" value={summary.failedWarnings} warning />
             </div>
           </section>
 
           <section className="panel">
-            <h2>4. Priority-sorted task table</h2>
+            <h2>4. 按优先级排序的今日待办</h2>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Priority</th>
-                    <th>Creator</th>
-                    <th>Product</th>
-                    <th>Current status</th>
-                    <th>Trigger reason</th>
-                    <th>Suggested action</th>
-                    <th>Contact method</th>
-                    <th>Video progress</th>
-                    <th>Failed warning</th>
+                    <th>优先级</th>
+                    <th>达人</th>
+                    <th>产品</th>
+                    <th>当前状态</th>
+                    <th>触发原因</th>
+                    <th>建议动作</th>
+                    <th>联系渠道</th>
+                    <th>视频进度</th>
+                    <th>失败风险</th>
                   </tr>
                 </thead>
                 <tbody>
                   {followUpTasks.map((task) => (
                     <tr key={task.id}>
-                      <td><span className={priorityClass[task.priority]}>{task.priority}</span></td>
+                      <td><span className={priorityClass[task.priority]}>{priorityLabel[task.priority]}</span></td>
                       <td>{task.username}</td>
                       <td>{task.product}</td>
                       <td>{task.currentStatus || '—'}</td>
@@ -163,73 +181,73 @@ function App() {
                       <td>{task.suggestedAction}</td>
                       <td>{task.contactMethod || '—'}</td>
                       <td>{task.videoProgress}</td>
-                      <td>{task.failedWarnings.length ? 'Failed Candidate' : '—'}</td>
+                      <td>{task.failedWarnings.length ? '失败风险' : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {followUpTasks.length === 0 && <p className="empty">No follow-up task is due today under the MVP rules.</p>}
+            {followUpTasks.length === 0 && <p className="empty">根据当前 MVP 规则，今天没有需要跟进的任务。</p>}
           </section>
 
           <section className="split">
             <div className="panel">
-              <h2>5. Highest-priority explanations</h2>
-              {highestTasks.length === 0 && <p className="empty">No Highest priority creators today.</p>}
+              <h2>5. 最高优先级达人说明</h2>
+              {highestTasks.length === 0 && <p className="empty">今天没有最高优先级达人。</p>}
               {highestTasks.map((task) => (
                 <article className="explanation" key={task.id}>
                   <h3>{task.username}</h3>
                   <p>
-                    The sample was delivered {daysSince(task.sampleDeliveredDate) ?? 'unknown'} days ago, and current video progress is {task.videoProgress}.
-                    This is urgent because the sample has arrived but no video has been posted yet.
+                    样品已到货 {daysSince(task.sampleDeliveredDate) ?? '未知'} 天，当前视频进度为 {task.videoProgress}。
+                    这类任务紧急，因为样品已经到达，但达人还没有发布视频。
                   </p>
-                  <p><strong>Next action:</strong> {task.suggestedAction}</p>
+                  <p><strong>下一步动作：</strong>{task.suggestedAction}</p>
                 </article>
               ))}
             </div>
 
             <div className="panel warning-panel">
-              <h2>6. Failed candidate warnings</h2>
-              {failedCandidates.length === 0 && <p className="empty">No failed-candidate warnings found.</p>}
+              <h2>6. 合作失败风险提醒</h2>
+              {failedCandidates.length === 0 && <p className="empty">当前没有合作失败风险提醒。</p>}
               {failedCandidates.map((task) => (
                 <article className="warning" key={task.id}>
                   <h3>{task.username}</h3>
                   <ul>
                     {task.failedWarnings.map((warning) => <li key={warning}>{warning}</li>)}
                   </ul>
-                  <p>Final options: continue following up, mark as failed, or wait and review later.</p>
+                  <p>最终处理建议：继续跟进、标记为失败，或稍后复查。系统只提示风险，最终决定由你确认。</p>
                 </article>
               ))}
             </div>
           </section>
 
           <section className="panel generator">
-            <h2>7. Generate one creator message</h2>
-            <p>Select one creator and one contact channel. The tool generates the English message first and a Chinese explanation below.</p>
+            <h2>7. 生成单个达人话术</h2>
+            <p>选择一个达人和一个联系渠道。系统会先生成英文话术，再在下方提供中文解释。</p>
             <div className="generator-controls">
               <label>
-                Creator
+                选择达人
                 <select value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>
                   {followUpTasks.map((task) => (
-                    <option key={task.id} value={task.id}>{task.priority} — {task.username}</option>
+                    <option key={task.id} value={task.id}>{priorityLabel[task.priority]} — {task.username}</option>
                   ))}
                 </select>
               </label>
               <label>
-                Channel
+                选择联系渠道
                 <select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>
                   {CHANNELS.map((item) => <option key={item}>{item}</option>)}
                 </select>
               </label>
-              <button onClick={handleGenerateMessage} disabled={!selectedTask}>Generate message</button>
+              <button onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
             </div>
 
             {message && (
               <div className="message-output">
-                <span className="scenario">Scenario: {message.scenario}</span>
-                <h3>English message</h3>
+                <span className="scenario">场景：{scenarioLabel[message.scenario] ?? message.scenario}</span>
+                <h3>英文话术</h3>
                 <pre>{message.english}</pre>
-                <h3>中文说明</h3>
+                <h3>中文解释</h3>
                 <p>{message.chineseExplanation}</p>
               </div>
             )}
