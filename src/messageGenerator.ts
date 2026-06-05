@@ -2,7 +2,13 @@ import type { Channel, GeneratedMessage, Task } from './types';
 
 export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message', 'Email', 'WhatsApp'];
 
-export const steamGroomingBrushBrief = {
+export type CreatorFilmingRequirements = {
+  productName: string;
+  requirements: string[];
+  keyContentPoints: string[];
+};
+
+export const defaultCreatorFilmingRequirements: CreatorFilmingRequirements = {
   productName: '蒸汽梳毛器',
   requirements: [
     '每位达人 2 条视频',
@@ -10,7 +16,13 @@ export const steamGroomingBrushBrief = {
     '必须 tag 品牌账号',
     '必须挂 TikTok Shop 产品链接',
   ],
-  priorities: ['Loose hair removed', 'Mist feature', 'Pet’s real reaction', 'Natural daily pet-care scene', 'Easy cleanup'],
+  keyContentPoints: [
+    '展示雾化功能',
+    '展示梳下来的浮毛',
+    '展示宠物真实反应',
+    '展示自然的日常宠物护理场景',
+    '展示清理过程',
+  ],
 };
 
 function scenarioForTask(task: Task): string {
@@ -21,34 +33,73 @@ function scenarioForTask(task: Task): string {
   return 'Light Follow-up';
 }
 
-function briefLine(task: Task): string {
-  if (!task.product.toLowerCase().includes('steam grooming brush')) return '';
-  return 'Please make sure the video clearly shows the mist feature, the loose hair removed, your pet’s real reaction, and the TikTok Shop product link.';
+function matchesFilmingRequirementsProduct(task: Task, filmingRequirements: CreatorFilmingRequirements): boolean {
+  const taskProduct = task.product.trim().toLowerCase();
+  const requirementProduct = filmingRequirements.productName.trim().toLowerCase();
+
+  if (!taskProduct || !requirementProduct) return false;
+  return taskProduct.includes(requirementProduct) || requirementProduct.includes(taskProduct);
 }
 
-export function generateMessage(task: Task, channel: Channel): GeneratedMessage {
+function toEnglishContentPoint(point: string): string {
+  const translationMap: Record<string, string> = {
+    展示雾化功能: 'the mist feature',
+    展示梳下来的浮毛: 'the loose hair removed',
+    展示宠物真实反应: "your pet’s real reaction",
+    展示自然的日常宠物护理场景: 'a natural daily pet-care scene',
+    展示清理过程: 'the cleanup process',
+  };
+
+  return translationMap[point] ?? point;
+}
+
+function joinEnglishList(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+function filmingRequirementsLine(task: Task, filmingRequirements: CreatorFilmingRequirements): string {
+  if (!matchesFilmingRequirementsProduct(task, filmingRequirements)) return '';
+
+  const keyContentPoints = filmingRequirements.keyContentPoints.map(toEnglishContentPoint).filter(Boolean);
+  const requirements = filmingRequirements.requirements.filter(Boolean);
+  const contentPointText = joinEnglishList(keyContentPoints);
+  const requirementsText = requirements.length > 0 ? ` Requirements: ${requirements.join('; ')}.` : '';
+
+  if (!contentPointText && !requirementsText) return '';
+  return `Please follow the current creator filming requirements (达人拍摄要求)${contentPointText ? ` and clearly show ${contentPointText}` : ''}.${requirementsText}`;
+}
+
+export function generateMessage(
+  task: Task,
+  channel: Channel,
+  filmingRequirements: CreatorFilmingRequirements = defaultCreatorFilmingRequirements,
+): GeneratedMessage {
   const scenario = scenarioForTask(task);
   const name = task.username.startsWith('@') ? task.username : `@${task.username}`;
   const product = task.product || 'the product';
-  const brief = briefLine(task);
+  const filmingRequirementsReminder = filmingRequirementsLine(task, filmingRequirements);
+  const keyContentPointText = joinEnglishList(filmingRequirements.keyContentPoints.map(toEnglishContentPoint).filter(Boolean));
 
   let english = '';
 
   if (scenario === 'Sample Delivered Follow-up') {
-    const request = `Just checking in now that the ${product} sample has been delivered. When you film, please focus on the main usage shots from the brief: loose hair removed, the mist feature, your pet’s real reaction, and easy cleanup. Please let us know your expected posting date for the first video.`;
-    english = byChannel(channel, name, request, brief);
+    const request = `Just checking in now that the ${product} sample has been delivered. When you film, please focus on the main usage shots from the creator filming requirements (达人拍摄要求)${keyContentPointText ? `: ${keyContentPointText}` : ''}. Please let us know your expected posting date for the first video.`;
+    english = byChannel(channel, name, request, filmingRequirementsReminder);
   } else if (scenario === 'Second Video Reminder') {
-    const request = `Thanks for posting the first video for ${product}. Since this collaboration includes 2 videos, could you let us know when you plan to post the second one? ${brief || 'Please keep the second video aligned with the original brief and add the product link.'}`;
-    english = byChannel(channel, name, request, brief);
+    const request = `Thanks for posting the first video for ${product}. Since this collaboration includes 2 videos, could you let us know when you plan to post the second one? ${filmingRequirementsReminder || 'Please keep the second video aligned with the current creator filming requirements (达人拍摄要求) and add the product link.'}`;
+    english = byChannel(channel, name, request, filmingRequirementsReminder);
   } else if (scenario === 'Second Follow-up') {
     const request = `Just following up again on ${product}. Could you send us a quick update on whether you are still moving forward and your expected timeline? If anything is blocking filming or posting, please let us know so we can plan the next step.`;
-    english = byChannel(channel, name, request, brief);
+    english = byChannel(channel, name, request, filmingRequirementsReminder);
   } else if (scenario === 'Final Follow-up Before Failed Candidate') {
     const request = `We wanted to check in one final time about the ${product} collaboration. Please let us know if you are still able to move forward and share a clear posting timeline. If you are no longer able to continue, please tell us so we can update the campaign status on our side.`;
-    english = byChannel(channel, name, request, brief);
+    english = byChannel(channel, name, request, filmingRequirementsReminder);
   } else {
     const request = `Just checking in to see if you are interested in moving forward with the ${product} collaboration. If it sounds like a fit, please let us know and we can confirm the next step.`;
-    english = byChannel(channel, name, request, brief);
+    english = byChannel(channel, name, request, filmingRequirementsReminder);
   }
 
   return {
@@ -58,20 +109,20 @@ export function generateMessage(task: Task, channel: Channel): GeneratedMessage 
   };
 }
 
-function byChannel(channel: Channel, name: string, request: string, brief: string): string {
+function byChannel(channel: Channel, name: string, request: string, filmingRequirementsReminder: string): string {
   if (channel === 'TikTok DM') {
-    return `Hi ${name}, ${request.split('. ').slice(0, 2).join('. ')}.`.replace('..', '.');
+    return `Hi ${name}, ${request.split('. ').slice(0, 2).join('. ')}. ${filmingRequirementsReminder}`.replace('..', '.').trim();
   }
 
   if (channel === 'TikTok Shop Affiliate Message') {
-    return `Hi ${name}, ${request} ${brief ? 'This helps viewers understand the product clearly and keeps the content aligned with the campaign brief.' : 'This helps us keep the collaboration timeline clear.'}`.trim();
+    return `Hi ${name}, ${request} ${filmingRequirementsReminder ? 'This helps viewers understand the product clearly and keeps the content aligned with the current creator filming requirements (达人拍摄要求).' : 'This helps us keep the collaboration timeline clear.'}`.trim();
   }
 
   if (channel === 'WhatsApp') {
-    return `Hi ${name}, ${request} A quick update is totally fine — we just want to keep the collaboration timeline clear.`;
+    return `Hi ${name}, ${request} ${filmingRequirementsReminder || 'A quick update is totally fine — we just want to keep the collaboration timeline clear.'}`.trim();
   }
 
-  return `Hi ${name},\n\n${request}\n\nThis helps us keep the collaboration timeline clear and make sure the content matches the campaign requirements.\n\nBest,\nBrand Team`;
+  return `Hi ${name},\n\n${request}\n\n${filmingRequirementsReminder || 'This helps us keep the collaboration timeline clear and make sure the content matches the campaign requirements.'}\n\nBest,\nBrand Team`;
 }
 
 function buildChineseExplanation(scenario: string, channel: Channel): string {

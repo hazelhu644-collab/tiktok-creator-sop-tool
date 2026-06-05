@@ -48,7 +48,44 @@ h3 { font-size: 1rem; margin-bottom: 8px; }
   margin-bottom: 20px;
 }
 
-.brief-card ul { padding-left: 20px; margin-bottom: 0; color: #475569; }
+.brief-card ul { padding-left: 20px; margin: 0 0 14px; color: #475569; }
+.brief-card ul:last-child { margin-bottom: 0; }
+.brief-card h3 { margin-top: 16px; }
+.filming-requirements-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.filming-requirements-heading h2 { margin-bottom: 0; }
+.filming-requirements-editor,
+.filming-requirements-editor label {
+  display: grid;
+  gap: 10px;
+}
+.filming-requirements-editor label {
+  color: #475569;
+  font-weight: 800;
+}
+.filming-requirements-editor input,
+.filming-requirements-editor textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.filming-requirements-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+button.compact {
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: .85rem;
+}
 .upload-panel {
   display: grid;
   grid-template-columns: 1fr minmax(280px, 420px);

@@ -9,7 +9,7 @@ import {
 } from './creatorData';
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, buildSummary, daysSince } from './sopRules';
-import { CHANNELS, generateMessage, steamGroomingBrushBrief } from './messageGenerator';
+import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
 import type { Channel, CreatorRow, GeneratedMessage, Priority } from './types';
 import './styles.css';
 
@@ -29,6 +29,8 @@ const priorityLabel: Record<Priority, string> = {
   None: '无',
 };
 
+const FILMING_REQUIREMENTS_STORAGE_KEY = 'tiktokCreatorSop.filmingRequirements';
+
 const scenarioLabel: Record<string, string> = {
   'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
   'Sample Delivered Follow-up': '样品到货后催拍',
@@ -37,6 +39,45 @@ const scenarioLabel: Record<string, string> = {
   'Light Follow-up': '轻量跟进',
 };
 
+function normalizeListText(value: string): string[] {
+  return value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function toRequirementsText(items: string[]): string {
+  return items.join('\n');
+}
+
+function loadFilmingRequirements(): CreatorFilmingRequirements {
+  if (typeof window === 'undefined') return defaultCreatorFilmingRequirements;
+
+  try {
+    const savedRequirements = window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY);
+    if (!savedRequirements) return defaultCreatorFilmingRequirements;
+
+    const parsedRequirements = JSON.parse(savedRequirements) as Partial<CreatorFilmingRequirements>;
+    return {
+      productName: typeof parsedRequirements.productName === 'string'
+        ? parsedRequirements.productName
+        : defaultCreatorFilmingRequirements.productName,
+      requirements: Array.isArray(parsedRequirements.requirements)
+        ? parsedRequirements.requirements.filter((item): item is string => typeof item === 'string')
+        : defaultCreatorFilmingRequirements.requirements,
+      keyContentPoints: Array.isArray(parsedRequirements.keyContentPoints)
+        ? parsedRequirements.keyContentPoints.filter((item): item is string => typeof item === 'string')
+        : defaultCreatorFilmingRequirements.keyContentPoints,
+    };
+  } catch {
+    return defaultCreatorFilmingRequirements;
+  }
+}
+
+function saveFilmingRequirements(filmingRequirements: CreatorFilmingRequirements) {
+  window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify(filmingRequirements));
+}
+
 function App() {
   const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
   const [fileName, setFileName] = useState('');
@@ -44,6 +85,11 @@ function App() {
   const [selectedCreatorId, setSelectedCreatorId] = useState('');
   const [channel, setChannel] = useState<Channel>('TikTok DM');
   const [message, setMessage] = useState<GeneratedMessage | null>(null);
+  const [filmingRequirements, setFilmingRequirements] = useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
+  const [isEditingFilmingRequirements, setIsEditingFilmingRequirements] = useState(false);
+  const [filmingProductNameDraft, setFilmingProductNameDraft] = useState(() => defaultCreatorFilmingRequirements.productName);
+  const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.requirements));
+  const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
 
   const tasks = useMemo(() => analyzeCreators(rows), [rows]);
   const followUpTasks = tasks.filter((task) => task.needsFollowUp);
@@ -76,7 +122,37 @@ function App() {
 
   function handleGenerateMessage() {
     if (!selectedTask) return;
-    setMessage(generateMessage(selectedTask, channel));
+    setMessage(generateMessage(selectedTask, channel, filmingRequirements));
+  }
+
+  function handleEditFilmingRequirements() {
+    setFilmingProductNameDraft(filmingRequirements.productName);
+    setFilmingRequirementsDraft(toRequirementsText(filmingRequirements.requirements));
+    setKeyContentPointsDraft(toRequirementsText(filmingRequirements.keyContentPoints));
+    setIsEditingFilmingRequirements(true);
+  }
+
+  function handleSaveFilmingRequirements() {
+    const nextFilmingRequirements = {
+      productName: filmingProductNameDraft.trim() || defaultCreatorFilmingRequirements.productName,
+      requirements: normalizeListText(filmingRequirementsDraft),
+      keyContentPoints: normalizeListText(keyContentPointsDraft),
+    };
+
+    setFilmingRequirements(nextFilmingRequirements);
+    saveFilmingRequirements(nextFilmingRequirements);
+    setIsEditingFilmingRequirements(false);
+    setMessage(null);
+  }
+
+  function handleRestoreDefaultFilmingRequirements() {
+    setFilmingProductNameDraft(defaultCreatorFilmingRequirements.productName);
+    setFilmingRequirementsDraft(toRequirementsText(defaultCreatorFilmingRequirements.requirements));
+    setKeyContentPointsDraft(toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
+    setFilmingRequirements(defaultCreatorFilmingRequirements);
+    saveFilmingRequirements(defaultCreatorFilmingRequirements);
+    setIsEditingFilmingRequirements(false);
+    setMessage(null);
   }
 
   function handleEditCreator(rowId: string, field: EditableCreatorField, value: string) {
@@ -113,13 +189,48 @@ function App() {
           </p>
         </div>
         <div className="brief-card">
-          <h2>内置拍摄 Brief</h2>
-          <strong>蒸汽梳毛器</strong>
-          <ul>
-            {steamGroomingBrushBrief.requirements.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+          <div className="filming-requirements-heading">
+            <h2>达人拍摄要求</h2>
+            {!isEditingFilmingRequirements && (
+              <button type="button" className="secondary compact" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button>
+            )}
+          </div>
+          {isEditingFilmingRequirements ? (
+            <div className="filming-requirements-editor">
+              <label>
+                产品名称
+                <input value={filmingProductNameDraft} onChange={(event) => setFilmingProductNameDraft(event.target.value)} />
+              </label>
+              <label>
+                拍摄要求（每行一条）
+                <textarea value={filmingRequirementsDraft} onChange={(event) => setFilmingRequirementsDraft(event.target.value)} rows={5} />
+              </label>
+              <label>
+                内容重点（每行一条）
+                <textarea value={keyContentPointsDraft} onChange={(event) => setKeyContentPointsDraft(event.target.value)} rows={6} />
+              </label>
+              <div className="filming-requirements-actions">
+                <button type="button" onClick={handleSaveFilmingRequirements}>保存拍摄要求</button>
+                <button type="button" className="secondary" onClick={handleRestoreDefaultFilmingRequirements}>恢复默认拍摄要求</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <strong>{filmingRequirements.productName}</strong>
+              <h3>Requirements</h3>
+              <ul>
+                {filmingRequirements.requirements.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              <h3>Key content points</h3>
+              <ul>
+                {filmingRequirements.keyContentPoints.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       </header>
 
