@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { creatorRowsToCsv, updateCreatorField } from './creatorData';
+import { afterEach, describe, expect, it } from 'vitest';
+import { CREATOR_ROWS_STORAGE_KEY, createBlankCreatorRow, creatorRowsToCsv, deleteCreatorRow, loadCreatorRows, saveCreatorRows, updateCreatorField } from './creatorData';
 import type { CreatorRow } from './types';
 
 function row(overrides: Partial<CreatorRow> = {}): CreatorRow {
@@ -21,6 +21,10 @@ function row(overrides: Partial<CreatorRow> = {}): CreatorRow {
   };
 }
 
+afterEach(() => {
+  window.localStorage.clear();
+});
+
 describe('editable creator data helpers', () => {
   it('updates edited creator fields and normalizes safe video progress text for export', () => {
     const edited = updateCreatorField(row(), 'videoProgress', '2 of 2');
@@ -29,6 +33,41 @@ describe('editable creator data helpers', () => {
     expect(edited.videoProgressWarning).toBeUndefined();
     expect(updateCreatorField(row(), 'lastFollowUpCount', '3').lastFollowUpCount).toBe(3);
     expect(updateCreatorField(row(), 'lastFollowUpCount', '').lastFollowUpCount).toBe(0);
+  });
+
+  it('creates a valid blank creator row using the current product and required video count', () => {
+    const blankRow = createBlankCreatorRow('Custom Product', 5);
+
+    expect(blankRow).toMatchObject({
+      username: '',
+      profileLink: '',
+      contactMethod: '',
+      product: 'Custom Product',
+      currentStatus: 'To Contact',
+      sampleShippingStatus: 'Not Shipped',
+      sampleDeliveredDate: '',
+      videoProgress: '0 of 5',
+      firstVideoPostedDate: '',
+      lastContactDate: '',
+      lastFollowUpCount: 0,
+      notes: '',
+    });
+    expect(blankRow.id).toMatch(/^manual-/);
+  });
+
+  it('deletes only the selected creator row', () => {
+    const rows = [row({ id: 'keep-1' }), row({ id: 'delete-me' }), row({ id: 'keep-2' })];
+
+    expect(deleteCreatorRow(rows, 'delete-me').map((creator) => creator.id)).toEqual(['keep-1', 'keep-2']);
+  });
+
+  it('preserves blank manually created rows during localStorage save and restore', () => {
+    const blankRow = createBlankCreatorRow('Saved Product', 3);
+
+    saveCreatorRows([blankRow]);
+
+    expect(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY)).toBeTruthy();
+    expect(loadCreatorRows()).toEqual([blankRow]);
   });
 
   it('exports the current rows with the original template column structure', () => {

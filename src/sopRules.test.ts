@@ -8,6 +8,7 @@ import {
   parseRequiredVideos,
   VIDEO_PROGRESS_OVER_REQUIRED_WARNING,
 } from './sopRules';
+import { createBlankCreatorRow } from './creatorData';
 import type { CreatorRow } from './types';
 
 const today = new Date('2026-06-05T12:00:00Z');
@@ -143,6 +144,24 @@ describe('MVP SOP rules', () => {
     expect(task.videoProgressWarning).toBe(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
     expect(task.failedWarnings).toContain(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
     expect(task.triggerReason).toBeTruthy();
+  });
+
+  it('keeps priority analysis stable when a blank manually added row exists', () => {
+    const blankRow = createBlankCreatorRow('Manual Product', 4);
+    const tasks = analyzeCreators([
+      blankRow,
+      row({ id: 'highest', username: 'highest', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-02', videoProgress: '0 of 4' }),
+    ], today, 4);
+
+    expect(tasks).toHaveLength(2);
+    expect(tasks.find((task) => task.id === blankRow.id)).toMatchObject({
+      username: '',
+      product: 'Manual Product',
+      videoProgress: '0/4',
+      needsFollowUp: false,
+      priority: 'None',
+    });
+    expect(tasks[0].id).toBe('highest');
   });
 
   it('suggests failed candidates without changing status', () => {

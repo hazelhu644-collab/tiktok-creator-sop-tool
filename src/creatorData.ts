@@ -20,6 +20,8 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
 
 export type EditableCreatorField =
   | 'username'
+  | 'profileLink'
+  | 'contactMethod'
   | 'product'
   | 'currentStatus'
   | 'sampleShippingStatus'
@@ -52,11 +54,35 @@ export function loadCreatorRows(): CreatorRow[] {
   try {
     const parsed = JSON.parse(saved) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => toStoredRow(item as CreatorRow)).filter((row) => normalizeText(row.username));
+    return parsed.map((item) => toStoredRow(item as CreatorRow)).filter((row) => normalizeText(row.id));
   } catch {
     storage.removeItem(CREATOR_ROWS_STORAGE_KEY);
     return [];
   }
+}
+
+export function createBlankCreatorRow(productName = '', requiredVideos = 2): CreatorRow {
+  const safeRequiredVideos = Number.isFinite(requiredVideos) && requiredVideos > 0 ? Math.floor(requiredVideos) : 2;
+
+  return {
+    id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    username: '',
+    profileLink: '',
+    contactMethod: '',
+    product: productName.trim(),
+    currentStatus: 'To Contact',
+    sampleShippingStatus: 'Not Shipped',
+    sampleDeliveredDate: '',
+    videoProgress: `0 of ${safeRequiredVideos}`,
+    firstVideoPostedDate: '',
+    lastContactDate: '',
+    lastFollowUpCount: 0,
+    notes: '',
+  };
+}
+
+export function deleteCreatorRow(rows: CreatorRow[], rowId: string): CreatorRow[] {
+  return rows.filter((row) => row.id !== rowId);
 }
 
 export function saveCreatorRows(rows: CreatorRow[]): void {

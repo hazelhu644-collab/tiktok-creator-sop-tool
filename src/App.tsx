@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   clearSavedCreatorRows,
+  createBlankCreatorRow,
+  deleteCreatorRow,
   downloadCreatorRowsCsv,
   loadCreatorRows,
   saveCreatorRows,
@@ -78,6 +80,10 @@ function saveFilmingRequirements(filmingRequirements: CreatorFilmingRequirements
   window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify(filmingRequirements));
 }
 
+function displayCreatorName(username: string): string {
+  return username.trim() || '未命名达人';
+}
+
 function App() {
   const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
   const [fileName, setFileName] = useState('');
@@ -98,7 +104,7 @@ function App() {
   const summary = useMemo(() => buildSummary(tasks), [tasks]);
   const highestTasks = tasks.filter((task) => task.priority === 'Highest');
   const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
-  const selectedTask = tasks.find((task) => task.id === selectedCreatorId) ?? followUpTasks[0];
+  const selectedTask = followUpTasks.find((task) => task.id === selectedCreatorId) ?? followUpTasks[0];
 
   useEffect(() => {
     saveCreatorRows(rows);
@@ -157,10 +163,28 @@ function App() {
     setMessage(null);
   }
 
+  function handleAddCreator() {
+    const newRow = createBlankCreatorRow(filmingRequirements.productName, requiredVideos);
+
+    setRows((currentRows) => [newRow, ...currentRows]);
+    setSelectedCreatorId(newRow.id);
+    setMessage(null);
+    setError('');
+  }
+
   function handleEditCreator(rowId: string, field: EditableCreatorField, value: string) {
     setRows((currentRows) => currentRows.map((row) => (
       row.id === rowId ? updateCreatorField(row, field, value, requiredVideos) : row
     )));
+    setMessage(null);
+  }
+
+  function handleDeleteCreator(rowId: string) {
+    const confirmed = window.confirm('确定要删除这个达人吗？');
+    if (!confirmed) return;
+
+    setRows((currentRows) => deleteCreatorRow(currentRows, rowId));
+    setSelectedCreatorId((currentCreatorId) => (currentCreatorId === rowId ? '' : currentCreatorId));
     setMessage(null);
   }
 
@@ -257,21 +281,28 @@ function App() {
         {error && <p className="error">{error}</p>}
       </section>
 
-      {rows.length > 0 && (
-        <>
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <h2>2. 可编辑数据表</h2>
-                <p className="muted">可直接修改表格字段，优先级、今日概览、失败风险和话术候选会即时重新计算并自动保存。</p>
-              </div>
-              <p className="hint">{videoProgressHint}</p>
-            </div>
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <h2>2. 可编辑数据表</h2>
+            <p className="muted">可直接新增、删除或修改表格字段，优先级、今日概览、失败风险和话术候选会即时重新计算并自动保存。</p>
+          </div>
+          <div className="table-heading-actions">
+            <button type="button" onClick={handleAddCreator}>新增达人</button>
+            <p className="hint">{videoProgressHint}</p>
+          </div>
+        </div>
+        {rows.length === 0 ? (
+          <p className="empty creator-empty-state">当前还没有达人数据。你可以上传表格，或点击「新增达人」手动添加。</p>
+        ) : (
+          <>
             <div className="table-wrap editable-table-wrap">
               <table className="editable-table">
                 <thead>
                   <tr>
                     <th>达人账号</th>
+                    <th>主页链接</th>
+                    <th>联系渠道</th>
                     <th>产品</th>
                     <th>当前状态</th>
                     <th>物流状态</th>
@@ -281,12 +312,15 @@ function App() {
                     <th>最后联系时间</th>
                     <th>跟进次数</th>
                     <th>备注</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id}>
-                      <EditableCell label="Creator username" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} />
+                      <EditableCell label="Creator username" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} autoFocus={selectedCreatorId === row.id && row.username === ''} />
+                      <EditableCell label="Creator profile link" value={row.profileLink} onChange={(value) => handleEditCreator(row.id, 'profileLink', value)} />
+                      <EditableCell label="Contact method" value={row.contactMethod} onChange={(value) => handleEditCreator(row.id, 'contactMethod', value)} />
                       <EditableCell label="Product" value={row.product} onChange={(value) => handleEditCreator(row.id, 'product', value)} />
                       <EditableCell label="Current status" value={row.currentStatus} onChange={(value) => handleEditCreator(row.id, 'currentStatus', value)} />
                       <EditableCell label="Sample shipping status" value={row.sampleShippingStatus} onChange={(value) => handleEditCreator(row.id, 'sampleShippingStatus', value)} />
@@ -301,13 +335,21 @@ function App() {
                       <EditableCell label="Last contact date" value={row.lastContactDate} onChange={(value) => handleEditCreator(row.id, 'lastContactDate', value)} />
                       <EditableCell label="Last follow-up count" type="number" value={String(row.lastFollowUpCount)} onChange={(value) => handleEditCreator(row.id, 'lastFollowUpCount', value)} />
                       <EditableCell label="Notes" multiline value={row.notes} onChange={(value) => handleEditCreator(row.id, 'notes', value)} />
+                      <td>
+                        <button type="button" className="secondary danger row-action" onClick={() => handleDeleteCreator(row.id)}>删除</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <p className="muted">当前共 {rows.length} 行。导出时会保留原始模板列结构。</p>
-          </section>
+          </>
+        )}
+      </section>
+
+      {rows.length > 0 && (
+        <>
 
           <section className="panel">
             <h2>3. 今日跟进概览</h2>
@@ -343,7 +385,7 @@ function App() {
                   {followUpTasks.map((task) => (
                     <tr key={task.id}>
                       <td><span className={priorityClass[task.priority]}>{priorityLabel[task.priority]}</span></td>
-                      <td>{task.username}</td>
+                      <td>{displayCreatorName(task.username)}</td>
                       <td>{task.product}</td>
                       <td>{task.currentStatus || '—'}</td>
                       <td>{task.triggerReason}</td>
@@ -365,7 +407,7 @@ function App() {
               {highestTasks.length === 0 && <p className="empty">今天没有最高优先级达人。</p>}
               {highestTasks.map((task) => (
                 <article className="explanation" key={task.id}>
-                  <h3>{task.username}</h3>
+                  <h3>{displayCreatorName(task.username)}</h3>
                   <p>
                     样品已到货 {daysSince(task.sampleDeliveredDate) ?? '未知'} 天，当前视频进度为 {task.videoProgress}。
                     这类任务紧急，因为样品已经到达，但达人还没有发布视频。
@@ -380,7 +422,7 @@ function App() {
               {failedCandidates.length === 0 && <p className="empty">当前没有合作失败风险提醒。</p>}
               {failedCandidates.map((task) => (
                 <article className="warning" key={task.id}>
-                  <h3>{task.username}</h3>
+                  <h3>{displayCreatorName(task.username)}</h3>
                   <ul>
                     {task.failedWarnings.map((warning) => <li key={warning}>{warning}</li>)}
                   </ul>
@@ -398,7 +440,7 @@ function App() {
                 选择达人
                 <select value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>
                   {followUpTasks.map((task) => (
-                    <option key={task.id} value={task.id}>{priorityLabel[task.priority]} — {task.username}</option>
+                    <option key={task.id} value={task.id}>{priorityLabel[task.priority]} — {displayCreatorName(task.username)}</option>
                   ))}
                 </select>
               </label>
@@ -434,6 +476,7 @@ function EditableCell({
   type = 'text',
   warning,
   multiline = false,
+  autoFocus = false,
 }: {
   label: string;
   value: string;
@@ -441,13 +484,14 @@ function EditableCell({
   type?: 'text' | 'number';
   warning?: string;
   multiline?: boolean;
+  autoFocus?: boolean;
 }) {
   return (
     <td>
       {multiline ? (
         <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} rows={2} />
       ) : (
-        <input aria-label={label} type={type} min={type === 'number' ? 0 : undefined} value={value} onChange={(event) => onChange(event.target.value)} />
+        <input aria-label={label} type={type} min={type === 'number' ? 0 : undefined} value={value} onChange={(event) => onChange(event.target.value)} autoFocus={autoFocus} />
       )}
       {warning && <p className="cell-warning">{warning}</p>}
     </td>
