@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { CREATOR_ROWS_STORAGE_KEY } from './creatorData';
@@ -18,7 +18,7 @@ function creatorRow(overrides: Partial<CreatorRow> = {}): CreatorRow {
     currentStatus: 'Sample Delivered',
     sampleShippingStatus: 'Delivered',
     sampleDeliveredDate: '2026-06-02',
-    videoProgress: '0 of 3',
+    videoProgress: '0 of 2',
     firstVideoPostedDate: '',
     lastContactDate: '2026-06-01',
     lastFollowUpCount: 0,
@@ -32,73 +32,80 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('AI filming requirements generator UI', () => {
-  it('opens and closes the AI generation form', async () => {
+describe('ChatGPT prompt generator UI', () => {
+  it('opens and closes the local ChatGPT prompt form', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'AI 生成拍摄要求' }));
+    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
 
-    expect(screen.getByText('AI 拍摄要求草稿生成')).toBeInTheDocument();
+    expect(screen.getByText('ChatGPT 提示词生成')).toBeInTheDocument();
+    expect(screen.getByText('当前版本不调用 API，不产生额外费用。你可以复制提示词到 ChatGPT 生成拍摄要求，再手动粘贴回来保存。')).toBeInTheDocument();
     expect(screen.getByLabelText('产品卖点')).toBeInTheDocument();
     expect(screen.getByLabelText('参考视频链接（可选）')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '取消' }));
 
-    expect(screen.queryByText('AI 拍摄要求草稿生成')).not.toBeInTheDocument();
+    expect(screen.queryByText('ChatGPT 提示词生成')).not.toBeInTheDocument();
   });
 
-  it('fills draft filming requirements from a successful API response without auto-saving', async () => {
+  it('generates a Chinese ChatGPT prompt locally without calling the API', async () => {
     const user = userEvent.setup();
-    let resolveDraft: (response: Response) => void = () => {};
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
-      resolveDraft = resolve;
-    })));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'AI 生成拍摄要求' }));
+    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
     await user.clear(screen.getByLabelText('产品名称'));
     await user.type(screen.getByLabelText('产品名称'), '智能宠物饮水机');
     await user.type(screen.getByLabelText('产品卖点'), '静音循环水，容易清洗，鼓励猫咪喝水');
     await user.type(screen.getByLabelText('单条视频时长要求'), '45 秒以上');
-    await user.click(screen.getByRole('button', { name: '生成草稿' }));
+    await user.type(screen.getByLabelText('目标宠物 / 使用场景'), '美国养猫家庭厨房或客厅');
+    await user.type(screen.getByLabelText('必须展示的画面'), '猫咪主动喝水\n拆洗水箱');
+    await user.type(screen.getByLabelText('不希望达人这样拍'), '不要像硬广念稿');
+    await user.click(screen.getAllByRole('button', { name: '生成 ChatGPT 提示词' })[1]);
 
-    expect(screen.getByText('AI 正在生成拍摄要求...')).toBeInTheDocument();
-
-    resolveDraft(new Response(JSON.stringify({
-      productName: '智能宠物饮水机',
-      requirements: [
-        '每位达人 3 条视频',
-        '每条视频 45 秒以上',
-        '必须 tag 品牌账号',
-        '必须挂 TikTok Shop 产品链接',
-      ],
-      priorities: ['展示猫咪主动喝水', '展示静音运行', '展示可拆洗水箱', '展示真实家居场景', '避免像硬广念稿'],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    await waitFor(() => expect(screen.getByText('已生成拍摄要求草稿，你可以手动修改后保存。')).toBeInTheDocument());
-
-    expect(screen.getByDisplayValue('智能宠物饮水机')).toBeInTheDocument();
-    expect(screen.getByDisplayValue(/每位达人 3 条视频/)).toBeInTheDocument();
-    expect(screen.getByDisplayValue(/展示猫咪主动喝水/)).toBeInTheDocument();
+    const prompt = screen.getByLabelText('ChatGPT 提示词') as HTMLTextAreaElement;
+    expect(prompt.value).toContain('智能宠物饮水机');
+    expect(prompt.value).toContain('适合美国 TikTok 达人沟通');
+    expect(prompt.value).toContain('不要太像合同');
+    expect(prompt.value).toContain('全部使用简体中文');
+    expect(prompt.value).toContain('达人拍摄要求');
+    expect(prompt.value).toContain('重点拍摄内容');
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY)).toBeNull();
   });
 
-  it('keeps manual editing available after AI fills the draft', async () => {
+  it('copies the generated prompt', async () => {
     const user = userEvent.setup();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      productName: '智能宠物饮水机',
-      requirements: ['每位达人 3 条视频', '每条视频 45 秒以上', '必须 tag 品牌账号', '必须挂 TikTok Shop 产品链接'],
-      priorities: ['展示猫咪主动喝水', '展示静音运行', '展示可拆洗水箱', '展示真实家居场景', '避免像硬广念稿'],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'AI 生成拍摄要求' }));
-    await user.click(screen.getByRole('button', { name: '生成草稿' }));
-    await screen.findByText('已生成拍摄要求草稿，你可以手动修改后保存。');
+    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
+    await user.type(screen.getByLabelText('产品卖点'), '静音循环水');
+    await user.click(screen.getAllByRole('button', { name: '生成 ChatGPT 提示词' })[1]);
+    await user.click(screen.getByRole('button', { name: '复制提示词' }));
 
-    const requirementsDraft = screen.getByDisplayValue(/每位达人 3 条视频/);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('静音循环水'));
+    expect(screen.getByText('已复制提示词。')).toBeInTheDocument();
+  });
+
+  it('keeps manual editing and saving available after generating a prompt', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
+    await user.click(screen.getAllByRole('button', { name: '生成 ChatGPT 提示词' })[1]);
+    expect(screen.getByLabelText('ChatGPT 提示词')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
+    const requirementsDraft = screen.getByLabelText('拍摄要求（每行一条）');
     await user.clear(requirementsDraft);
     await user.type(requirementsDraft, '每位达人 4 条视频\n必须 tag 品牌账号\n必须挂 TikTok Shop 产品链接');
     await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
@@ -109,26 +116,20 @@ describe('AI filming requirements generator UI', () => {
     });
   });
 
-  it('uses saved AI-generated requirements in the existing message generator', async () => {
+  it('uses manually saved requirements in the existing message generator', async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify([creatorRow()]));
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      productName: '智能宠物饮水机',
-      requirements: ['每位达人 3 条视频', '每条视频 45 秒以上', '必须 tag 品牌账号', '必须挂 TikTok Shop 产品链接'],
-      priorities: ['quiet fountain shot', 'easy-clean tank shot', 'cat drinking naturally', 'home kitchen setup', 'show product link reminder'],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify([creatorRow({ sampleDeliveredDate: '2020-01-01', lastContactDate: '2020-01-01' })]));
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'AI 生成拍摄要求' }));
-    await user.click(screen.getByRole('button', { name: '生成草稿' }));
-    await screen.findByText('已生成拍摄要求草稿，你可以手动修改后保存。');
+    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
+    await user.clear(screen.getByLabelText('内容重点（每行一条）'));
+    await user.type(screen.getByLabelText('内容重点（每行一条）'), 'quiet fountain shot\neasy-clean tank shot\ncat drinking naturally');
     await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
     await user.click(screen.getByRole('button', { name: '生成话术' }));
 
     expect(screen.getByText('英文话术')).toBeInTheDocument();
     expect(screen.getByText('中文解释')).toBeInTheDocument();
     expect(screen.getAllByText(/quiet fountain shot/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/每位达人 3 条视频/).length).toBeGreaterThan(0);
   });
 });

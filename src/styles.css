@@ -321,6 +321,16 @@ button.danger {
   margin-bottom: 12px;
 }
 
+.ai-cost-note {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 800;
+  margin: 12px 0 0;
+}
+
 .ai-generator-panel {
   border: 1px solid #ccfbf1;
   border-radius: 18px;
@@ -352,6 +362,27 @@ button.danger {
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.chatgpt-prompt-output {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.chatgpt-prompt-output label {
+  color: #475569;
+  display: grid;
+  font-weight: 800;
+  gap: 8px;
+}
+
+.chatgpt-prompt-output textarea {
+  border: 1px solid #99f6e4;
+  border-radius: 12px;
+  padding: 12px;
   resize: vertical;
   width: 100%;
 }
