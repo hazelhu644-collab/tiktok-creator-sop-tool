@@ -1,4 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  clearSavedCreatorRows,
+  downloadCreatorRowsCsv,
+  loadCreatorRows,
+  saveCreatorRows,
+  updateCreatorField,
+  type EditableCreatorField,
+} from './creatorData';
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, buildSummary, daysSince } from './sopRules';
 import { CHANNELS, generateMessage, steamGroomingBrushBrief } from './messageGenerator';
@@ -30,7 +38,7 @@ const scenarioLabel: Record<string, string> = {
 };
 
 function App() {
-  const [rows, setRows] = useState<CreatorRow[]>([]);
+  const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [selectedCreatorId, setSelectedCreatorId] = useState('');
@@ -43,6 +51,10 @@ function App() {
   const highestTasks = tasks.filter((task) => task.priority === 'Highest');
   const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
   const selectedTask = tasks.find((task) => task.id === selectedCreatorId) ?? followUpTasks[0];
+
+  useEffect(() => {
+    saveCreatorRows(rows);
+  }, [rows]);
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -58,7 +70,6 @@ function App() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '无法解析该文件。');
-      setRows([]);
       setFileName('');
     }
   }
@@ -66,6 +77,29 @@ function App() {
   function handleGenerateMessage() {
     if (!selectedTask) return;
     setMessage(generateMessage(selectedTask, channel));
+  }
+
+  function handleEditCreator(rowId: string, field: EditableCreatorField, value: string) {
+    setRows((currentRows) => currentRows.map((row) => (
+      row.id === rowId ? updateCreatorField(row, field, value) : row
+    )));
+    setMessage(null);
+  }
+
+  function handleClearData() {
+    const confirmed = window.confirm('确定要清空当前浏览器中保存的达人数据吗？');
+    if (!confirmed) return;
+
+    clearSavedCreatorRows();
+    setRows([]);
+    setFileName('');
+    setSelectedCreatorId('');
+    setMessage(null);
+    setError('');
+  }
+
+  function handleExportData() {
+    downloadCreatorRowsCsv(rows);
   }
 
   return (
@@ -92,52 +126,74 @@ function App() {
       <section className="panel upload-panel">
         <div>
           <h2>1. 上传达人表格</h2>
-          <p>支持格式：.csv、.xls、.xlsx。数据仅在当前浏览器会话中处理；第一版不需要登录，也不保存数据库。</p>
+          <p>支持格式：.csv、.xls、.xlsx。数据已保存在当前浏览器。本版本不支持跨设备同步。</p>
+          <p className="muted">不需要登录，不保存数据库；刷新或重新打开本浏览器页面时会自动恢复已保存数据。</p>
         </div>
-        <label className="upload-box">
-          <input type="file" accept=".csv,.xls,.xlsx" onChange={(event) => handleFile(event.target.files?.[0])} />
-          <span>选择 CSV 或 Excel 文件</span>
-          {fileName && <small>已加载：{fileName}</small>}
-        </label>
+        <div className="upload-actions">
+          <label className="upload-box">
+            <input type="file" accept=".csv,.xls,.xlsx" onChange={(event) => handleFile(event.target.files?.[0])} />
+            <span>选择 CSV 或 Excel 文件</span>
+            {fileName && <small>已加载：{fileName}</small>}
+            {!fileName && rows.length > 0 && <small>已恢复当前浏览器保存的数据</small>}
+          </label>
+          <div className="data-actions">
+            <button type="button" onClick={handleExportData} disabled={rows.length === 0}>导出当前表格</button>
+            <button type="button" className="secondary danger" onClick={handleClearData} disabled={rows.length === 0}>清空当前数据</button>
+          </div>
+        </div>
         {error && <p className="error">{error}</p>}
       </section>
 
       {rows.length > 0 && (
         <>
           <section className="panel">
-            <h2>2. 数据预览</h2>
-            <div className="table-wrap">
-              <table>
+            <div className="section-heading">
+              <div>
+                <h2>2. 可编辑数据表</h2>
+                <p className="muted">可直接修改表格字段，优先级、今日概览、失败风险和话术候选会即时重新计算并自动保存。</p>
+              </div>
+              <p className="hint">视频进度建议填写 0 of 2、1 of 2、2 of 2，避免 Excel 自动转成日期。</p>
+            </div>
+            <div className="table-wrap editable-table-wrap">
+              <table className="editable-table">
                 <thead>
                   <tr>
-                    <th>达人</th>
-                    <th>产品</th>
-                    <th>当前状态</th>
-                    <th>物流状态</th>
-                    <th>到货时间</th>
-                    <th>视频进度</th>
-                    <th>最后联系时间</th>
+                    <th>Creator username</th>
+                    <th>Product</th>
+                    <th>Current status</th>
+                    <th>Sample shipping status</th>
+                    <th>Sample delivered date</th>
+                    <th>Video progress</th>
+                    <th>First video posted date</th>
+                    <th>Last contact date</th>
+                    <th>Last follow-up count</th>
+                    <th>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 8).map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.id}>
-                      <td>{row.profileLink ? <a href={row.profileLink}>{row.username}</a> : row.username}</td>
-                      <td>{row.product}</td>
-                      <td>{row.currentStatus || '—'}</td>
-                      <td>{row.sampleShippingStatus || '—'}</td>
-                      <td>{row.sampleDeliveredDate || '—'}</td>
-                      <td>
-                        {row.videoProgress || '—'}
-                        {row.videoProgressWarning && <p className="cell-warning">{row.videoProgressWarning}</p>}
-                      </td>
-                      <td>{row.lastContactDate || '—'}</td>
+                      <EditableCell label="Creator username" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} />
+                      <EditableCell label="Product" value={row.product} onChange={(value) => handleEditCreator(row.id, 'product', value)} />
+                      <EditableCell label="Current status" value={row.currentStatus} onChange={(value) => handleEditCreator(row.id, 'currentStatus', value)} />
+                      <EditableCell label="Sample shipping status" value={row.sampleShippingStatus} onChange={(value) => handleEditCreator(row.id, 'sampleShippingStatus', value)} />
+                      <EditableCell label="Sample delivered date" value={row.sampleDeliveredDate} onChange={(value) => handleEditCreator(row.id, 'sampleDeliveredDate', value)} />
+                      <EditableCell
+                        label="Video progress"
+                        value={row.videoProgress}
+                        warning={row.videoProgressWarning}
+                        onChange={(value) => handleEditCreator(row.id, 'videoProgress', value)}
+                      />
+                      <EditableCell label="First video posted date" value={row.firstVideoPostedDate} onChange={(value) => handleEditCreator(row.id, 'firstVideoPostedDate', value)} />
+                      <EditableCell label="Last contact date" value={row.lastContactDate} onChange={(value) => handleEditCreator(row.id, 'lastContactDate', value)} />
+                      <EditableCell label="Last follow-up count" type="number" value={String(row.lastFollowUpCount)} onChange={(value) => handleEditCreator(row.id, 'lastFollowUpCount', value)} />
+                      <EditableCell label="Notes" multiline value={row.notes} onChange={(value) => handleEditCreator(row.id, 'notes', value)} />
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {rows.length > 8 && <p className="muted">当前显示前 8 行，共 {rows.length} 行。</p>}
+            <p className="muted">当前共 {rows.length} 行。导出时会保留原始模板列结构。</p>
           </section>
 
           <section className="panel">
@@ -255,6 +311,33 @@ function App() {
         </>
       )}
     </main>
+  );
+}
+
+function EditableCell({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  warning,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: 'text' | 'number';
+  warning?: string;
+  multiline?: boolean;
+}) {
+  return (
+    <td>
+      {multiline ? (
+        <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} rows={2} />
+      ) : (
+        <input aria-label={label} type={type} min={type === 'number' ? 0 : undefined} value={value} onChange={(event) => onChange(event.target.value)} />
+      )}
+      {warning && <p className="cell-warning">{warning}</p>}
+    </td>
   );
 }
 
