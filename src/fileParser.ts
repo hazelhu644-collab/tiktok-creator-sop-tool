@@ -27,10 +27,10 @@ function pickValue(record: Record<string, unknown>, aliases: string[]): string {
   return normalizeText(found?.[1]);
 }
 
-export function normalizeRecord(record: Record<string, unknown>, index: number): CreatorRow {
+export function normalizeRecord(record: Record<string, unknown>, index: number, requiredVideos = 2): CreatorRow {
   const lastFollowUpValue = pickValue(record, FOLLOW_UP_ALIASES);
   const followUpCount = Number.parseInt(lastFollowUpValue || '0', 10);
-  const progressResult = normalizeVideoProgress(pickValue(record, COLUMN_ALIASES.videoProgress));
+  const progressResult = normalizeVideoProgress(pickValue(record, COLUMN_ALIASES.videoProgress), requiredVideos);
 
   return {
     id: `${index}-${pickValue(record, COLUMN_ALIASES.username) || 'creator'}`,
@@ -50,7 +50,7 @@ export function normalizeRecord(record: Record<string, unknown>, index: number):
   };
 }
 
-export async function parseCreatorFile(file: File): Promise<CreatorRow[]> {
+export async function parseCreatorFile(file: File, requiredVideos = 2): Promise<CreatorRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase();
   const buffer = await file.arrayBuffer();
 
@@ -60,7 +60,7 @@ export async function parseCreatorFile(file: File): Promise<CreatorRow[]> {
     const workbook = XLSX.read(text, { type: 'string' });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map(normalizeRecord).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, requiredVideos)).filter((row) => row.username);
   }
 
   if (extension === 'xlsx' || extension === 'xls') {
@@ -68,7 +68,7 @@ export async function parseCreatorFile(file: File): Promise<CreatorRow[]> {
     const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map(normalizeRecord).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, requiredVideos)).filter((row) => row.username);
   }
 
   throw new Error('请上传 CSV、XLS 或 XLSX 文件。');

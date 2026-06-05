@@ -22,10 +22,10 @@ function row(overrides: Partial<CreatorRow> = {}): CreatorRow {
 }
 
 describe('editable creator data helpers', () => {
-  it('updates edited creator fields and keeps safe video progress text for export', () => {
+  it('updates edited creator fields and normalizes safe video progress text for export', () => {
     const edited = updateCreatorField(row(), 'videoProgress', '2 of 2');
 
-    expect(edited.videoProgress).toBe('2 of 2');
+    expect(edited.videoProgress).toBe('2/2');
     expect(edited.videoProgressWarning).toBeUndefined();
     expect(updateCreatorField(row(), 'lastFollowUpCount', '3').lastFollowUpCount).toBe(3);
     expect(updateCreatorField(row(), 'lastFollowUpCount', '').lastFollowUpCount).toBe(0);

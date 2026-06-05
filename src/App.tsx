@@ -8,7 +8,7 @@ import {
   type EditableCreatorField,
 } from './creatorData';
 import { parseCreatorFile } from './fileParser';
-import { analyzeCreators, buildSummary, daysSince } from './sopRules';
+import { analyzeCreators, buildSummary, buildVideoProgressHint, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
 import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
 import type { Channel, CreatorRow, GeneratedMessage, Priority } from './types';
 import './styles.css';
@@ -91,7 +91,9 @@ function App() {
   const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.requirements));
   const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
 
-  const tasks = useMemo(() => analyzeCreators(rows), [rows]);
+  const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
+  const videoProgressHint = useMemo(() => buildVideoProgressHint(requiredVideos), [requiredVideos]);
+  const tasks = useMemo(() => analyzeCreators(rows, undefined, requiredVideos), [rows, requiredVideos]);
   const followUpTasks = tasks.filter((task) => task.needsFollowUp);
   const summary = useMemo(() => buildSummary(tasks), [tasks]);
   const highestTasks = tasks.filter((task) => task.priority === 'Highest');
@@ -107,7 +109,7 @@ function App() {
     try {
       setError('');
       setMessage(null);
-      const parsedRows = await parseCreatorFile(file);
+      const parsedRows = await parseCreatorFile(file, requiredVideos);
       setRows(parsedRows);
       setFileName(file.name);
       setSelectedCreatorId('');
@@ -157,7 +159,7 @@ function App() {
 
   function handleEditCreator(rowId: string, field: EditableCreatorField, value: string) {
     setRows((currentRows) => currentRows.map((row) => (
-      row.id === rowId ? updateCreatorField(row, field, value) : row
+      row.id === rowId ? updateCreatorField(row, field, value, requiredVideos) : row
     )));
     setMessage(null);
   }
@@ -263,22 +265,22 @@ function App() {
                 <h2>2. 可编辑数据表</h2>
                 <p className="muted">可直接修改表格字段，优先级、今日概览、失败风险和话术候选会即时重新计算并自动保存。</p>
               </div>
-              <p className="hint">视频进度建议填写 0 of 2、1 of 2、2 of 2，避免 Excel 自动转成日期。</p>
+              <p className="hint">{videoProgressHint}</p>
             </div>
             <div className="table-wrap editable-table-wrap">
               <table className="editable-table">
                 <thead>
                   <tr>
-                    <th>Creator username</th>
-                    <th>Product</th>
-                    <th>Current status</th>
-                    <th>Sample shipping status</th>
-                    <th>Sample delivered date</th>
-                    <th>Video progress</th>
-                    <th>First video posted date</th>
-                    <th>Last contact date</th>
-                    <th>Last follow-up count</th>
-                    <th>Notes</th>
+                    <th>达人账号</th>
+                    <th>产品</th>
+                    <th>当前状态</th>
+                    <th>物流状态</th>
+                    <th>样品到货时间</th>
+                    <th>视频进度</th>
+                    <th>首条视频发布时间</th>
+                    <th>最后联系时间</th>
+                    <th>跟进次数</th>
+                    <th>备注</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -292,7 +294,7 @@ function App() {
                       <EditableCell
                         label="Video progress"
                         value={row.videoProgress}
-                        warning={row.videoProgressWarning}
+                        warning={normalizeVideoProgress(row.videoProgress, requiredVideos).warning}
                         onChange={(value) => handleEditCreator(row.id, 'videoProgress', value)}
                       />
                       <EditableCell label="First video posted date" value={row.firstVideoPostedDate} onChange={(value) => handleEditCreator(row.id, 'firstVideoPostedDate', value)} />
