@@ -32,6 +32,78 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+
+
+describe('filming requirements reference links UI', () => {
+  it('saves, displays, and restores optional reference links with filming requirements', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+
+    expect(screen.queryByText('参考视频链接')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
+    await user.type(
+      screen.getByLabelText('对标视频链接（可选，每行一个）'),
+      ' https://tiktok.com/reference-one \n\nhttps://shop.tiktok.com/reference-two ',
+    );
+    await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
+
+    expect(screen.getByText('参考视频链接')).toBeInTheDocument();
+    expect(screen.getByText('https://tiktok.com/reference-one')).toBeInTheDocument();
+    expect(screen.getByText('https://shop.tiktok.com/reference-two')).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY) ?? '{}')).toMatchObject({
+      referenceLinks: ['https://tiktok.com/reference-one', 'https://shop.tiktok.com/reference-two'],
+    });
+
+    unmount();
+    render(<App />);
+
+    expect(screen.getByText('参考视频链接')).toBeInTheDocument();
+    expect(screen.getByText('https://tiktok.com/reference-one')).toBeInTheDocument();
+    expect(screen.getByText('https://shop.tiktok.com/reference-two')).toBeInTheDocument();
+  });
+
+  it('allows empty reference links and restores default by clearing them', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
+    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), '   \n  ');
+    await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
+
+    expect(screen.queryByText('参考视频链接')).not.toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY) ?? '{}')).toMatchObject({
+      referenceLinks: [],
+    });
+
+    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
+    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), 'https://tiktok.com/reference-one');
+    await user.click(screen.getByRole('button', { name: '恢复默认拍摄要求' }));
+
+    expect(screen.queryByText('参考视频链接')).not.toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY) ?? '{}')).toMatchObject({
+      referenceLinks: [],
+    });
+  });
+
+  it('prefills saved reference links in the ChatGPT prompt form', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify({
+      productName: '蒸汽梳毛器',
+      requirements: ['每位达人 2 条视频'],
+      keyContentPoints: ['展示雾化功能'],
+      referenceLinks: ['https://tiktok.com/prefill-reference'],
+    }));
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '生成 ChatGPT 提示词' }));
+
+    expect(screen.getByLabelText('参考视频链接（可选）')).toHaveValue('https://tiktok.com/prefill-reference');
+  });
+});
+
+
 describe('ChatGPT prompt generator UI', () => {
   it('opens and closes the local ChatGPT prompt form', async () => {
     const user = userEvent.setup();

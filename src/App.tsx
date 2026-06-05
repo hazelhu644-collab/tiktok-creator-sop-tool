@@ -63,6 +63,13 @@ const scenarioLabel: Record<string, string> = {
   'Light Follow-up': '轻量跟进',
 };
 
+function normalizeReferenceLinksText(value: string): string[] {
+  return value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function normalizeListText(value: string): string[] {
   return value
     .split('\n')
@@ -92,6 +99,9 @@ function loadFilmingRequirements(): CreatorFilmingRequirements {
       keyContentPoints: Array.isArray(parsedRequirements.keyContentPoints)
         ? parsedRequirements.keyContentPoints.filter((item): item is string => typeof item === 'string')
         : defaultCreatorFilmingRequirements.keyContentPoints,
+      referenceLinks: Array.isArray(parsedRequirements.referenceLinks)
+        ? parsedRequirements.referenceLinks.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+        : defaultCreatorFilmingRequirements.referenceLinks,
     };
   } catch {
     return defaultCreatorFilmingRequirements;
@@ -118,6 +128,7 @@ function App() {
   const [filmingProductNameDraft, setFilmingProductNameDraft] = useState(() => defaultCreatorFilmingRequirements.productName);
   const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.requirements));
   const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
+  const [referenceLinksDraft, setReferenceLinksDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.referenceLinks ?? []));
   const [isAiFormOpen, setIsAiFormOpen] = useState(false);
   const [aiForm, setAiForm] = useState<AiFilmingRequirementsForm>(() => emptyAiFilmingRequirementsForm);
   const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState('');
@@ -163,6 +174,7 @@ function App() {
     setFilmingProductNameDraft(filmingRequirements.productName);
     setFilmingRequirementsDraft(toRequirementsText(filmingRequirements.requirements));
     setKeyContentPointsDraft(toRequirementsText(filmingRequirements.keyContentPoints));
+    setReferenceLinksDraft(toRequirementsText(filmingRequirements.referenceLinks ?? []));
     setIsEditingFilmingRequirements(true);
   }
 
@@ -171,6 +183,7 @@ function App() {
       productName: filmingProductNameDraft.trim() || defaultCreatorFilmingRequirements.productName,
       requirements: normalizeListText(filmingRequirementsDraft),
       keyContentPoints: normalizeListText(keyContentPointsDraft),
+      referenceLinks: normalizeReferenceLinksText(referenceLinksDraft),
     };
 
     setFilmingRequirements(nextFilmingRequirements);
@@ -183,6 +196,7 @@ function App() {
     setFilmingProductNameDraft(defaultCreatorFilmingRequirements.productName);
     setFilmingRequirementsDraft(toRequirementsText(defaultCreatorFilmingRequirements.requirements));
     setKeyContentPointsDraft(toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
+    setReferenceLinksDraft(toRequirementsText(defaultCreatorFilmingRequirements.referenceLinks ?? []));
     setFilmingRequirements(defaultCreatorFilmingRequirements);
     saveFilmingRequirements(defaultCreatorFilmingRequirements);
     setIsEditingFilmingRequirements(false);
@@ -194,6 +208,7 @@ function App() {
       ...emptyAiFilmingRequirementsForm,
       productName: filmingProductNameDraft.trim() || filmingRequirements.productName,
       videoCount: String(requiredVideos),
+      referenceLinks: toRequirementsText(filmingRequirements.referenceLinks ?? []),
     });
     setGeneratedChatGptPrompt('');
     setPromptCopyStatus('');
@@ -386,6 +401,15 @@ function App() {
                 内容重点（每行一条）
                 <textarea value={keyContentPointsDraft} onChange={(event) => setKeyContentPointsDraft(event.target.value)} rows={6} />
               </label>
+              <label>
+                对标视频链接（可选，每行一个）
+                <textarea
+                  value={referenceLinksDraft}
+                  onChange={(event) => setReferenceLinksDraft(event.target.value)}
+                  rows={4}
+                  placeholder="粘贴 TikTok / Shop / 参考视频链接，每行一个。可用于给达人参考拍摄模板或优化方向。"
+                />
+              </label>
               <div className="filming-requirements-actions">
                 <button type="button" onClick={handleSaveFilmingRequirements}>保存拍摄要求</button>
                 <button type="button" className="secondary" onClick={handleRestoreDefaultFilmingRequirements}>恢复默认拍摄要求</button>
@@ -406,6 +430,16 @@ function App() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
+              {(filmingRequirements.referenceLinks ?? []).length > 0 && (
+                <section className="reference-links-section">
+                  <h3>参考视频链接</h3>
+                  <ul>
+                    {(filmingRequirements.referenceLinks ?? []).map((link) => (
+                      <li key={link}>{link}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
             </>
           )}
         </div>
