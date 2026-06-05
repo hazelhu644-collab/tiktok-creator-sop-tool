@@ -161,3 +161,9 @@ pre {
   .hero, .upload-panel, .split, .generator-controls { grid-template-columns: 1fr; }
   .summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
 }
+.cell-warning {
+  color: #b45309;
+  font-size: .8rem;
+  font-weight: 700;
+  margin: 6px 0 0;
+}
