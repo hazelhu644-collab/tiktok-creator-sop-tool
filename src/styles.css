@@ -161,3 +161,72 @@ pre {
   .hero, .upload-panel, .split, .generator-controls { grid-template-columns: 1fr; }
   .summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
 }
+.cell-warning {
+  color: #b45309;
+  font-size: .8rem;
+  font-weight: 700;
+  margin: 6px 0 0;
+}
+
+.upload-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.data-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.save-note, .hint {
+  color: #0f766e;
+  font-weight: 800;
+  margin-bottom: 0;
+}
+
+.secondary-button {
+  background: #ecfeff;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
+.danger-button {
+  background: #fff7ed;
+  color: #b45309;
+  border-color: #fed7aa;
+}
+
+.editable-table-wrap table {
+  min-width: 1420px;
+}
+
+.editable-table th {
+  white-space: nowrap;
+}
+
+.editable-cell {
+  width: 100%;
+  min-width: 130px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #ffffff;
+  color: #172026;
+}
+
+.editable-cell:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
+  outline: none;
+}
+
+.editable-notes {
+  min-width: 220px;
+  min-height: 42px;
+  resize: vertical;
+}
+
+@media (max-width: 900px) {
+  .data-actions { grid-template-columns: 1fr; }
+}

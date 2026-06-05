@@ -6,6 +6,11 @@ export type Channel =
   | 'Email'
   | 'WhatsApp';
 
+export type VideoProgressNormalization = {
+  normalized: string;
+  warning?: string;
+};
+
 export type CreatorRow = {
   id: string;
   username: string;
@@ -16,6 +21,7 @@ export type CreatorRow = {
   sampleShippingStatus: string;
   sampleDeliveredDate: string;
   videoProgress: string;
+  videoProgressWarning?: string;
   firstVideoPostedDate: string;
   lastContactDate: string;
   lastFollowUpCount: number;
