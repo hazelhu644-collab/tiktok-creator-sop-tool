@@ -248,7 +248,7 @@ button.danger {
 }
 
 .editable-table-wrap table {
-  min-width: 1500px;
+  min-width: 1840px;
 }
 
 .editable-table td {
@@ -272,6 +272,27 @@ button.danger {
 }
 
 @media (max-width: 900px) {
-  .section-heading, .data-actions { grid-template-columns: 1fr; display: grid; }
+  .section-heading, .data-actions, .table-heading-actions { grid-template-columns: 1fr; display: grid; }
+  .table-heading-actions { justify-items: stretch; }
   .hint { max-width: none; }
+}
+
+.table-heading-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.creator-empty-state {
+  border: 1px dashed #99f6e4;
+  border-radius: 16px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-weight: 800;
+  padding: 18px;
+}
+
+.row-action {
+  white-space: nowrap;
+  padding: 9px 12px;
 }
