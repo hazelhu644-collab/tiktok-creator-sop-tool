@@ -44,12 +44,6 @@ type AiFilmingRequirementsForm = {
   referenceLinks: string;
 };
 
-type AiFilmingRequirementsResponse = {
-  productName: string;
-  requirements: string[];
-  priorities: string[];
-};
-
 const emptyAiFilmingRequirementsForm: AiFilmingRequirementsForm = {
   productName: '',
   sellingPoints: '',
@@ -126,9 +120,8 @@ function App() {
   const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
   const [isAiFormOpen, setIsAiFormOpen] = useState(false);
   const [aiForm, setAiForm] = useState<AiFilmingRequirementsForm>(() => emptyAiFilmingRequirementsForm);
-  const [aiStatusMessage, setAiStatusMessage] = useState('');
-  const [aiErrorMessage, setAiErrorMessage] = useState('');
-  const [isGeneratingAiDraft, setIsGeneratingAiDraft] = useState(false);
+  const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState('');
+  const [promptCopyStatus, setPromptCopyStatus] = useState('');
 
   const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
   const videoProgressHint = useMemo(() => buildVideoProgressHint(requiredVideos), [requiredVideos]);
@@ -202,62 +195,62 @@ function App() {
       productName: filmingProductNameDraft.trim() || filmingRequirements.productName,
       videoCount: String(requiredVideos),
     });
-    setAiStatusMessage('');
-    setAiErrorMessage('');
+    setGeneratedChatGptPrompt('');
+    setPromptCopyStatus('');
     setIsAiFormOpen(true);
   }
 
   function handleCancelAiForm() {
     setIsAiFormOpen(false);
-    setAiStatusMessage('');
-    setAiErrorMessage('');
+    setGeneratedChatGptPrompt('');
+    setPromptCopyStatus('');
   }
 
   function updateAiFormField(field: keyof AiFilmingRequirementsForm, value: string) {
     setAiForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
-  async function handleGenerateAiFilmingRequirementsDraft() {
-    setIsGeneratingAiDraft(true);
-    setAiStatusMessage('AI 正在生成拍摄要求...');
-    setAiErrorMessage('');
+  function buildChatGptPrompt(form: AiFilmingRequirementsForm): string {
+    const fieldValue = (value: string) => value.trim() || '请根据常见 TikTok Shop 达人合作需求补充';
+
+    return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。
+
+【产品信息】
+- 产品名称：${fieldValue(form.productName)}
+- 产品卖点：${fieldValue(form.sellingPoints)}
+- 目标视频数量：${fieldValue(form.videoCount)}
+- 单条视频时长要求：${fieldValue(form.durationRequirement)}
+- 目标宠物 / 使用场景：${fieldValue(form.targetPetOrScene)}
+- 必须展示的画面：${fieldValue(form.mustShowShots)}
+- 不希望达人这样拍：${fieldValue(form.avoidShots)}
+- 参考视频链接（可选）：${form.referenceLinks.trim() || '无'}
+
+请按以下结构输出，全部使用简体中文：
+1. 产品名称
+2. 达人拍摄要求（5-8 条，简洁明确，包含目标视频数量、单条视频时长、tag 品牌账号、挂 TikTok Shop 产品链接等要求）
+3. 重点拍摄内容（5-8 条，围绕卖点、使用场景、必须展示画面和避免事项）
+
+口吻要求：
+- 适合 TikTok Shop 达人的简洁口吻
+- 不要太像合同，不要太正式
+- 适合美国 TikTok 达人沟通
+- 清楚说明需要拍什么、怎么展示、哪些不要拍
+- 输出内容方便我复制回工具里的「达人拍摄要求」和「内容重点」编辑框。`;
+  }
+
+  function handleGenerateChatGptPrompt() {
+    setGeneratedChatGptPrompt(buildChatGptPrompt(aiForm));
+    setPromptCopyStatus('');
+  }
+
+  async function handleCopyChatGptPrompt() {
+    if (!generatedChatGptPrompt) return;
 
     try {
-      const response = await fetch('/api/generate-filming-requirements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(aiForm),
-      });
-      const responseBody = await response.json() as Partial<AiFilmingRequirementsResponse> & { error?: string };
-
-      if (!response.ok) {
-        throw new Error(responseBody.error || 'AI 生成失败：请稍后重试。');
-      }
-
-      const nextProductName = typeof responseBody.productName === 'string' ? responseBody.productName : aiForm.productName;
-      const nextRequirements = Array.isArray(responseBody.requirements)
-        ? responseBody.requirements.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        : [];
-      const nextPriorities = Array.isArray(responseBody.priorities)
-        ? responseBody.priorities.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        : [];
-
-      if (nextRequirements.length === 0 || nextPriorities.length === 0) {
-        throw new Error('AI 生成失败：返回内容缺少拍摄要求或内容重点。');
-      }
-
-      setFilmingProductNameDraft(nextProductName);
-      setFilmingRequirementsDraft(toRequirementsText(nextRequirements));
-      setKeyContentPointsDraft(toRequirementsText(nextPriorities));
-      setIsEditingFilmingRequirements(true);
-      setIsAiFormOpen(false);
-      setAiStatusMessage('已生成拍摄要求草稿，你可以手动修改后保存。');
-      setMessage(null);
-    } catch (error) {
-      setAiStatusMessage('');
-      setAiErrorMessage(error instanceof Error ? error.message : 'AI 生成失败：请稍后重试。');
-    } finally {
-      setIsGeneratingAiDraft(false);
+      await navigator.clipboard.writeText(generatedChatGptPrompt);
+      setPromptCopyStatus('已复制提示词。');
+    } catch {
+      setPromptCopyStatus('复制失败，请手动选中文字复制。');
     }
   }
 
@@ -316,18 +309,17 @@ function App() {
           <div className="filming-requirements-heading">
             <h2>达人拍摄要求</h2>
             <div className="filming-requirements-heading-actions">
-              <button type="button" className="secondary compact" onClick={handleOpenAiForm}>AI 生成拍摄要求</button>
+              <button type="button" className="secondary compact" onClick={handleOpenAiForm}>生成 ChatGPT 提示词</button>
               {!isEditingFilmingRequirements && (
                 <button type="button" className="secondary compact" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button>
               )}
             </div>
           </div>
-          {aiStatusMessage && <p className="ai-status">{aiStatusMessage}</p>}
-          {aiErrorMessage && <p className="error ai-error">{aiErrorMessage}</p>}
           {isAiFormOpen && (
             <div className="ai-generator-panel">
-              <h3>AI 拍摄要求草稿生成</h3>
-              <p className="muted">填写产品信息后生成草稿。草稿只会填入下方编辑框，不会自动保存。</p>
+              <h3>ChatGPT 提示词生成</h3>
+              <p className="muted">填写产品信息后，在浏览器本地生成可复制的 ChatGPT 提示词。</p>
+              <p className="ai-cost-note">当前版本不调用 API，不产生额外费用。你可以复制提示词到 ChatGPT 生成拍摄要求，再手动粘贴回来保存。</p>
               <div className="ai-generator-grid">
                 <label>
                   产品名称
@@ -363,9 +355,21 @@ function App() {
                 </label>
               </div>
               <div className="filming-requirements-actions">
-                <button type="button" onClick={handleGenerateAiFilmingRequirementsDraft} disabled={isGeneratingAiDraft}>生成草稿</button>
-                <button type="button" className="secondary" onClick={handleCancelAiForm} disabled={isGeneratingAiDraft}>取消</button>
+                <button type="button" onClick={handleGenerateChatGptPrompt}>生成 ChatGPT 提示词</button>
+                <button type="button" className="secondary" onClick={handleCancelAiForm}>取消</button>
               </div>
+              {generatedChatGptPrompt && (
+                <div className="chatgpt-prompt-output">
+                  <label>
+                    ChatGPT 提示词
+                    <textarea value={generatedChatGptPrompt} readOnly rows={14} />
+                  </label>
+                  <div className="filming-requirements-actions">
+                    <button type="button" onClick={handleCopyChatGptPrompt}>复制提示词</button>
+                  </div>
+                  {promptCopyStatus && <p className="ai-status">{promptCopyStatus}</p>}
+                </div>
+              )}
             </div>
           )}
           {isEditingFilmingRequirements ? (
