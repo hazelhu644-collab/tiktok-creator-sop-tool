@@ -395,6 +395,110 @@ describe('creator communication center selection', () => {
     expect(optionText.find((text) => text.includes('failed_creator'))).toContain('失败');
   });
 
+
+  it('filters 待建联 to true first-outreach creators without shipped or delivered samples', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'true-to-contact', username: 'true_to_contact', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', lastContactDate: '' }),
+      creatorRow({ id: 'in-transit-to-contact', username: 'stale_to_contact', currentStatus: 'To Contact', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', lastContactDate: '' }),
+      creatorRow({ id: 'contacted', username: 'contacted_creator', currentStatus: 'Contacted / Waiting for Reply', sampleShippingStatus: '', sampleDeliveredDate: '' }),
+    ]);
+
+    render(<App />);
+
+    expect(screen.getByRole('button', { name: '待建联' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '待联系' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '待建联' }));
+    const creatorSelect = screen.getByRole('combobox', { name: '选择达人' });
+    const optionText = Array.from(creatorSelect.querySelectorAll('option')).map((option) => option.textContent ?? '');
+
+    expect(optionText).toEqual([expect.stringContaining('true_to_contact')]);
+    expect(optionText.join('\n')).not.toContain('stale_to_contact');
+    expect(optionText.join('\n')).not.toContain('contacted_creator');
+  });
+
+  it('routes To Contact creators with in-transit samples to 样品运输中 instead of 待建联', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'stale-to-contact', username: 'stale_in_transit', currentStatus: 'To Contact', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', lastContactDate: '' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '待建联' }));
+    expect(screen.getByText('当前没有纯待建联达人。样品已发出或已到货的达人，请查看「样品运输中」「样品已到」或「需跟进」。')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: '样品运输中' }));
+    const optionText = Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
+    expect(optionText).toEqual([expect.stringContaining('stale_in_transit')]);
+  });
+
+  it('includes shipped or in-transit creators in 需跟进 while excluding terminal statuses', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'sample-shipped', username: 'sample_shipped_in_transit', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'completed', username: 'completed_creator', currentStatus: 'Completed', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', videoProgress: '2 of 2' }),
+      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', videoProgress: '0 of 2' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '需跟进' }));
+    const optionText = Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
+
+    expect(optionText).toEqual([expect.stringContaining('sample_shipped_in_transit')]);
+    expect(optionText.join('\n')).not.toContain('completed_creator');
+    expect(optionText.join('\n')).not.toContain('failed_creator');
+  });
+
+  it('finds delivered creators by delivered shipping status or delivered date', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'delivered-status', username: 'delivered_status_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'delivered-date', username: 'delivered_date_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'Pending', sampleDeliveredDate: '2026-06-01' }),
+      creatorRow({ id: 'not-delivered', username: 'not_delivered_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '样品已到' }));
+    const optionText = Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '').join('\n');
+
+    expect(optionText).toContain('delivered_status_creator');
+    expect(optionText).toContain('delivered_date_creator');
+    expect(optionText).not.toContain('not_delivered_creator');
+  });
+
+  it('keeps 部分视频 focused on incomplete partial video progress', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'partial', username: 'partial_creator', currentStatus: 'Posted Video / Waiting for Next Video', sampleShippingStatus: 'Delivered', videoProgress: '1 of 2' }),
+      creatorRow({ id: 'none-posted', username: 'none_posted_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'completed-progress', username: 'completed_progress_creator', currentStatus: 'Posted Video / Waiting for Next Video', sampleShippingStatus: 'Delivered', videoProgress: '2 of 2' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '部分视频' }));
+    const optionText = Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
+
+    expect(optionText).toEqual([expect.stringContaining('partial_creator')]);
+  });
+
+  it('shows a helpful generic empty state when filters or search have no matches', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'sample-shipped', username: 'sample_shipped_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '样品已到' }));
+    expect(screen.getByText('没有匹配的达人，请调整搜索词或切换筛选。')).toBeInTheDocument();
+  });
+
   it('searches creators by username, product, and current status', async () => {
     const user = userEvent.setup();
     seedCreators([

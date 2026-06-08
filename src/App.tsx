@@ -127,7 +127,9 @@ const creatorQuickFilters = [
   { key: 'all', label: '全部' },
   { key: 'highest', label: '最高优先级' },
   { key: 'high', label: '高优先级' },
-  { key: 'to-contact', label: '待联系' },
+  { key: 'to-contact', label: '待建联' },
+  { key: 'needs-follow-up', label: '需跟进' },
+  { key: 'shipping', label: '样品运输中' },
   { key: 'delivered', label: '样品已到' },
   { key: 'partial', label: '部分视频' },
   { key: 'revision', label: '需修改' },
@@ -184,6 +186,50 @@ function compareLastContactThenUsername(a: Task, b: Task): number {
   return a.username.localeCompare(b.username);
 }
 
+function isTerminalStatus(status: string): boolean {
+  return status === 'completed' || status === 'failed';
+}
+
+function hasSampleInTransitEvidence(status: string, shippingStatus: string): boolean {
+  return status === 'sample shipped' || shippingStatus === 'shipped' || shippingStatus === 'in transit';
+}
+
+function hasSampleDeliveredEvidence(task: Task, shippingStatus: string): boolean {
+  return shippingStatus === 'delivered' || Boolean(task.sampleDeliveredDate.trim());
+}
+
+function hasPartialVideoProgress(progress: ReturnType<typeof normalizeVideoProgress>): boolean {
+  return typeof progress.postedCount === 'number'
+    && typeof progress.requiredVideos === 'number'
+    && progress.postedCount > 0
+    && progress.postedCount < progress.requiredVideos;
+}
+
+function needsOperationalFollowUp(task: Task, status: string, shippingStatus: string, progress: ReturnType<typeof normalizeVideoProgress>): boolean {
+  if (isTerminalStatus(status)) return false;
+
+  const followUpStatuses = new Set([
+    'contacted / waiting for reply',
+    'contacted',
+    'no reply',
+    'invited / waiting for sample request',
+    'sample requested',
+    'sample shipped',
+    'in transit',
+    'delivered / waiting for video',
+    'posted video / waiting for next video',
+    'needs revision',
+  ]);
+
+  return followUpStatuses.has(status)
+    || shippingStatus === 'shipped'
+    || shippingStatus === 'in transit'
+    || shippingStatus === 'delivered'
+    || task.needsFollowUp
+    || task.failedWarnings.length > 0
+    || hasPartialVideoProgress(progress);
+}
+
 function matchesQuickFilter(task: Task, quickFilter: CreatorQuickFilterKey): boolean {
   const status = task.currentStatus.trim().toLowerCase();
   const shippingStatus = task.sampleShippingStatus.trim().toLowerCase();
@@ -192,13 +238,23 @@ function matchesQuickFilter(task: Task, quickFilter: CreatorQuickFilterKey): boo
   if (quickFilter === 'all') return true;
   if (quickFilter === 'highest') return task.priority === 'Highest';
   if (quickFilter === 'high') return task.priority === 'High';
-  if (quickFilter === 'to-contact') return status.includes('to contact');
-  if (quickFilter === 'delivered') return status.includes('delivered') || shippingStatus.includes('delivered');
-  if (quickFilter === 'partial') return status.includes('posted video') || (typeof progress.postedCount === 'number' && typeof progress.requiredVideos === 'number' && progress.postedCount > 0 && progress.postedCount < progress.requiredVideos);
-  if (quickFilter === 'revision') return status.includes('needs revision') || status.includes('revision');
+  if (quickFilter === 'to-contact') return status === 'to contact' && !['shipped', 'in transit', 'delivered'].includes(shippingStatus);
+  if (quickFilter === 'needs-follow-up') return needsOperationalFollowUp(task, status, shippingStatus, progress);
+  if (quickFilter === 'shipping') return hasSampleInTransitEvidence(status, shippingStatus);
+  if (quickFilter === 'delivered') return hasSampleDeliveredEvidence(task, shippingStatus);
+  if (quickFilter === 'partial') return hasPartialVideoProgress(progress);
+  if (quickFilter === 'revision') return status === 'needs revision' || status.includes('revision');
   if (quickFilter === 'completed') return status === 'completed';
   if (quickFilter === 'failed') return status === 'failed';
   return true;
+}
+
+function creatorGeneratorEmptyState(quickFilter: CreatorQuickFilterKey): string {
+  if (quickFilter === 'to-contact') {
+    return '当前没有纯待建联达人。样品已发出或已到货的达人，请查看「样品运输中」「样品已到」或「需跟进」。';
+  }
+
+  return '没有匹配的达人，请调整搜索词或切换筛选。';
 }
 
 function creatorOptionLabel(task: Task): string {
@@ -909,7 +965,7 @@ function App() {
                     ))}
                   </select>
                 </label>
-                {generatorTasks.length === 0 && <p className="empty">没有匹配的达人，请调整搜索或筛选。</p>}
+                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState(creatorQuickFilter)}</p>}
               </div>
               <label>
                 选择联系渠道
