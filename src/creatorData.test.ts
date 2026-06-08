@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CREATOR_ROWS_STORAGE_KEY, createBlankCreatorRow, creatorRowsToCsv, deleteCreatorRow, loadCreatorRows, saveCreatorRows, updateCreatorField } from './creatorData';
+import { normalizeRecord } from './fileParser';
 import type { CreatorRow } from './types';
 
 function row(overrides: Partial<CreatorRow> = {}): CreatorRow {
@@ -75,8 +76,26 @@ describe('editable creator data helpers', () => {
       row({ username: 'creator, one', notes: 'Line 1\nLine 2' }),
     ]);
 
-    expect(csv.split('\n')[0]).toBe('Creator username,Creator profile link,Contact method,Product,Current status,Sample shipping status,Sample delivered date,Video progress,First video posted date,Last contact date,Last follow-up count,Notes,Last message scenario,Last message channel,Last message sent at,Next follow-up date,Last creator response');
+    expect(csv.split('\n')[0]).toBe('Creator username,Creator profile link,Contact method,Product,Current status,Sample shipping status,Sample delivered date,Video progress,First video posted date,Last contact date,Last follow-up count,Notes,Tracking status,Last message scenario,Last message channel,Last message sent at,Next follow-up date,Last creator response');
     expect(csv).toContain('"creator, one"');
     expect(csv).toContain('"Line 1\nLine 2"');
+  });
+
+  it('imports older spreadsheet records without tracking columns as empty optional tracking fields', () => {
+    const imported = normalizeRecord({
+      'Creator username': 'legacy_creator',
+      Product: 'Legacy Product',
+      'Video progress': '0 of 2',
+    }, 0);
+
+    expect(imported).toMatchObject({
+      username: 'legacy_creator',
+      trackingStatus: '',
+      lastMessageScenario: '',
+      lastMessageChannel: '',
+      lastMessageSentAt: '',
+      nextFollowUpDate: '',
+      lastCreatorResponse: '',
+    });
   });
 });

@@ -277,6 +277,9 @@ describe('post-message tracking workflow', () => {
       const saved = storedCreator();
       expect(saved.lastContactDate).toBe(today);
       expect(saved.lastFollowUpCount).toBe(2);
+      expect(saved.trackingStatus).toBe('Followed Up');
+      expect(saved.lastMessageScenario).toBe('样品到货后催拍');
+      expect(saved.lastMessageChannel).toBe('TikTok DM');
       expect(saved.lastMessageSentAt).toBe(today);
       expect(saved.nextFollowUpDate).toBe(expectedNextDate);
       expect(saved.followUpHistory).toEqual(expect.arrayContaining([
@@ -289,10 +292,10 @@ describe('post-message tracking workflow', () => {
         }),
       ]));
     });
-    expect(screen.getByText('已标记为发送，并更新最后联系时间和跟进次数。')).toBeInTheDocument();
+    expect(screen.getByText('已标记为发送，并同步更新数据表格。')).toBeInTheDocument();
     expect(screen.getByText('下一步跟进建议')).toBeInTheDocument();
     expect(screen.getByText(`建议下次跟进时间：${expectedNextDate}`)).toBeInTheDocument();
-    expect(screen.getByText('Message Sent', { exact: false })).toBeInTheDocument();
+    expect(screen.getAllByText('Message Sent', { exact: false }).length).toBeGreaterThan(0);
     expect(screen.getAllByText('样品到货后催拍', { exact: false }).length).toBeGreaterThan(0);
   });
 
@@ -309,13 +312,15 @@ describe('post-message tracking workflow', () => {
     await waitFor(() => {
       const saved = storedCreator();
       expect(saved.lastCreatorResponse).toBe('Creator will post tomorrow');
+      expect(saved.trackingStatus).toBe('Replied');
       expect(saved.lastContactDate).toBe(today);
       expect(saved.followUpHistory).toEqual(expect.arrayContaining([
         expect.objectContaining({ date: today, action: 'Creator Replied', note: 'Creator will post tomorrow' }),
       ]));
     });
     expect(window.prompt).toHaveBeenCalledWith('记录达人回复内容或下一步重点：');
-    expect(screen.getByText('Creator will post tomorrow')).toBeInTheDocument();
+    expect(screen.getByText('已记录达人回复，并同步更新数据表格。')).toBeInTheDocument();
+    expect(screen.getAllByText('Creator will post tomorrow').length).toBeGreaterThan(0);
   });
 
   it('marks cooperation completed and normalizes completion progress', async () => {
@@ -331,17 +336,21 @@ describe('post-message tracking workflow', () => {
     await waitFor(() => {
       const saved = storedCreator();
       expect(saved.currentStatus).toBe('Completed');
+      expect(saved.trackingStatus).toBe('Completed');
+      expect(saved.lastContactDate).toBe(today);
       expect(saved.videoProgress).toBe('2 of 2');
       expect(saved.followUpHistory).toEqual(expect.arrayContaining([
         expect.objectContaining({ date: today, action: 'Completed' }),
       ]));
     });
     expect(window.confirm).toHaveBeenCalledWith('确定要标记这个达人合作完成吗？');
+    expect(screen.getByText('已标记合作完成，并同步更新数据表格。')).toBeInTheDocument();
   });
 
   it('marks cooperation failed while preserving priority analysis stability', async () => {
     const user = userEvent.setup();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'prompt').mockReturnValue('Creator missed deadline');
     seedCreator({ sampleDeliveredDate: '2026-06-04', lastFollowUpCount: 0 });
     render(<App />);
 
@@ -354,13 +363,19 @@ describe('post-message tracking workflow', () => {
     await waitFor(() => {
       const saved = storedCreator();
       expect(saved.currentStatus).toBe('Failed');
+      expect(saved.trackingStatus).toBe('Failed');
+      expect(saved.lastContactDate).toBe(today);
+      expect(saved.lastCreatorResponse).toBe('Creator missed deadline');
+      expect(saved.notes).toContain('Creator missed deadline');
       expect(saved.followUpHistory).toEqual(expect.arrayContaining([
-        expect.objectContaining({ date: today, action: 'Failed' }),
+        expect.objectContaining({ date: today, action: 'Failed', note: 'Creator missed deadline' }),
       ]));
     });
     expect(screen.getByText('达人总数')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /今日跟进概览/ })).toBeInTheDocument();
     expect(window.confirm).toHaveBeenCalledWith('确定要标记这个达人合作失败吗？');
+    expect(window.prompt).toHaveBeenCalledWith('记录失败原因或备注（可选）：');
+    expect(screen.getByText('已标记合作失败，并同步更新数据表格。')).toBeInTheDocument();
   });
 });
 

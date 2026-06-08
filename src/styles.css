@@ -248,7 +248,7 @@ button.danger {
 }
 
 .editable-table-wrap table {
-  min-width: 1840px;
+  min-width: 2600px;
 }
 
 .editable-table td {
@@ -269,6 +269,14 @@ button.danger {
 
 .editable-table textarea {
   min-width: 220px;
+}
+
+.editable-table tr.tracking-row-completed td {
+  background: #f0fdf4;
+}
+
+.editable-table tr.tracking-row-failed td {
+  background: #fef2f2;
 }
 
 @media (max-width: 900px) {

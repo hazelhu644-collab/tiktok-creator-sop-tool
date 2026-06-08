@@ -23,6 +23,8 @@ export type FollowUpHistoryEntry = {
   note?: string;
 };
 
+export type TrackingStatus = 'Followed Up' | 'Replied' | 'Completed' | 'Failed' | '';
+
 export type CreatorRow = {
   id: string;
   username: string;
@@ -38,6 +40,7 @@ export type CreatorRow = {
   lastContactDate: string;
   lastFollowUpCount: number;
   notes: string;
+  trackingStatus?: TrackingStatus | string;
   lastMessageScenario?: string;
   lastMessageChannel?: Channel | string;
   lastMessageSentAt?: string;
