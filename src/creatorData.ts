@@ -16,6 +16,11 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: 'Last contact date', key: 'lastContactDate' },
   { header: 'Last follow-up count', key: 'lastFollowUpCount' },
   { header: 'Notes', key: 'notes' },
+  { header: 'Last message scenario', key: 'lastMessageScenario' },
+  { header: 'Last message channel', key: 'lastMessageChannel' },
+  { header: 'Last message sent at', key: 'lastMessageSentAt' },
+  { header: 'Next follow-up date', key: 'nextFollowUpDate' },
+  { header: 'Last creator response', key: 'lastCreatorResponse' },
 ];
 
 export type EditableCreatorField =
@@ -37,10 +42,21 @@ function getBrowserStorage(): Storage | null {
   return window.localStorage;
 }
 
+function normalizeFollowUpHistory(row: CreatorRow): CreatorRow['followUpHistory'] {
+  if (!Array.isArray(row.followUpHistory)) return [];
+
+  return row.followUpHistory.filter((entry) => (
+    entry
+    && typeof entry.date === 'string'
+    && typeof entry.action === 'string'
+  ));
+}
+
 function toStoredRow(row: CreatorRow): CreatorRow {
   return {
     ...row,
     lastFollowUpCount: Number.isFinite(Number(row.lastFollowUpCount)) ? Number(row.lastFollowUpCount) : 0,
+    followUpHistory: normalizeFollowUpHistory(row),
   };
 }
 

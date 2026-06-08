@@ -429,3 +429,44 @@ button.danger {
 .reference-links-section li {
   overflow-wrap: anywhere;
 }
+
+.tracking-actions,
+.next-follow-up,
+.follow-up-history {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 0.75rem;
+  background: #f8fbff;
+}
+
+.tracking-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tracking-status {
+  margin: 0.75rem 0 0;
+  color: #166534;
+  font-weight: 700;
+}
+
+.next-follow-up p,
+.follow-up-history p {
+  margin: 0.35rem 0;
+}
+
+.follow-up-history summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.follow-up-history ul {
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.follow-up-history li + li {
+  margin-top: 0.75rem;
+}

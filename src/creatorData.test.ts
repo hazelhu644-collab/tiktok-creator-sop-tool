@@ -67,15 +67,15 @@ describe('editable creator data helpers', () => {
     saveCreatorRows([blankRow]);
 
     expect(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY)).toBeTruthy();
-    expect(loadCreatorRows()).toEqual([blankRow]);
+    expect(loadCreatorRows()).toEqual([{ ...blankRow, followUpHistory: [] }]);
   });
 
-  it('exports the current rows with the original template column structure', () => {
+  it('exports the current rows with the template columns plus optional tracking fields', () => {
     const csv = creatorRowsToCsv([
       row({ username: 'creator, one', notes: 'Line 1\nLine 2' }),
     ]);
 
-    expect(csv.split('\n')[0]).toBe('Creator username,Creator profile link,Contact method,Product,Current status,Sample shipping status,Sample delivered date,Video progress,First video posted date,Last contact date,Last follow-up count,Notes');
+    expect(csv.split('\n')[0]).toBe('Creator username,Creator profile link,Contact method,Product,Current status,Sample shipping status,Sample delivered date,Video progress,First video posted date,Last contact date,Last follow-up count,Notes,Last message scenario,Last message channel,Last message sent at,Next follow-up date,Last creator response');
     expect(csv).toContain('"creator, one"');
     expect(csv).toContain('"Line 1\nLine 2"');
   });

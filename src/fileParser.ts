@@ -1,7 +1,7 @@
 import type { CreatorRow } from './types';
 import { normalizeText, normalizeVideoProgress } from './sopRules';
 
-const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning'>, string[]> = {
+const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory'>, string[]> = {
   username: ['creator username', 'username', 'creator', 'creator handle'],
   profileLink: ['creator profile link', 'profile link', 'creator link', 'profile'],
   contactMethod: ['contact method', 'contact', 'channel'],
@@ -13,6 +13,11 @@ const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' |
   firstVideoPostedDate: ['first video posted date', 'first video date', 'video 1 date'],
   lastContactDate: ['last contact date', 'last contacted date', 'contacted date'],
   notes: ['notes', 'note', 'remarks'],
+  lastMessageScenario: ['last message scenario'],
+  lastMessageChannel: ['last message channel'],
+  lastMessageSentAt: ['last message sent at'],
+  nextFollowUpDate: ['next follow-up date', 'next follow up date'],
+  lastCreatorResponse: ['last creator response'],
 };
 
 const FOLLOW_UP_ALIASES = ['last follow-up count', 'last follow up count', 'follow-up count', 'follow up count', 'followups'];
@@ -47,6 +52,12 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
     lastContactDate: pickValue(record, COLUMN_ALIASES.lastContactDate),
     lastFollowUpCount: Number.isNaN(followUpCount) ? 0 : followUpCount,
     notes: pickValue(record, COLUMN_ALIASES.notes),
+    lastMessageScenario: pickValue(record, COLUMN_ALIASES.lastMessageScenario),
+    lastMessageChannel: pickValue(record, COLUMN_ALIASES.lastMessageChannel),
+    lastMessageSentAt: pickValue(record, COLUMN_ALIASES.lastMessageSentAt),
+    nextFollowUpDate: pickValue(record, COLUMN_ALIASES.nextFollowUpDate),
+    lastCreatorResponse: pickValue(record, COLUMN_ALIASES.lastCreatorResponse),
+    followUpHistory: [],
   };
 }
 

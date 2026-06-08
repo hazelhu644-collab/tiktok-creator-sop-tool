@@ -14,6 +14,15 @@ export type VideoProgressNormalization = {
   isOverRequired?: boolean;
 };
 
+export type FollowUpHistoryEntry = {
+  date: string;
+  action: 'Message Sent' | 'Creator Replied' | 'Completed' | 'Failed';
+  channel?: Channel | string;
+  scenario?: string;
+  message?: string;
+  note?: string;
+};
+
 export type CreatorRow = {
   id: string;
   username: string;
@@ -29,6 +38,12 @@ export type CreatorRow = {
   lastContactDate: string;
   lastFollowUpCount: number;
   notes: string;
+  lastMessageScenario?: string;
+  lastMessageChannel?: Channel | string;
+  lastMessageSentAt?: string;
+  nextFollowUpDate?: string;
+  lastCreatorResponse?: string;
+  followUpHistory?: FollowUpHistoryEntry[];
 };
 
 export type Task = CreatorRow & {

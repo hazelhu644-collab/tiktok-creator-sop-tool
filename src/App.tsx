@@ -12,7 +12,7 @@ import {
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, buildSummary, buildVideoProgressHint, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
 import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
-import type { Channel, CreatorRow, GeneratedMessage, Priority } from './types';
+import type { Channel, CreatorRow, FollowUpHistoryEntry, GeneratedMessage, Priority } from './types';
 import './styles.css';
 
 const priorityClass: Record<string, string> = {
@@ -115,6 +115,40 @@ function displayCreatorName(username: string): string {
   return username.trim() || '未命名达人';
 }
 
+function formatDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number): string {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return formatDate(nextDate);
+}
+
+function followUpDelayDays(scenario: string): number {
+  if (scenario === 'Final Follow-up Before Failed Candidate' || scenario === 'Second Follow-up') return 1;
+  return 2;
+}
+
+function suggestedNextAction(scenario: string): string {
+  if (scenario === 'Final Follow-up Before Failed Candidate') return '如果达人仍未回复，可再次确认是否继续合作，并准备标记合作失败。';
+  if (scenario === 'Partial Video Completion Follow-up') return '如果达人仍未更新剩余视频，可再次确认发布时间或剩余内容计划。';
+  if (scenario === 'Second Follow-up') return '如果达人仍未回复，可再次确认是否继续合作。';
+  return '如果达人仍未回复，可再次确认是否继续合作。';
+}
+
+function messagePreview(messageText: string): string {
+  const normalized = messageText.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= 90) return normalized;
+  return `${normalized.slice(0, 90)}…`;
+}
+
+function completedVideoProgress(currentProgress: string, requiredVideos: number): string {
+  const progress = normalizeVideoProgress(currentProgress, requiredVideos);
+  if (typeof progress.postedCount === 'number' && progress.postedCount >= requiredVideos) return progress.normalized;
+  return `${requiredVideos} of ${requiredVideos}`;
+}
+
 function App() {
   const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
   const [fileName, setFileName] = useState('');
@@ -132,6 +166,9 @@ function App() {
   const [promptHelperForm, setPromptHelperForm] = useState<ChatGptPromptHelperForm>(() => emptyChatGptPromptHelperForm);
   const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState('');
   const [promptCopyStatus, setPromptCopyStatus] = useState('');
+  const [trackingStatus, setTrackingStatus] = useState('');
+  const [generatedMessageCreatorId, setGeneratedMessageCreatorId] = useState('');
+  const [nextFollowUpRecommendation, setNextFollowUpRecommendation] = useState<{ date: string; action: string } | null>(null);
 
   const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
   const videoProgressHint = useMemo(() => buildVideoProgressHint(requiredVideos), [requiredVideos]);
@@ -141,6 +178,8 @@ function App() {
   const highestTasks = tasks.filter((task) => task.priority === 'Highest');
   const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
   const selectedTask = followUpTasks.find((task) => task.id === selectedCreatorId) ?? followUpTasks[0];
+  const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
+  const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
 
   useEffect(() => {
     saveCreatorRows(rows);
@@ -151,6 +190,9 @@ function App() {
     try {
       setError('');
       setMessage(null);
+      setGeneratedMessageCreatorId('');
+      setNextFollowUpRecommendation(null);
+      setTrackingStatus('');
       const parsedRows = await parseCreatorFile(file, requiredVideos);
       setRows(parsedRows);
       setFileName(file.name);
@@ -167,6 +209,107 @@ function App() {
   function handleGenerateMessage() {
     if (!selectedTask) return;
     setMessage(generateMessage(selectedTask, channel, filmingRequirements));
+    setGeneratedMessageCreatorId(selectedTask.id);
+    setNextFollowUpRecommendation(null);
+    setTrackingStatus('');
+  }
+
+  async function handleCopyGeneratedMessage() {
+    if (!message) return;
+
+    try {
+      await navigator.clipboard.writeText(message.english);
+      setTrackingStatus('已复制英文话术。');
+    } catch {
+      setTrackingStatus('复制失败，请手动选中英文话术复制。');
+    }
+  }
+
+  function updateGeneratedCreator(updater: (row: CreatorRow, today: string) => CreatorRow, confirmation: string) {
+    if (!generatedMessageCreatorId) return;
+    const today = formatDate(new Date());
+
+    setRows((currentRows) => currentRows.map((row) => (
+      row.id === generatedMessageCreatorId ? updater(row, today) : row
+    )));
+    setTrackingStatus(confirmation);
+  }
+
+  function handleMarkMessageSent() {
+    if (!message) return;
+    const scenario = message.scenario;
+    const nextDate = addDays(new Date(), followUpDelayDays(scenario));
+    const nextAction = suggestedNextAction(scenario);
+
+    updateGeneratedCreator((row, today) => {
+      const entry: FollowUpHistoryEntry = {
+        date: today,
+        channel,
+        scenario: scenarioLabel[scenario] ?? scenario,
+        message: message.english,
+        action: 'Message Sent',
+      };
+
+      return {
+        ...row,
+        lastContactDate: today,
+        lastFollowUpCount: row.lastFollowUpCount + 1,
+        lastMessageScenario: scenarioLabel[scenario] ?? scenario,
+        lastMessageChannel: channel,
+        lastMessageSentAt: today,
+        nextFollowUpDate: nextDate,
+        followUpHistory: [...(row.followUpHistory ?? []), entry],
+      };
+    }, '已标记为发送，并更新最后联系时间和跟进次数。');
+    setNextFollowUpRecommendation({ date: nextDate, action: nextAction });
+  }
+
+  function handleMarkCreatorReplied() {
+    const note = window.prompt('记录达人回复内容或下一步重点：');
+    if (note === null) return;
+    const trimmedNote = note.trim();
+
+    updateGeneratedCreator((row, today) => ({
+      ...row,
+      lastContactDate: today,
+      lastCreatorResponse: trimmedNote,
+      followUpHistory: [
+        ...(row.followUpHistory ?? []),
+        { date: today, action: 'Creator Replied', note: trimmedNote },
+      ],
+    }), '已记录达人回复。');
+  }
+
+  function handleMarkCompleted() {
+    const confirmed = window.confirm('确定要标记这个达人合作完成吗？');
+    if (!confirmed) return;
+
+    updateGeneratedCreator((row, today) => ({
+      ...row,
+      currentStatus: 'Completed',
+      videoProgress: completedVideoProgress(row.videoProgress, requiredVideos),
+      videoProgressWarning: undefined,
+      lastContactDate: today,
+      followUpHistory: [
+        ...(row.followUpHistory ?? []),
+        { date: today, action: 'Completed' },
+      ],
+    }), '已标记合作完成。');
+  }
+
+  function handleMarkFailed() {
+    const confirmed = window.confirm('确定要标记这个达人合作失败吗？');
+    if (!confirmed) return;
+
+    updateGeneratedCreator((row, today) => ({
+      ...row,
+      currentStatus: 'Failed',
+      lastContactDate: today,
+      followUpHistory: [
+        ...(row.followUpHistory ?? []),
+        { date: today, action: 'Failed' },
+      ],
+    }), '已标记合作失败。');
   }
 
   function handleEditFilmingRequirements() {
@@ -287,6 +430,9 @@ function App() {
       row.id === rowId ? updateCreatorField(row, field, value, requiredVideos) : row
     )));
     setMessage(null);
+    setGeneratedMessageCreatorId('');
+    setNextFollowUpRecommendation(null);
+    setTrackingStatus('');
   }
 
   function handleDeleteCreator(rowId: string) {
@@ -658,6 +804,45 @@ function App() {
                 <pre>{message.english}</pre>
                 <h3>中文解释</h3>
                 <p>{message.chineseExplanation}</p>
+
+                <div className="tracking-actions" aria-label="发送后追踪">
+                  <h3>发送后追踪</h3>
+                  <div className="tracking-button-row">
+                    <button type="button" onClick={handleCopyGeneratedMessage}>复制话术</button>
+                    <button type="button" onClick={handleMarkMessageSent} disabled={!generatedMessageCreator}>标记为已发送</button>
+                    <button type="button" className="secondary" onClick={handleMarkCreatorReplied} disabled={!generatedMessageCreator}>标记达人已回复</button>
+                    <button type="button" className="secondary" onClick={handleMarkCompleted} disabled={!generatedMessageCreator}>标记合作完成</button>
+                    <button type="button" className="secondary danger" onClick={handleMarkFailed} disabled={!generatedMessageCreator}>标记合作失败</button>
+                  </div>
+                  {trackingStatus && <p className="tracking-status" role="status">{trackingStatus}</p>}
+                </div>
+
+                {nextFollowUpRecommendation && (
+                  <section className="next-follow-up">
+                    <h3>下一步跟进建议</h3>
+                    <p>建议下次跟进时间：{nextFollowUpRecommendation.date}</p>
+                    <p>建议动作：{nextFollowUpRecommendation.action}</p>
+                  </section>
+                )}
+
+                <details className="follow-up-history" open>
+                  <summary>跟进记录</summary>
+                  {selectedHistory.length === 0 ? (
+                    <p className="empty">暂无跟进记录。</p>
+                  ) : (
+                    <ul>
+                      {selectedHistory.slice(-5).reverse().map((entry, index) => (
+                        <li key={`${entry.date}-${entry.action}-${index}`}>
+                          <strong>{entry.date}</strong> · {entry.action}
+                          {entry.channel && <> · {entry.channel}</>}
+                          {entry.scenario && <> · {entry.scenario}</>}
+                          {entry.note && <p>{entry.note}</p>}
+                          {entry.message && <p>{messagePreview(entry.message)}</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </details>
               </div>
             )}
           </section>
