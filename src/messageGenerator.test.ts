@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
+import { classifyCreatorFollowUp, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
 import type { Task } from './types';
 
 const chineseCharacterPattern = /[\u3400-\u9fff]/;
@@ -303,6 +303,114 @@ describe('generateMessage status-aware communication center scenarios', () => {
     expect(message.scenarioReason).toContain('物流状态为 In Transit');
     expect(message.english).toContain('sample is on the way');
     expect(message.english).toContain('No posting is needed before the sample is delivered');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('does not generate final confirmation for Sample Shipped + In Transit before delivery', () => {
+    const inTransitTask = task({
+      currentStatus: 'Sample Shipped',
+      sampleShippingStatus: 'In Transit',
+      sampleDeliveredDate: '',
+      videoProgress: '0 of 2',
+      priority: 'Highest',
+      lastFollowUpCount: 3,
+      failedWarnings: ['达人已被跟进 2 次以上，但合作仍未完成。'],
+    });
+    const message = generateMessage(inTransitTask, 'TikTok Shop Affiliate Message');
+
+    expect(message.communicationAction).toBe('物流异常确认');
+    expect(message.urgencyLevel).toBe('极高');
+    expect(message.scenario).toBe('Logistics Exception Confirmation');
+    expect(message.scenario).not.toBe('Final Follow-up Before Failed Candidate');
+    expect(message.english).not.toContain('required video(s) are still incomplete');
+    expect(message.english).not.toContain('still able to complete the remaining video(s)');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('does not generate remaining video fulfillment for Sample Shipped + In Transit before delivery', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Sample Shipped',
+      sampleShippingStatus: 'In Transit',
+      sampleDeliveredDate: '',
+      videoProgress: '1 of 2',
+      firstVideoPostedDate: '2026-06-04',
+      priority: 'High',
+      priorityRank: 2,
+    }), 'TikTok DM');
+
+    expect(message.communicationAction).toBe('样品运输中建联');
+    expect(message.scenario).toBe('Sample In Transit Reminder');
+    expect(message.scenario).not.toBe('Partial Video Completion Follow-up');
+    expect(message.english).not.toContain('remaining video');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('uses logistics confirmation instead of final confirmation when in-transit follow-up count is high', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Sample Shipped',
+      sampleShippingStatus: 'In Transit',
+      sampleDeliveredDate: '',
+      videoProgress: '0/2',
+      priority: 'High',
+      lastFollowUpCount: 2,
+      failedWarnings: [],
+    }), 'Email');
+
+    expect(message.urgencyLevel).toBe('极高');
+    expect(message.communicationAction).toBe('物流异常确认');
+    expect(message.scenario).toBe('Logistics Exception Confirmation');
+    expect(message.scenarioReason).toContain('需要优先确认物流状态');
+    expect(message.english).toContain('confirm whether you have received it or seen any delivery updates');
+    expect(message.english).not.toContain('If you’re no longer able to continue');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('keeps extreme urgency for in-transit risk but classifies action as logistics confirmation', () => {
+    const classification = classifyCreatorFollowUp(task({
+      currentStatus: 'Sample Shipped',
+      sampleShippingStatus: 'In Transit',
+      sampleDeliveredDate: '',
+      videoProgress: '0/2',
+      priority: 'Highest',
+      priorityRank: 1,
+      lastFollowUpCount: 1,
+    }));
+
+    expect(classification.urgencyLevel).toBe('极高');
+    expect(classification.communicationAction).toBe('物流异常确认');
+    expect(classification.reason).toContain('样品仍处于运输中，暂不能催促视频履约');
+  });
+
+  it('classifies Delivered + 0/N as sample-delivered filming follow-up without high-risk pressure', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Delivered / Waiting for Video',
+      sampleShippingStatus: 'Delivered',
+      sampleDeliveredDate: '',
+      videoProgress: '0 of 2',
+      failedWarnings: [],
+      lastFollowUpCount: 0,
+      priority: 'None',
+    }), 'TikTok DM');
+
+    expect(message.communicationAction).toBe('样品到货催拍');
+    expect(message.scenario).toBe('Sample Delivered Follow-up');
+    expect(message.english).toContain('sample has been delivered');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('allows Delivered + high follow-up count + 0/N to generate final confirmation', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Delivered / Waiting for Video',
+      sampleShippingStatus: 'Delivered',
+      sampleDeliveredDate: '2026-06-02',
+      videoProgress: '0 of 2',
+      lastFollowUpCount: 2,
+      failedWarnings: ['达人已被跟进 2 次以上，但合作仍未完成。'],
+    }), 'TikTok Shop Affiliate Message');
+
+    expect(message.communicationAction).toBe('最后确认');
+    expect(message.scenario).toBe('Final Follow-up Before Failed Candidate');
+    expect(message.english).toContain('required video(s) are still incomplete');
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
 

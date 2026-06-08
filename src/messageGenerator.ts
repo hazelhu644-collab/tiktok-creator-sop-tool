@@ -64,13 +64,12 @@ function shippingMatches(task: Task, terms: string[]): boolean {
 }
 
 function hasSampleInTransitEvidence(task: Task): boolean {
-  return statusIncludes(task, ['sample shipped']) || shippingMatches(task, ['shipped', 'in transit']);
+  return (statusIncludes(task, ['sample shipped']) || shippingMatches(task, ['shipped', 'in transit']))
+    && !hasSampleDeliveredEvidence(task);
 }
 
 function hasSampleDeliveredEvidence(task: Task): boolean {
-  return statusIncludes(task, ['delivered', 'waiting for video'])
-    || shippingMatches(task, ['delivered'])
-    || Boolean(task.sampleDeliveredDate.trim());
+  return shippingMatches(task, ['delivered']) || Boolean(task.sampleDeliveredDate.trim());
 }
 
 function progressForTask(task: Task, configuredRequiredVideos?: number) {
@@ -94,7 +93,7 @@ function isCompletedTask(task: Task, configuredRequiredVideos: number): boolean 
 }
 
 function clearlyMeetsFinalFailedCandidateConditions(task: Task, configuredRequiredVideos: number): boolean {
-  if (isCompletedTask(task, configuredRequiredVideos) || statusIncludes(task, ['failed'])) return false;
+  if (isCompletedTask(task, configuredRequiredVideos) || statusIncludes(task, ['failed']) || !hasSampleDeliveredEvidence(task)) return false;
 
   const warningText = task.failedWarnings.join(' ');
   return task.lastFollowUpCount >= 2
@@ -118,6 +117,12 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
     || /revision|revise|edit|修改|调整|重拍/i.test(task.notes);
   const partialCompletion = postedCount > 0 && postedCount < requiredVideos;
   const finalFollowUp = clearlyMeetsFinalFailedCandidateConditions(task, configuredRequiredVideos);
+  const hasLogisticsExceptionRisk = hasInTransitEvidence
+    && !hasDeliveredEvidence
+    && (task.priority === 'Highest'
+      || task.lastFollowUpCount >= 2
+      || task.failedWarnings.length > 0
+      || /shipping delay|logistics|tracking|delivery issue|delayed|stuck|lost|物流|快递|延迟|异常/i.test(task.notes));
   const hasNoSampleStarted = !shippingStatus || shippingStatus === 'not shipped' || shippingStatus === 'not started' || shippingStatus === 'pending';
   const isFirstOutreach = (!status || status.includes('to contact'))
     && hasNoSampleStarted
@@ -133,11 +138,38 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
     };
   }
 
+  if (hasInTransitEvidence && !hasDeliveredEvidence) {
+    if (hasLogisticsExceptionRisk) {
+      return {
+        urgencyLevel: task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0 ? '极高' : '高',
+        communicationAction: '物流异常确认',
+        reason: `原因：样品已发出但尚未确认送达，且流程已延迟或已多次跟进，需要优先确认物流状态。样品仍处于运输中，暂不能催促视频履约。当前优先确认物流和收货情况。`,
+        highRisk: true,
+      };
+    }
+
+    return {
+      urgencyLevel: task.priority === 'High' || task.priority === 'Highest' ? '高' : '中',
+      communicationAction: '样品运输中建联',
+      reason: `物流状态为 ${sampleShippingStatus} 或 Current status 为 ${currentStatus}，物流状态已发货/运输中，达人已进入样品合作流程，应提醒收货和后续拍摄安排。样品仍处于运输中，暂不能催促视频履约。当前优先确认物流和收货情况。`,
+      highRisk: false,
+    };
+  }
+
   if (isCompleted) {
     return {
       urgencyLevel: '归档',
       communicationAction: '合作完成维护',
       reason: `当前状态为 ${currentStatus}，或视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成，应做维护而不是催发视频。`,
+      highRisk: false,
+    };
+  }
+
+  if (needsRevision && hasDeliveredEvidence) {
+    return {
+      urgencyLevel: task.priority === 'Highest' ? '极高' : '高',
+      communicationAction: '视频修改',
+      reason: `当前状态或备注显示需要修改视频，应清楚说明修改点并推动达人完成调整。`,
       highRisk: false,
     };
   }
@@ -151,15 +183,6 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
     };
   }
 
-  if (finalFollowUp) {
-    return {
-      urgencyLevel: '极高',
-      communicationAction: '最后确认',
-      reason: `达人跟进次数较高或已有失败风险提醒，合作仍未完成，需要今天确认是否还能继续履约。`,
-      highRisk: true,
-    };
-  }
-
   if (partialCompletion) {
     const urgent = task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0;
     return {
@@ -170,6 +193,15 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
     };
   }
 
+  if (finalFollowUp) {
+    return {
+      urgencyLevel: '极高',
+      communicationAction: '最后确认',
+      reason: `达人跟进次数较高或已有失败风险提醒，合作仍未完成，需要今天确认是否还能继续履约。`,
+      highRisk: true,
+    };
+  }
+
   if (hasDeliveredEvidence && postedCount === 0) {
     const urgent = task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0;
     return {
@@ -177,15 +209,6 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
       communicationAction: '样品到货催拍',
       reason: `物流状态为 ${sampleShippingStatus}，样品到货日期${task.sampleDeliveredDate.trim() ? '已填写' : '未填写'}；样品已送达或已填写到货日期，但当前视频进度为 0/${requiredVideos}，需要确认拍摄和发布时间。`,
       highRisk: urgent,
-    };
-  }
-
-  if (hasInTransitEvidence) {
-    return {
-      urgencyLevel: task.priority === 'High' || task.priority === 'Highest' ? '高' : '中',
-      communicationAction: '样品运输中建联',
-      reason: `物流状态为 ${sampleShippingStatus} 或 Current status 为 ${currentStatus}，物流状态已发货/运输中，达人已进入样品合作流程，应提醒收货和后续拍摄安排。`,
-      highRisk: false,
     };
   }
 
@@ -238,6 +261,7 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
   if (classification.communicationAction === '最后确认') return withClassification('Final Follow-up Before Failed Candidate');
   if (classification.communicationAction === '剩余视频履约') return withClassification('Partial Video Completion Follow-up');
   if (classification.communicationAction === '样品到货催拍') return withClassification('Sample Delivered Follow-up');
+  if (classification.communicationAction === '物流异常确认') return withClassification('Logistics Exception Confirmation');
   if (classification.communicationAction === '样品运输中建联') return withClassification('Sample In Transit Reminder');
 
   if (statusIncludes(task, ['to contact'])) {
@@ -340,6 +364,7 @@ function joinEnglishList(items: string[]): string {
 function isGuidelineScenario(scenario: string): boolean {
   return scenario === 'Sample Delivered Follow-up'
     || scenario === 'Sample In Transit Reminder'
+    || scenario === 'Logistics Exception Confirmation'
     || scenario === 'Partial Video Completion Follow-up'
     || scenario === 'Needs Revision Reminder'
     || scenario === 'Final Follow-up Before Failed Candidate'
@@ -438,6 +463,8 @@ export function generateMessage(
     english = sampleRequestConfirmationMessage(channel, name, product);
   } else if (scenario === 'Sample In Transit Reminder') {
     english = sampleInTransitMessage(channel, name, product, filmingRequirementsReminder);
+  } else if (scenario === 'Logistics Exception Confirmation') {
+    english = logisticsExceptionMessage(channel, name, product, filmingRequirementsReminder);
   } else if (scenario === 'Sample Delivered Follow-up') {
     const request = `Just checking in now that the ${product} sample has been delivered. Please confirm your expected posting date for the first video. ${filmingRequirementsReminder}`;
     english = byChannel(channel, name, request, '', highRisk);
@@ -519,6 +546,37 @@ After delivery, please plan the content based on the filming guidelines we share
 Could you please confirm when you expect to start filming after receiving the sample?
 
 Thank you.`;
+}
+
+function logisticsExceptionMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
+  const reminder = filmingRequirementsReminder.trim();
+
+  if (channel === 'TikTok DM') {
+    return `Hi ${name}, I’m checking in on the ${product} sample shipment. It still appears to be in transit on our side. Have you received it or seen any delivery update? Please let us know if there is any delivery issue. Once it arrives, we can move forward with filming based on the guidelines. ${reminder}`.replace(/\s+/g, ' ').trim();
+  }
+
+  if (channel === 'TikTok Shop Affiliate Message') {
+    return `Hi ${name},
+
+I’m checking in on the sample shipment for the ${product} collaboration. The package appears to still be in transit on our side, so I wanted to confirm whether you’ve received it or seen any delivery updates.
+
+Please let us know if there is any issue with the delivery. Once the sample arrives, we can move forward with the filming plan based on the guidelines we shared. ${reminder}
+
+Thank you.`;
+  }
+
+  if (channel === 'WhatsApp') {
+    return `Hi ${name}, I’m checking in on the ${product} sample shipment. It still appears to be in transit on our side. Could you confirm whether you have received it or seen any delivery updates? Please let us know if there is any delivery issue. Once it arrives, we can move forward with the filming plan. ${reminder}`.replace(/\s+/g, ' ').trim();
+  }
+
+  return `Hi ${name},
+
+I hope you’re doing well. I’m checking in on the sample shipment for the ${product} collaboration. The package appears to still be in transit on our side, so I wanted to confirm whether you have received it or seen any delivery updates.
+
+Please let us know if there is any issue with the delivery. Once the sample arrives, we can move forward with the filming plan based on the guidelines we shared. ${reminder}
+
+Thank you,
+Brand Team`;
 }
 
 function needsRevisionMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
@@ -620,6 +678,7 @@ function buildChineseExplanation(scenario: string, channel: Channel, hasReferenc
     'Sample Request Reminder': '提醒达人申请样品，重点是让达人完成样品申请动作。',
     'Sample Request Confirmation': '样品申请后确认，重点是说明申请已收到或正在处理。',
     'Sample In Transit Reminder': '样品运输中提醒，重点是提醒达人关注物流，到货后再开始拍摄。',
+    'Logistics Exception Confirmation': '物流异常确认，重点是确认达人是否收到包裹、查看物流更新，并说明样品到货后再推进拍摄。',
     'Sample Delivered Follow-up': '样品到货后催拍，重点是确认发布时间，并轻量提醒拍摄要求、产品链接和 tag。',
     'Partial Video Completion Follow-up': '已发布部分视频，跟进剩余视频，先认可已发布内容，再确认剩余视频发布时间。',
     'Needs Revision Reminder': '视频修改提醒，重点是清楚说明需要调整，不情绪化。',
