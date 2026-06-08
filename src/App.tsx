@@ -11,8 +11,8 @@ import {
 } from './creatorData';
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, buildSummary, buildVideoProgressHint, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
-import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
-import type { Channel, CreatorRow, FollowUpHistoryEntry, GeneratedMessage, Priority, Task } from './types';
+import { CHANNELS, classifyCreatorFollowUp, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
+import type { Channel, CreatorRow, FollowUpHistoryEntry, GeneratedMessage, Priority, Task, UrgencyLevel } from './types';
 import './styles.css';
 
 const priorityClass: Record<string, string> = {
@@ -125,25 +125,29 @@ function displayCreatorName(username: string): string {
 
 const creatorQuickFilters = [
   { key: 'all', label: '全部' },
-  { key: 'highest', label: '最高优先级' },
-  { key: 'high', label: '高优先级' },
-  { key: 'to-contact', label: '待建联' },
-  { key: 'needs-follow-up', label: '需跟进' },
-  { key: 'shipping', label: '样品运输中' },
-  { key: 'delivered', label: '样品已到' },
-  { key: 'partial', label: '部分视频' },
-  { key: 'revision', label: '需修改' },
-  { key: 'completed', label: '已完成' },
-  { key: 'failed', label: '失败' },
+  { key: '极高', label: '极高' },
+  { key: '高', label: '高' },
+  { key: '中', label: '中' },
+  { key: '低', label: '低' },
+  { key: '归档', label: '归档' },
 ] as const;
 
 type CreatorQuickFilterKey = typeof creatorQuickFilters[number]['key'];
+
+const urgencySortRank: Record<UrgencyLevel, number> = {
+  极高: 1,
+  高: 2,
+  中: 3,
+  低: 4,
+  归档: 5,
+};
 
 function statusText(task: Task): string {
   return task.currentStatus.trim() || '未填写状态';
 }
 
-function normalizedTaskSearchText(task: Task): string {
+function normalizedTaskSearchText(task: Task, requiredVideos: number): string {
+  const classification = classifyCreatorFollowUp(task, requiredVideos);
   return [
     task.username,
     task.product,
@@ -152,113 +156,48 @@ function normalizedTaskSearchText(task: Task): string {
     priorityLabel[task.priority],
     task.priority,
     task.sampleShippingStatus,
+    classification.urgencyLevel,
+    classification.communicationAction,
   ].join(' ').toLowerCase();
 }
 
-function creatorSortBucket(task: Task): number {
-  const status = task.currentStatus.trim().toLowerCase();
-  if (status === 'completed') return 6;
-  if (status === 'failed') return 7;
-  if (task.priority === 'Highest') return 1;
-  if (task.priority === 'High') return 2;
-  if (task.priority === 'Medium') return 3;
-  if (task.priority === 'Low') return 4;
-  return 5;
+function compareDateAscending(aDate: string, bDate: string): number {
+  const a = aDate.trim();
+  const b = bDate.trim();
+  if (a && b && a !== b) return a.localeCompare(b);
+  if (a && !b) return -1;
+  if (!a && b) return 1;
+  return 0;
 }
 
-function creatorDropdownGroupLabel(task: Task): string {
-  const status = task.currentStatus.trim().toLowerCase();
-  if (status === 'completed') return '已完成';
-  if (status === 'failed') return '失败';
-  if (task.priority === 'None') return '普通';
-  return priorityLabel[task.priority];
-}
+function compareCreatorQueueOrder(a: Task, b: Task, requiredVideos: number): number {
+  const aClassification = classifyCreatorFollowUp(a, requiredVideos);
+  const bClassification = classifyCreatorFollowUp(b, requiredVideos);
+  const urgencyDifference = urgencySortRank[aClassification.urgencyLevel] - urgencySortRank[bClassification.urgencyLevel];
+  if (urgencyDifference !== 0) return urgencyDifference;
 
-function compareLastContactThenUsername(a: Task, b: Task): number {
-  const bucketDifference = creatorSortBucket(a) - creatorSortBucket(b);
-  if (bucketDifference !== 0) return bucketDifference;
+  const lastContactDifference = compareDateAscending(a.lastContactDate, b.lastContactDate);
+  if (lastContactDifference !== 0) return lastContactDifference;
 
-  const aDate = a.lastContactDate.trim();
-  const bDate = b.lastContactDate.trim();
-  if (aDate && bDate && aDate !== bDate) return bDate.localeCompare(aDate);
-  if (aDate && !bDate) return -1;
-  if (!aDate && bDate) return 1;
+  const sampleDeliveredDifference = compareDateAscending(a.sampleDeliveredDate, b.sampleDeliveredDate);
+  if (sampleDeliveredDifference !== 0) return sampleDeliveredDifference;
+
   return a.username.localeCompare(b.username);
 }
 
-function isTerminalStatus(status: string): boolean {
-  return status === 'completed' || status === 'failed';
-}
-
-function hasSampleInTransitEvidence(status: string, shippingStatus: string): boolean {
-  return status === 'sample shipped' || shippingStatus === 'shipped' || shippingStatus === 'in transit';
-}
-
-function hasSampleDeliveredEvidence(task: Task, shippingStatus: string): boolean {
-  return shippingStatus === 'delivered' || Boolean(task.sampleDeliveredDate.trim());
-}
-
-function hasPartialVideoProgress(progress: ReturnType<typeof normalizeVideoProgress>): boolean {
-  return typeof progress.postedCount === 'number'
-    && typeof progress.requiredVideos === 'number'
-    && progress.postedCount > 0
-    && progress.postedCount < progress.requiredVideos;
-}
-
-function needsOperationalFollowUp(task: Task, status: string, shippingStatus: string, progress: ReturnType<typeof normalizeVideoProgress>): boolean {
-  if (isTerminalStatus(status)) return false;
-
-  const followUpStatuses = new Set([
-    'contacted / waiting for reply',
-    'contacted',
-    'no reply',
-    'invited / waiting for sample request',
-    'sample requested',
-    'sample shipped',
-    'in transit',
-    'delivered / waiting for video',
-    'posted video / waiting for next video',
-    'needs revision',
-  ]);
-
-  return followUpStatuses.has(status)
-    || shippingStatus === 'shipped'
-    || shippingStatus === 'in transit'
-    || shippingStatus === 'delivered'
-    || task.needsFollowUp
-    || task.failedWarnings.length > 0
-    || hasPartialVideoProgress(progress);
-}
-
-function matchesQuickFilter(task: Task, quickFilter: CreatorQuickFilterKey): boolean {
-  const status = task.currentStatus.trim().toLowerCase();
-  const shippingStatus = task.sampleShippingStatus.trim().toLowerCase();
-  const progress = normalizeVideoProgress(task.videoProgress);
-
+function matchesQuickFilter(task: Task, quickFilter: CreatorQuickFilterKey, requiredVideos: number): boolean {
   if (quickFilter === 'all') return true;
-  if (quickFilter === 'highest') return task.priority === 'Highest';
-  if (quickFilter === 'high') return task.priority === 'High';
-  if (quickFilter === 'to-contact') return status === 'to contact' && !['shipped', 'in transit', 'delivered'].includes(shippingStatus);
-  if (quickFilter === 'needs-follow-up') return needsOperationalFollowUp(task, status, shippingStatus, progress);
-  if (quickFilter === 'shipping') return hasSampleInTransitEvidence(status, shippingStatus);
-  if (quickFilter === 'delivered') return hasSampleDeliveredEvidence(task, shippingStatus);
-  if (quickFilter === 'partial') return hasPartialVideoProgress(progress);
-  if (quickFilter === 'revision') return status === 'needs revision' || status.includes('revision');
-  if (quickFilter === 'completed') return status === 'completed';
-  if (quickFilter === 'failed') return status === 'failed';
-  return true;
+  return classifyCreatorFollowUp(task, requiredVideos).urgencyLevel === quickFilter;
 }
 
-function creatorGeneratorEmptyState(quickFilter: CreatorQuickFilterKey): string {
-  if (quickFilter === 'to-contact') {
-    return '当前没有纯待建联达人。样品已发出或已到货的达人，请查看「样品运输中」「样品已到」或「需跟进」。';
-  }
-
+function creatorGeneratorEmptyState(): string {
   return '没有匹配的达人，请调整搜索词或切换筛选。';
 }
 
-function creatorOptionLabel(task: Task): string {
-  return `${creatorDropdownGroupLabel(task)} — ${displayCreatorName(task.username)} — ${statusText(task)}`;
+function creatorOptionLabel(task: Task, requiredVideos: number): string {
+  const classification = classifyCreatorFollowUp(task, requiredVideos);
+  const productText = task.product.trim() ? ` · ${task.product.trim()}` : '';
+  return `${classification.urgencyLevel} · ${classification.communicationAction} · ${displayCreatorName(task.username)} · ${statusText(task)}${productText}`;
 }
 
 function formatDate(date: Date): string {
@@ -325,10 +264,10 @@ function App() {
   const generatorTasks = useMemo(() => {
     const normalizedSearch = creatorSearchTerm.trim().toLowerCase();
     return [...tasks]
-      .sort(compareLastContactThenUsername)
-      .filter((task) => matchesQuickFilter(task, creatorQuickFilter))
-      .filter((task) => !normalizedSearch || normalizedTaskSearchText(task).includes(normalizedSearch));
-  }, [tasks, creatorSearchTerm, creatorQuickFilter]);
+      .sort((a, b) => compareCreatorQueueOrder(a, b, requiredVideos))
+      .filter((task) => matchesQuickFilter(task, creatorQuickFilter, requiredVideos))
+      .filter((task) => !normalizedSearch || normalizedTaskSearchText(task, requiredVideos).includes(normalizedSearch));
+  }, [tasks, creatorSearchTerm, creatorQuickFilter, requiredVideos]);
   const summary = useMemo(() => buildSummary(tasks), [tasks]);
   const highestTasks = tasks.filter((task) => task.priority === 'Highest');
   const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
@@ -932,20 +871,20 @@ function App() {
           </section>
 
           <section className="panel generator">
-            <h2>7. 生成单个达人话术</h2>
-            <p>选择一个达人和一个联系渠道。系统会先生成英文话术，再在下方提供中文解释。</p>
+            <h2>7. 达人跟进队列</h2>
+            <p>按紧急程度排序达人，系统会根据当前合作阶段生成对应话术。</p>
             <div className="generator-controls">
               <div className="creator-selector-panel">
                 <label>
                   搜索达人
                   <input
-                    aria-label="搜索达人账号 / 产品 / 状态"
-                    placeholder="搜索达人账号 / 产品 / 状态"
+                    aria-label="搜索达人账号 / 产品 / 状态 / 沟通动作"
+                    placeholder="搜索达人账号 / 产品 / 状态 / 沟通动作"
                     value={creatorSearchTerm}
                     onChange={(event) => setCreatorSearchTerm(event.target.value)}
                   />
                 </label>
-                <div className="quick-filters" aria-label="达人快捷筛选">
+                <div className="quick-filters" aria-label="紧急程度筛选">
                   {creatorQuickFilters.map((filter) => (
                     <button
                       key={filter.key}
@@ -961,11 +900,11 @@ function App() {
                   选择达人
                   <select value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>
                     {generatorTasks.map((task) => (
-                      <option key={task.id} value={task.id}>{creatorOptionLabel(task)}</option>
+                      <option key={task.id} value={task.id}>{creatorOptionLabel(task, requiredVideos)}</option>
                     ))}
                   </select>
                 </label>
-                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState(creatorQuickFilter)}</p>}
+                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState()}</p>}
               </div>
               <label>
                 选择联系渠道
@@ -978,8 +917,12 @@ function App() {
 
             {message && (
               <div className="message-output">
+                <div className="queue-message-meta">
+                  <p>紧急程度：{message.urgencyLevel}</p>
+                  <p>沟通动作：{message.communicationAction}</p>
+                  <p>原因：{message.scenarioReason}</p>
+                </div>
                 <span className="scenario">场景：{scenarioLabel[message.scenario] ?? message.scenario}</span>
-                <p className="scenario-reason">原因：{message.scenarioReason}</p>
                 <h3>英文话术</h3>
                 <pre>{message.english}</pre>
                 <h3>中文解释</h3>

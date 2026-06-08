@@ -65,9 +65,23 @@ export type Summary = {
   failedWarnings: number;
 };
 
+export type UrgencyLevel = '极高' | '高' | '中' | '低' | '归档';
+
+export type CommunicationAction =
+  | '未合作邀约'
+  | '样品运输中建联'
+  | '样品到货催拍'
+  | '剩余视频履约'
+  | '视频修改'
+  | '最后确认'
+  | '合作完成维护'
+  | '合作失败归档';
+
 export type GeneratedMessage = {
   english: string;
   chineseExplanation: string;
   scenario: string;
   scenarioReason: string;
+  urgencyLevel: UrgencyLevel;
+  communicationAction: CommunicationAction;
 };
