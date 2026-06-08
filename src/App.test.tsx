@@ -219,7 +219,7 @@ describe('ChatGPT prompt generator UI', () => {
     const messageArea = within(messageOutput as HTMLElement);
     expect(messageArea.getByText('英文话术')).toBeInTheDocument();
     expect(messageArea.getByText('中文解释')).toBeInTheDocument();
-    expect(messageArea.getAllByText(/saved quiet fountain shot/).length).toBeGreaterThan(0);
+    expect(messageArea.getByText(/required video\(s\) are still incomplete/)).toBeInTheDocument();
     expect(messageArea.getAllByText(/https:\/\/tiktok.com\/saved-reference/).length).toBeGreaterThan(0);
     expect(messageArea.queryByText(/unsaved helper-only selling point/)).not.toBeInTheDocument();
     expect(messageArea.queryByText(/https:\/\/tiktok.com\/unsaved-helper-reference/)).not.toBeInTheDocument();
