@@ -69,4 +69,5 @@ export type GeneratedMessage = {
   english: string;
   chineseExplanation: string;
   scenario: string;
+  scenarioReason: string;
 };

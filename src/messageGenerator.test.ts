@@ -268,3 +268,108 @@ describe('generateMessage reference video links', () => {
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
 });
+
+describe('generateMessage status-aware communication center scenarios', () => {
+  it('generates first outreach for To Contact creators', () => {
+    const message = generateMessage(task({
+      currentStatus: 'To Contact',
+      sampleShippingStatus: '',
+      sampleDeliveredDate: '',
+      priority: 'None',
+      priorityRank: 99,
+      needsFollowUp: false,
+    }), 'Email');
+
+    expect(message.scenario).toBe('First Outreach');
+    expect(message.scenarioReason).toContain('首次合作介绍话术');
+    expect(message.english).toContain('potential collaboration');
+    expect(message.english).toContain('If you’re interested');
+    expect(message.english).not.toContain('delivered');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+    expect(message.chineseExplanation).toMatch(chineseCharacterPattern);
+  });
+
+  it('generates shipment-in-progress copy for Sample Shipped or In Transit creators', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Sample Shipped',
+      sampleShippingStatus: 'In Transit',
+      sampleDeliveredDate: '',
+      priority: 'None',
+      priorityRank: 99,
+      needsFollowUp: false,
+    }), 'TikTok DM');
+
+    expect(message.scenario).toBe('Sample In Transit Reminder');
+    expect(message.scenarioReason).toContain('物流状态为 In Transit');
+    expect(message.english).toContain('sample is on the way');
+    expect(message.english).toContain('No posting is needed before the sample is delivered');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('generates filming reminder copy for Delivered / Waiting for Video creators', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Delivered / Waiting for Video',
+      sampleShippingStatus: 'Delivered',
+      videoProgress: '0 of 2',
+      failedWarnings: [],
+      lastFollowUpCount: 0,
+    }), 'TikTok Shop Affiliate Message', requirements({ referenceLinks: ['https://example.com/ref'] }));
+
+    expect(message.scenario).toBe('Sample Delivered Follow-up');
+    expect(message.english).toContain('sample has been delivered');
+    expect(message.english).toContain('expected posting date for the first video');
+    expect(message.english).toContain('filming guidelines');
+    expect(message.english).toContain('https://example.com/ref');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('generates remaining-video follow-up for partial video completion', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Posted Video / Waiting for Next Video',
+      videoProgress: '1 of 3',
+      priority: 'High',
+      priorityRank: 2,
+      firstVideoPostedDate: '2026-06-04',
+      failedWarnings: [],
+    }), 'Email', requirements({ requirements: ['每位达人 3 条视频'] }));
+
+    expect(message.scenario).toBe('Partial Video Completion Follow-up');
+    expect(message.english).toContain('preparing to review it for ad testing');
+    expect(message.english).toContain('2 remaining videos');
+    expect(message.english).toContain('expected posting date');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('generates thank-you and future collaboration copy for Completed creators', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Completed',
+      videoProgress: '2 of 2',
+      priority: 'None',
+      priorityRank: 99,
+      needsFollowUp: false,
+    }), 'WhatsApp');
+
+    expect(message.scenario).toBe('Completed Thank You');
+    expect(message.english).toContain('Thank you for completing');
+    expect(message.english).toContain('review performance');
+    expect(message.english).toContain('future campaign opportunities');
+    expect(message.english).not.toContain('remaining video');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('generates non-pushy archive confirmation for Failed creators', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Failed',
+      priority: 'None',
+      priorityRank: 99,
+      failedWarnings: ['达人已被跟进 2 次以上，但合作仍未完成。'],
+      needsFollowUp: false,
+    }), 'TikTok Shop Affiliate Message');
+
+    expect(message.scenario).toBe('Failed Archive Confirmation');
+    expect(message.english).toContain('updating the campaign status');
+    expect(message.english).toContain('archive this campaign as not completed');
+    expect(message.english).not.toContain('Please let us know if you’re still able to complete');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+});
