@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { CREATOR_ROWS_STORAGE_KEY } from './creatorData';
@@ -29,6 +29,7 @@ function creatorRow(overrides: Partial<CreatorRow> = {}): CreatorRow {
 
 afterEach(() => {
   window.localStorage.clear();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -158,7 +159,11 @@ describe('ChatGPT prompt generator UI', () => {
   it('copies the generated prompt', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(async () => undefined);
-    Object.defineProperty(navigator, 'clipboard', {
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
       configurable: true,
       value: { writeText },
     });
@@ -223,5 +228,138 @@ describe('ChatGPT prompt generator UI', () => {
     expect(messageArea.getAllByText(/https:\/\/tiktok.com\/saved-reference/).length).toBeGreaterThan(0);
     expect(messageArea.queryByText(/unsaved helper-only selling point/)).not.toBeInTheDocument();
     expect(messageArea.queryByText(/https:\/\/tiktok.com\/unsaved-helper-reference/)).not.toBeInTheDocument();
+  });
+});
+
+
+describe('post-message tracking workflow', () => {
+  function seedCreator(overrides: Partial<CreatorRow> = {}) {
+    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify([creatorRow(overrides)]));
+  }
+
+  async function renderAndGenerateMessage(overrides: Partial<CreatorRow> = {}) {
+    seedCreator(overrides);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+    return user;
+  }
+
+  function storedCreator(): CreatorRow {
+    return JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
+  }
+
+  it('copies only the English generated message', async () => {
+    const user = await renderAndGenerateMessage();
+    const englishMessage = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
+    const chineseExplanation = screen.getByText('中文解释').nextElementSibling?.textContent ?? '';
+
+    await user.click(screen.getByRole('button', { name: '复制话术' }));
+
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(englishMessage));
+    expect(await navigator.clipboard.readText()).not.toContain(chineseExplanation);
+    expect(screen.getByText('已复制英文话术。')).toBeInTheDocument();
+  });
+
+  it('marks a generated message as sent and records follow-up tracking details', async () => {
+    const user = userEvent.setup();
+    seedCreator({ lastFollowUpCount: 1, lastContactDate: '2026-06-01' });
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
+    const today = new Date().toISOString().slice(0, 10);
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + 2);
+    const expectedNextDate = nextDate.toISOString().slice(0, 10);
+
+    await waitFor(() => {
+      const saved = storedCreator();
+      expect(saved.lastContactDate).toBe(today);
+      expect(saved.lastFollowUpCount).toBe(2);
+      expect(saved.lastMessageSentAt).toBe(today);
+      expect(saved.nextFollowUpDate).toBe(expectedNextDate);
+      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          date: today,
+          action: 'Message Sent',
+          channel: 'TikTok DM',
+          scenario: '样品到货后催拍',
+          message: expect.stringContaining('Hi @fluffy_creator'),
+        }),
+      ]));
+    });
+    expect(screen.getByText('已标记为发送，并更新最后联系时间和跟进次数。')).toBeInTheDocument();
+    expect(screen.getByText('下一步跟进建议')).toBeInTheDocument();
+    expect(screen.getByText(`建议下次跟进时间：${expectedNextDate}`)).toBeInTheDocument();
+    expect(screen.getByText('Message Sent', { exact: false })).toBeInTheDocument();
+    expect(screen.getAllByText('样品到货后催拍', { exact: false }).length).toBeGreaterThan(0);
+  });
+
+  it('saves a creator reply note and updates the follow-up history', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'prompt').mockReturnValue('Creator will post tomorrow');
+    seedCreator();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    await user.click(screen.getByRole('button', { name: '标记达人已回复' }));
+    const today = new Date().toISOString().slice(0, 10);
+
+    await waitFor(() => {
+      const saved = storedCreator();
+      expect(saved.lastCreatorResponse).toBe('Creator will post tomorrow');
+      expect(saved.lastContactDate).toBe(today);
+      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
+        expect.objectContaining({ date: today, action: 'Creator Replied', note: 'Creator will post tomorrow' }),
+      ]));
+    });
+    expect(window.prompt).toHaveBeenCalledWith('记录达人回复内容或下一步重点：');
+    expect(screen.getByText('Creator will post tomorrow')).toBeInTheDocument();
+  });
+
+  it('marks cooperation completed and normalizes completion progress', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    seedCreator({ videoProgress: '1 of 2', firstVideoPostedDate: '2026-06-02' });
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    await user.click(screen.getByRole('button', { name: '标记合作完成' }));
+    const today = new Date().toISOString().slice(0, 10);
+
+    await waitFor(() => {
+      const saved = storedCreator();
+      expect(saved.currentStatus).toBe('Completed');
+      expect(saved.videoProgress).toBe('2 of 2');
+      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
+        expect.objectContaining({ date: today, action: 'Completed' }),
+      ]));
+    });
+    expect(window.confirm).toHaveBeenCalledWith('确定要标记这个达人合作完成吗？');
+  });
+
+  it('marks cooperation failed while preserving priority analysis stability', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    seedCreator({ sampleDeliveredDate: '2026-06-04', lastFollowUpCount: 0 });
+    render(<App />);
+
+    expect(screen.getByText('最高')).toBeInTheDocument();
+    expect(screen.getAllByText(/样品已到货/).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+    await user.click(screen.getByRole('button', { name: '标记合作失败' }));
+    const today = new Date().toISOString().slice(0, 10);
+
+    await waitFor(() => {
+      const saved = storedCreator();
+      expect(saved.currentStatus).toBe('Failed');
+      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
+        expect.objectContaining({ date: today, action: 'Failed' }),
+      ]));
+    });
+    expect(screen.getByText('达人总数')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /今日跟进概览/ })).toBeInTheDocument();
+    expect(window.confirm).toHaveBeenCalledWith('确定要标记这个达人合作失败吗？');
   });
 });
