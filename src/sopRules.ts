@@ -147,6 +147,10 @@ function isDelivered(status: string): boolean {
   return normalizeText(status).toLowerCase() === 'delivered';
 }
 
+function hasDeliveredEvidence(row: CreatorRow): boolean {
+  return isDelivered(row.sampleShippingStatus) || parseDate(row.sampleDeliveredDate) !== null;
+}
+
 function isNoSampleSent(status: string): boolean {
   const normalized = normalizeText(status).toLowerCase();
   return !normalized || normalized === 'pending' || normalized === 'not shipped';
@@ -179,7 +183,7 @@ export function getFailureWarnings(row: CreatorRow, today = new Date(), required
     warnings.push(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
   }
 
-  if (isDelivered(row.sampleShippingStatus) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 7) {
+  if (hasDeliveredEvidence(row) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 7) {
     warnings.push(`样品已到货 ${deliveredDays} 天，但视频进度仍为 0/${requiredVideos}。`);
   }
 
@@ -209,7 +213,7 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
   let triggerReason = '根据当前 MVP 规则，今天暂无必须跟进的任务。';
   let suggestedAction = '稍后复查。';
 
-  if (isDelivered(row.sampleShippingStatus) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 2) {
+  if (hasDeliveredEvidence(row) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 2) {
     priority = 'Highest';
     triggerReason = `样品已到货 ${deliveredDays} 天，但达人还没有发布视频。`;
     suggestedAction = `发送第一次拍摄跟进，提醒达人按照达人拍摄要求完成 ${requiredVideos} 条视频。`;

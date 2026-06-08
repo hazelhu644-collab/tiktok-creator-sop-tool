@@ -49,9 +49,19 @@ function statusIncludes(task: Task, terms: string[]): boolean {
   return terms.some((term) => status.includes(term));
 }
 
-function shippingIncludes(task: Task, terms: string[]): boolean {
+function shippingMatches(task: Task, terms: string[]): boolean {
   const shippingStatus = normalizeForScenario(task.sampleShippingStatus);
-  return terms.some((term) => shippingStatus.includes(term));
+  return terms.some((term) => shippingStatus === term);
+}
+
+function hasSampleInTransitEvidence(task: Task): boolean {
+  return statusIncludes(task, ['sample shipped']) || shippingMatches(task, ['shipped', 'in transit']);
+}
+
+function hasSampleDeliveredEvidence(task: Task): boolean {
+  return statusIncludes(task, ['delivered', 'waiting for video'])
+    || shippingMatches(task, ['delivered'])
+    || Boolean(task.sampleDeliveredDate.trim());
 }
 
 function progressForTask(task: Task, configuredRequiredVideos?: number) {
@@ -89,6 +99,8 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
   const requiredVideos = progress.requiredVideos ?? configuredRequiredVideos;
   const currentStatus = task.currentStatus.trim() || '未填写';
   const sampleShippingStatus = task.sampleShippingStatus.trim() || '未填写';
+  const hasDeliveredEvidence = hasSampleDeliveredEvidence(task);
+  const hasInTransitEvidence = hasSampleInTransitEvidence(task);
 
   if (statusIncludes(task, ['failed'])) {
     return {
@@ -101,7 +113,9 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
   if (isCompletedTask(task, configuredRequiredVideos)) {
     return {
       scenario: 'Completed Thank You',
-      reason: `当前状态为 ${currentStatus}，或视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成。`,
+      reason: hasDeliveredEvidence
+        ? `物流或到货信息显示达人已进入样品合作流程，且视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成。`
+        : `当前状态为 ${currentStatus}，或视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成。`,
       highRisk: false,
     };
   }
@@ -119,6 +133,30 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
       scenario: 'Final Follow-up Before Failed Candidate',
       reason: `跟进次数或风险提醒较高，且合作动作尚未完成，需要在归档失败前做最后一次明确确认。`,
       highRisk: true,
+    };
+  }
+
+  if (hasDeliveredEvidence && postedCount > 0 && postedCount < requiredVideos) {
+    return {
+      scenario: 'Partial Video Completion Follow-up',
+      reason: `物流或到货信息显示达人已进入样品合作流程，视频进度为 ${postedCount}/${requiredVideos}，应跟进剩余视频。`,
+      highRisk: false,
+    };
+  }
+
+  if (hasDeliveredEvidence && postedCount === 0) {
+    return {
+      scenario: 'Sample Delivered Follow-up',
+      reason: `虽然 Current status 为 ${currentStatus}，但物流状态为 ${sampleShippingStatus} 或样品到货日期已填写，说明达人已进入样品合作流程，因此生成样品到货后催拍。`,
+      highRisk: false,
+    };
+  }
+
+  if (hasInTransitEvidence) {
+    return {
+      scenario: 'Sample In Transit Reminder',
+      reason: `物流状态为 ${sampleShippingStatus}，物流状态已发货/运输中，优先按样品流程生成话术。`,
+      highRisk: false,
     };
   }
 
@@ -154,26 +192,10 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
     };
   }
 
-  if (statusIncludes(task, ['sample shipped']) || shippingIncludes(task, ['shipped', 'in transit'])) {
-    return {
-      scenario: 'Sample In Transit Reminder',
-      reason: `当前状态为 ${currentStatus}，物流状态为 ${sampleShippingStatus}，样品尚未确认到货。`,
-      highRisk: false,
-    };
-  }
-
   if (statusIncludes(task, ['posted video', 'waiting for next video']) || (postedCount > 0 && postedCount < requiredVideos)) {
     return {
       scenario: 'Partial Video Completion Follow-up',
       reason: `视频进度为 ${postedCount}/${requiredVideos}，已发布部分视频但剩余 deliverables 尚未完成。`,
-      highRisk: false,
-    };
-  }
-
-  if (statusIncludes(task, ['delivered', 'waiting for video']) || shippingIncludes(task, ['delivered'])) {
-    return {
-      scenario: 'Sample Delivered Follow-up',
-      reason: `当前状态为 ${currentStatus}，物流状态为 ${sampleShippingStatus}，视频进度为 ${postedCount}/${requiredVideos}，适合催拍首条视频。`,
       highRisk: false,
     };
   }
@@ -257,6 +279,7 @@ function joinEnglishList(items: string[]): string {
 
 function isGuidelineScenario(scenario: string): boolean {
   return scenario === 'Sample Delivered Follow-up'
+    || scenario === 'Sample In Transit Reminder'
     || scenario === 'Partial Video Completion Follow-up'
     || scenario === 'Needs Revision Reminder'
     || scenario === 'Final Follow-up Before Failed Candidate'
@@ -354,7 +377,7 @@ export function generateMessage(
   } else if (scenario === 'Sample Request Confirmation') {
     english = sampleRequestConfirmationMessage(channel, name, product);
   } else if (scenario === 'Sample In Transit Reminder') {
-    english = sampleInTransitMessage(channel, name, product);
+    english = sampleInTransitMessage(channel, name, product, filmingRequirementsReminder);
   } else if (scenario === 'Sample Delivered Follow-up') {
     const request = `Just checking in now that the ${product} sample has been delivered. Please confirm your expected posting date for the first video. ${filmingRequirementsReminder}`;
     english = byChannel(channel, name, request, '', highRisk);
@@ -402,9 +425,38 @@ function sampleRequestConfirmationMessage(channel: Channel, name: string, produc
   return byChannel(channel, name, request, '', false);
 }
 
-function sampleInTransitMessage(channel: Channel, name: string, product: string): string {
-  const request = `The ${product} sample is on the way. Please keep an eye on the delivery update, and once it arrives we can move into filming based on the campaign guidelines. No posting is needed before the sample is delivered.`;
-  return byChannel(channel, name, request, '', false);
+function sampleInTransitMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
+  const reminder = filmingRequirementsReminder.trim();
+
+  if (channel === 'TikTok DM') {
+    return `Hi ${name}, the ${product} sample has shipped and is on the way. The sample is on the way, so please keep an eye on delivery updates. No posting is needed before the sample is delivered. Once it arrives, please plan filming based on the guidelines and attach the TikTok Shop product link. Could you confirm when you expect to start filming after receiving it? ${reminder}`.replace(/\s+/g, ' ').trim();
+  }
+
+  if (channel === 'TikTok Shop Affiliate Message') {
+    return `Hi ${name},
+
+The sample for the ${product} collaboration has been shipped and is currently on the way. The sample is on the way, so please keep an eye on the delivery updates.
+
+Once it arrives, please plan the content based on the filming guidelines we shared and make sure the TikTok Shop product link is attached. No posting is needed before the sample is delivered. ${reminder}
+
+Could you please confirm when you expect to start filming after receiving the sample?
+
+Thank you.`;
+  }
+
+  if (channel === 'WhatsApp') {
+    return `Hi ${name}, the ${product} sample has been shipped and is currently on the way. Please keep an eye on delivery updates. Once it arrives, please plan filming based on the guidelines and attach the TikTok Shop product link. Could you confirm when you expect to start filming after receiving it? ${reminder}`.replace(/\s+/g, ' ').trim();
+  }
+
+  return `Hi ${name},
+
+The sample for the ${product} collaboration has been shipped and is currently on the way. The sample is on the way, so please keep an eye on the delivery updates so you know when it arrives.
+
+After delivery, please plan the content based on the filming guidelines we shared and make sure the TikTok Shop product link is attached. ${reminder}
+
+Could you please confirm when you expect to start filming after receiving the sample?
+
+Thank you.`;
 }
 
 function needsRevisionMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {

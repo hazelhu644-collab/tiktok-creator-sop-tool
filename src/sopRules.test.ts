@@ -164,6 +164,25 @@ describe('MVP SOP rules', () => {
     expect(tasks[0].id).toBe('highest');
   });
 
+  it('uses sample delivered date as delivered evidence even when shipping status is stale', () => {
+    const [task] = analyzeCreators([
+      row({ currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '2026-06-02', videoProgress: '0 of 2' }),
+    ], today, 2);
+
+    expect(task.priority).toBe('Highest');
+    expect(task.triggerReason).toContain('样品已到货 3 天');
+    expect(task.currentStatus).toBe('To Contact');
+  });
+
+  it('does not treat shipped stale To Contact rows as contacted with no sample sent', () => {
+    const [task] = analyzeCreators([
+      row({ currentStatus: 'To Contact', sampleShippingStatus: 'Shipped', lastContactDate: '2026-06-01', videoProgress: '0 of 2' }),
+    ], today, 2);
+
+    expect(task.priority).toBe('None');
+    expect(task.triggerReason).toBe('根据当前 MVP 规则，今天暂无必须跟进的任务。');
+  });
+
   it('suggests failed candidates without changing status', () => {
     const [task] = analyzeCreators([
       row({ currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-28', videoProgress: '0/2' }),
