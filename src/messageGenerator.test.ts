@@ -357,6 +357,82 @@ describe('generateMessage status-aware communication center scenarios', () => {
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
 
+  it.each(['Shipped', 'In Transit'])('lets %s shipping override stale To Contact status', (sampleShippingStatus) => {
+    const message = generateMessage(task({
+      currentStatus: 'To Contact',
+      sampleShippingStatus,
+      sampleDeliveredDate: '',
+      videoProgress: '0 of 2',
+      priority: 'None',
+      priorityRank: 99,
+      needsFollowUp: false,
+    }), 'TikTok Shop Affiliate Message', requirements({ referenceLinks: ['https://example.com/ref-1', 'https://example.com/ref-2', 'https://example.com/ref-3', 'https://example.com/ref-4'] }));
+
+    expect(message.scenario).toBe('Sample In Transit Reminder');
+    expect(message.scenarioReason).toContain('物流状态已发货/运输中');
+    expect(message.english).toContain('has been shipped and is currently on the way');
+    expect(message.english).toContain('keep an eye on the delivery updates');
+    expect(message.english).toContain('when you expect to start filming after receiving the sample');
+    expect(message.english).toContain('TikTok Shop product link');
+    expect(message.english).toContain('https://example.com/ref-1');
+    expect(message.english).toContain('https://example.com/ref-3');
+    expect(message.english).not.toContain('https://example.com/ref-4');
+    expect(message.english).not.toContain('If you’re interested');
+    expect(message.english).not.toContain('potential collaboration');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('lets Delivered shipping override stale To Contact status for 0/N video progress', () => {
+    const message = generateMessage(task({
+      currentStatus: 'To Contact',
+      sampleShippingStatus: 'Delivered',
+      sampleDeliveredDate: '',
+      videoProgress: '0 of 2',
+      failedWarnings: [],
+      lastFollowUpCount: 0,
+    }), 'TikTok Shop Affiliate Message');
+
+    expect(message.scenario).toBe('Sample Delivered Follow-up');
+    expect(message.scenarioReason).toContain('物流状态为 Delivered');
+    expect(message.english).toContain('sample has been delivered');
+    expect(message.english).toContain('expected posting date for the first video');
+    expect(message.english).not.toContain('If you’re interested');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('lets a present delivered date override stale To Contact status for 0/N video progress', () => {
+    const message = generateMessage(task({
+      currentStatus: 'To Contact',
+      sampleShippingStatus: '',
+      sampleDeliveredDate: '2026-06-03',
+      videoProgress: '0 of 2',
+      failedWarnings: [],
+      lastFollowUpCount: 0,
+    }), 'Email');
+
+    expect(message.scenario).toBe('Sample Delivered Follow-up');
+    expect(message.scenarioReason).toContain('样品到货日期已填写');
+    expect(message.english).toContain('sample has been delivered');
+    expect(message.english).not.toContain('potential collaboration');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('keeps stale To Contact with Not Shipped as first outreach', () => {
+    const message = generateMessage(task({
+      currentStatus: 'To Contact',
+      sampleShippingStatus: 'Not Shipped',
+      sampleDeliveredDate: '',
+      videoProgress: '0 of 2',
+      priority: 'None',
+      priorityRank: 99,
+      needsFollowUp: false,
+    }), 'TikTok DM');
+
+    expect(message.scenario).toBe('First Outreach');
+    expect(message.english).toContain('potential collaboration');
+    expect(message.english).toContain('If you’re interested');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
   it('generates non-pushy archive confirmation for Failed creators', () => {
     const message = generateMessage(task({
       currentStatus: 'Failed',
