@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
 import type { Task } from './types';
 
+const chineseCharacterPattern = /[\u3400-\u9fff]/;
+
 function task(overrides: Partial<Task> = {}): Task {
   return {
     id: 'creator-1',
@@ -34,16 +36,90 @@ function requirements(overrides: Partial<CreatorFilmingRequirements> = {}): Crea
   };
 }
 
+describe('generateMessage English copy readiness', () => {
+  it('keeps Chinese text out of the English message while leaving the Chinese explanation below it', () => {
+    const message = generateMessage(task(), 'TikTok Shop Affiliate Message', requirements({
+      requirements: ['每位达人 3 条视频', '必须挂 TikTok Shop 产品链接', '必须 tag 品牌账号'],
+      keyContentPoints: ['展示逗猫棒很好玩', '展示宠物真实反应'],
+    }));
+
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+    expect(message.english).toContain('show that the cat teaser is fun to use');
+    expect(message.english).toContain('include the TikTok Shop product link');
+    expect(message.english).not.toContain('达人拍摄要求');
+    expect(message.english).not.toContain('每位达人');
+    expect(message.chineseExplanation).toMatch(chineseCharacterPattern);
+    expect(message.chineseExplanation).toContain('这条消息用于');
+  });
+
+  it('falls back to concise filming guideline wording instead of pasting unknown Chinese requirements', () => {
+    const message = generateMessage(task(), 'Email', requirements({
+      requirements: ['拍摄要求：请用中文保存的复杂要求'],
+      keyContentPoints: ['内容重点：复杂中文卖点'],
+    }));
+
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+    expect(message.english).toContain('Please follow the filming guidelines we shared');
+    expect(message.english).not.toContain('复杂中文卖点');
+  });
+
+  it('keeps normal sample-delivered reminders concise while mentioning filming guidelines lightly', () => {
+    const message = generateMessage(task(), 'TikTok DM', requirements({ referenceLinks: [] }));
+
+    expect(message.scenario).toBe('Sample Delivered Follow-up');
+    expect(message.english).toContain('sample has been delivered');
+    expect(message.english).toContain('Please follow the filming guidelines we shared');
+    expect(message.english).toContain('expected posting date for the first video');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+});
+
+describe('generateMessage high-risk and final follow-up style', () => {
+  it('does not paste full filming requirements in final follow-up messages', () => {
+    const message = generateMessage(task({
+      failedWarnings: ['达人已被跟进 2 次以上，但合作仍未完成。'],
+      priority: 'Highest',
+      lastFollowUpCount: 2,
+    }), 'TikTok Shop Affiliate Message', requirements({
+      requirements: ['每位达人 3 条视频', '每条视频 60 秒以上', '必须 tag 品牌账号', '必须挂 TikTok Shop 产品链接'],
+      keyContentPoints: ['展示雾化功能', '展示梳下来的浮毛', '展示宠物真实反应', '展示自然的日常宠物护理场景'],
+    }));
+
+    expect(message.scenario).toBe('Final Follow-up Before Failed Candidate');
+    expect(message.english).toContain('required video(s) are still incomplete');
+    expect(message.english).toContain('confirm your expected posting date');
+    expect(message.english).toContain('update the campaign status');
+    expect(message.english).not.toContain('tag the brand account');
+    expect(message.english).not.toContain('include the TikTok Shop product link');
+    expect(message.english).not.toContain('show the mist feature');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('asks high-risk creators to confirm whether they can complete the collaboration and give a timeline', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Followed Up',
+      priority: 'Medium',
+      priorityRank: 3,
+      lastFollowUpCount: 2,
+      failedWarnings: ['达人已被跟进 2 次以上，但合作仍未完成。'],
+    }), 'Email');
+
+    expect(message.english).toContain('still able to complete the remaining video(s)');
+    expect(message.english).toContain('confirm your expected posting date');
+    expect(message.english).toContain('If you’re no longer able to continue');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+});
+
 describe('generateMessage reference video links', () => {
   it('includes reference links and the Chinese explanation when links are present', () => {
     const message = generateMessage(task(), 'WhatsApp', requirements({
       referenceLinks: ['https://tiktok.com/ref-a', 'https://shop.tiktok.com/ref-b'],
     }));
 
-    expect(message.english).toContain('Here are a few reference videos you can use for filming inspiration');
+    expect(message.english).toContain('Here are a few reference videos you can use for filming direction');
     expect(message.english).toContain('https://tiktok.com/ref-a');
     expect(message.english).toContain('https://shop.tiktok.com/ref-b');
-    expect(message.english).toContain('for reference only');
     expect(message.chineseExplanation).toContain('参考视频链接用于给达人参考拍摄模板、内容灵感或后续视频优化方向');
   });
 
@@ -51,7 +127,6 @@ describe('generateMessage reference video links', () => {
     const message = generateMessage(task(), 'Email', requirements({ referenceLinks: [] }));
 
     expect(message.english).not.toContain('reference videos');
-    expect(message.english).not.toContain('for reference only');
     expect(message.chineseExplanation).not.toContain('参考视频链接用于');
   });
 
@@ -71,6 +146,16 @@ describe('generateMessage reference video links', () => {
     expect(message.english).not.toContain('https://example.com/ref-4');
   });
 
+  it('uses lighter reference link wording for high-risk remaining-video follow-ups', () => {
+    const message = generateMessage(task({
+      failedWarnings: ['样品已到货 7 天，但视频进度仍为 0/2。'],
+    }), 'TikTok Shop Affiliate Message', requirements({ referenceLinks: ['https://example.com/remaining-video'] }));
+
+    expect(message.scenario).toBe('Final Follow-up Before Failed Candidate');
+    expect(message.english).toContain('You can use the reference links as direction for the remaining video(s): https://example.com/remaining-video.');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
   it('uses remaining-video wording for second-video follow-up scenarios', () => {
     const message = generateMessage(task({
       priority: 'High',
@@ -81,17 +166,9 @@ describe('generateMessage reference video links', () => {
     }), 'WhatsApp', requirements({ referenceLinks: ['https://example.com/remaining-video'] }));
 
     expect(message.scenario).toBe('Second Video Reminder');
-    expect(message.english).toContain('as direction for the next video');
+    expect(message.english).toContain('remaining content');
+    expect(message.english).toContain('Here are a few reference videos you can use for filming direction');
     expect(message.english).toContain('https://example.com/remaining-video');
-  });
-
-  it('keeps existing message generator behavior without reference links', () => {
-    const message = generateMessage(task(), 'TikTok DM', requirements({ referenceLinks: [] }));
-
-    expect(message.scenario).toBe('Sample Delivered Follow-up');
-    expect(message.english).toContain('Hi @fluffy_creator');
-    expect(message.english).toContain('sample has been delivered');
-    expect(message.english).toContain('creator filming requirements');
-    expect(message.chineseExplanation).toContain('语气保持专业、温和、直接');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
   });
 });
