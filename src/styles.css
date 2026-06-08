@@ -470,3 +470,41 @@ button.danger {
 .follow-up-history li + li {
   margin-top: 0.75rem;
 }
+
+.generator-controls input {
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 12px 14px;
+  width: 100%;
+}
+
+.quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chip {
+  background: white;
+  border-color: #cbd5e1;
+  color: #475569;
+  font-size: .82rem;
+  padding: 7px 10px;
+}
+
+.filter-chip.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: white;
+}
+
+.scenario-reason {
+  color: #334155;
+  font-weight: 800;
+  margin: 8px 0 0;
+}
+
+.creator-selector-panel {
+  display: grid;
+  gap: 10px;
+}

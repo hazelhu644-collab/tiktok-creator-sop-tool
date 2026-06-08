@@ -12,7 +12,7 @@ import {
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, buildSummary, buildVideoProgressHint, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
 import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
-import type { Channel, CreatorRow, FollowUpHistoryEntry, GeneratedMessage, Priority } from './types';
+import type { Channel, CreatorRow, FollowUpHistoryEntry, GeneratedMessage, Priority, Task } from './types';
 import './styles.css';
 
 const priorityClass: Record<string, string> = {
@@ -54,10 +54,18 @@ const emptyChatGptPromptHelperForm: ChatGptPromptHelperForm = {
 };
 
 const scenarioLabel: Record<string, string> = {
-  'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
+  'First Outreach': '首次建联',
+  'No Reply Follow-up': '建联后未回复跟进',
+  'Sample Request Reminder': '提醒达人申请样品',
+  'Sample Request Confirmation': '样品申请后确认',
+  'Sample In Transit Reminder': '样品运输中提醒',
   'Sample Delivered Follow-up': '样品到货后催拍',
-  'Second Video Reminder': '第二条视频提醒',
   'Partial Video Completion Follow-up': '已发布部分视频，跟进剩余视频',
+  'Needs Revision Reminder': '视频修改提醒',
+  'Completed Thank You': '合作完成感谢 / 后续合作',
+  'Failed Archive Confirmation': '合作失败归档',
+  'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
+  'Second Video Reminder': '第二条视频提醒',
   'Second Follow-up': '第二次跟进',
   'Light Follow-up': '轻量跟进',
 };
@@ -115,6 +123,88 @@ function displayCreatorName(username: string): string {
   return username.trim() || '未命名达人';
 }
 
+const creatorQuickFilters = [
+  { key: 'all', label: '全部' },
+  { key: 'highest', label: '最高优先级' },
+  { key: 'high', label: '高优先级' },
+  { key: 'to-contact', label: '待联系' },
+  { key: 'delivered', label: '样品已到' },
+  { key: 'partial', label: '部分视频' },
+  { key: 'revision', label: '需修改' },
+  { key: 'completed', label: '已完成' },
+  { key: 'failed', label: '失败' },
+] as const;
+
+type CreatorQuickFilterKey = typeof creatorQuickFilters[number]['key'];
+
+function statusText(task: Task): string {
+  return task.currentStatus.trim() || '未填写状态';
+}
+
+function normalizedTaskSearchText(task: Task): string {
+  return [
+    task.username,
+    task.product,
+    task.currentStatus,
+    task.contactMethod,
+    priorityLabel[task.priority],
+    task.priority,
+    task.sampleShippingStatus,
+  ].join(' ').toLowerCase();
+}
+
+function creatorSortBucket(task: Task): number {
+  const status = task.currentStatus.trim().toLowerCase();
+  if (status === 'completed') return 6;
+  if (status === 'failed') return 7;
+  if (task.priority === 'Highest') return 1;
+  if (task.priority === 'High') return 2;
+  if (task.priority === 'Medium') return 3;
+  if (task.priority === 'Low') return 4;
+  return 5;
+}
+
+function creatorDropdownGroupLabel(task: Task): string {
+  const status = task.currentStatus.trim().toLowerCase();
+  if (status === 'completed') return '已完成';
+  if (status === 'failed') return '失败';
+  if (task.priority === 'None') return '普通';
+  return priorityLabel[task.priority];
+}
+
+function compareLastContactThenUsername(a: Task, b: Task): number {
+  const bucketDifference = creatorSortBucket(a) - creatorSortBucket(b);
+  if (bucketDifference !== 0) return bucketDifference;
+
+  const aDate = a.lastContactDate.trim();
+  const bDate = b.lastContactDate.trim();
+  if (aDate && bDate && aDate !== bDate) return bDate.localeCompare(aDate);
+  if (aDate && !bDate) return -1;
+  if (!aDate && bDate) return 1;
+  return a.username.localeCompare(b.username);
+}
+
+function matchesQuickFilter(task: Task, quickFilter: CreatorQuickFilterKey): boolean {
+  const status = task.currentStatus.trim().toLowerCase();
+  const shippingStatus = task.sampleShippingStatus.trim().toLowerCase();
+  const progress = normalizeVideoProgress(task.videoProgress);
+
+  if (quickFilter === 'all') return true;
+  if (quickFilter === 'highest') return task.priority === 'Highest';
+  if (quickFilter === 'high') return task.priority === 'High';
+  if (quickFilter === 'to-contact') return status.includes('to contact');
+  if (quickFilter === 'delivered') return status.includes('delivered') || shippingStatus.includes('delivered');
+  if (quickFilter === 'partial') return status.includes('posted video') || (typeof progress.postedCount === 'number' && typeof progress.requiredVideos === 'number' && progress.postedCount > 0 && progress.postedCount < progress.requiredVideos);
+  if (quickFilter === 'revision') return status.includes('needs revision') || status.includes('revision');
+  if (quickFilter === 'completed') return status === 'completed';
+  if (quickFilter === 'failed') return status === 'failed';
+  return true;
+}
+
+function creatorOptionLabel(task: Task): string {
+  return `${creatorDropdownGroupLabel(task)} — ${displayCreatorName(task.username)} — ${statusText(task)}`;
+}
+
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -154,6 +244,8 @@ function App() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [selectedCreatorId, setSelectedCreatorId] = useState('');
+  const [creatorSearchTerm, setCreatorSearchTerm] = useState('');
+  const [creatorQuickFilter, setCreatorQuickFilter] = useState<CreatorQuickFilterKey>('all');
   const [channel, setChannel] = useState<Channel>('TikTok DM');
   const [message, setMessage] = useState<GeneratedMessage | null>(null);
   const [filmingRequirements, setFilmingRequirements] = useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
@@ -174,10 +266,17 @@ function App() {
   const videoProgressHint = useMemo(() => buildVideoProgressHint(requiredVideos), [requiredVideos]);
   const tasks = useMemo(() => analyzeCreators(rows, undefined, requiredVideos), [rows, requiredVideos]);
   const followUpTasks = tasks.filter((task) => task.needsFollowUp);
+  const generatorTasks = useMemo(() => {
+    const normalizedSearch = creatorSearchTerm.trim().toLowerCase();
+    return [...tasks]
+      .sort(compareLastContactThenUsername)
+      .filter((task) => matchesQuickFilter(task, creatorQuickFilter))
+      .filter((task) => !normalizedSearch || normalizedTaskSearchText(task).includes(normalizedSearch));
+  }, [tasks, creatorSearchTerm, creatorQuickFilter]);
   const summary = useMemo(() => buildSummary(tasks), [tasks]);
   const highestTasks = tasks.filter((task) => task.priority === 'Highest');
   const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
-  const selectedTask = followUpTasks.find((task) => task.id === selectedCreatorId) ?? followUpTasks[0];
+  const selectedTask = generatorTasks.find((task) => task.id === selectedCreatorId) ?? generatorTasks[0];
   const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
   const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
 
@@ -780,14 +879,38 @@ function App() {
             <h2>7. 生成单个达人话术</h2>
             <p>选择一个达人和一个联系渠道。系统会先生成英文话术，再在下方提供中文解释。</p>
             <div className="generator-controls">
-              <label>
-                选择达人
-                <select value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>
-                  {followUpTasks.map((task) => (
-                    <option key={task.id} value={task.id}>{priorityLabel[task.priority]} — {displayCreatorName(task.username)}</option>
+              <div className="creator-selector-panel">
+                <label>
+                  搜索达人
+                  <input
+                    aria-label="搜索达人账号 / 产品 / 状态"
+                    placeholder="搜索达人账号 / 产品 / 状态"
+                    value={creatorSearchTerm}
+                    onChange={(event) => setCreatorSearchTerm(event.target.value)}
+                  />
+                </label>
+                <div className="quick-filters" aria-label="达人快捷筛选">
+                  {creatorQuickFilters.map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      className={creatorQuickFilter === filter.key ? 'filter-chip active' : 'filter-chip'}
+                      onClick={() => setCreatorQuickFilter(filter.key)}
+                    >
+                      {filter.label}
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+                <label>
+                  选择达人
+                  <select value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>
+                    {generatorTasks.map((task) => (
+                      <option key={task.id} value={task.id}>{creatorOptionLabel(task)}</option>
+                    ))}
+                  </select>
+                </label>
+                {generatorTasks.length === 0 && <p className="empty">没有匹配的达人，请调整搜索或筛选。</p>}
+              </div>
               <label>
                 选择联系渠道
                 <select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>
@@ -800,6 +923,7 @@ function App() {
             {message && (
               <div className="message-output">
                 <span className="scenario">场景：{scenarioLabel[message.scenario] ?? message.scenario}</span>
+                <p className="scenario-reason">原因：{message.scenarioReason}</p>
                 <h3>英文话术</h3>
                 <pre>{message.english}</pre>
                 <h3>中文解释</h3>

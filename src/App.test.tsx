@@ -363,3 +363,66 @@ describe('post-message tracking workflow', () => {
     expect(window.confirm).toHaveBeenCalledWith('确定要标记这个达人合作失败吗？');
   });
 });
+
+describe('creator communication center selection', () => {
+  function seedCreators(rows: CreatorRow[]) {
+    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
+  }
+
+  it('makes all creators available in the message generator, not only Highest or High priority creators', () => {
+    seedCreators([
+      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleDeliveredDate: '2020-01-01', sampleShippingStatus: 'Delivered', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'medium', username: 'medium_creator', currentStatus: 'Followed Up', sampleDeliveredDate: '', sampleShippingStatus: 'Pending', videoProgress: '0 of 2', lastContactDate: '2020-01-01' }),
+      creatorRow({ id: 'normal', username: 'normal_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '0 of 2', lastContactDate: '' }),
+      creatorRow({ id: 'completed', username: 'done_creator', currentStatus: 'Completed', sampleDeliveredDate: '', sampleShippingStatus: 'Delivered', videoProgress: '2 of 2' }),
+      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '0 of 2' }),
+    ]);
+
+    render(<App />);
+
+    const creatorSelect = screen.getByRole('combobox', { name: '选择达人' });
+    const optionText = Array.from(creatorSelect.querySelectorAll('option')).map((option) => option.textContent ?? '');
+
+    expect(optionText).toEqual(expect.arrayContaining([
+      expect.stringContaining('highest_creator'),
+      expect.stringContaining('medium_creator'),
+      expect.stringContaining('normal_creator'),
+      expect.stringContaining('done_creator'),
+      expect.stringContaining('failed_creator'),
+    ]));
+    expect(optionText.find((text) => text.includes('normal_creator'))).toContain('普通');
+    expect(optionText.find((text) => text.includes('done_creator'))).toContain('已完成');
+    expect(optionText.find((text) => text.includes('failed_creator'))).toContain('失败');
+  });
+
+  it('searches creators by username, product, and current status', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'username-match', username: 'alpha_creator', product: 'Water Bottle', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '' }),
+      creatorRow({ id: 'product-match', username: 'beta_creator', product: 'Cat Tunnel', currentStatus: 'Invited / Waiting for Sample Request', sampleDeliveredDate: '', sampleShippingStatus: '' }),
+      creatorRow({ id: 'status-match', username: 'gamma_creator', product: 'Pet Comb', currentStatus: 'Needs Revision', sampleDeliveredDate: '', sampleShippingStatus: '' }),
+    ]);
+
+    render(<App />);
+
+    const searchInput = screen.getByLabelText('搜索达人账号 / 产品 / 状态');
+    const creatorSelect = screen.getByRole('combobox', { name: '选择达人' });
+
+    await user.type(searchInput, 'alpha');
+    expect(Array.from(creatorSelect.querySelectorAll('option')).map((option) => option.textContent)).toEqual([
+      expect.stringContaining('alpha_creator'),
+    ]);
+
+    await user.clear(searchInput);
+    await user.type(searchInput, 'Cat Tunnel');
+    expect(Array.from(creatorSelect.querySelectorAll('option')).map((option) => option.textContent)).toEqual([
+      expect.stringContaining('beta_creator'),
+    ]);
+
+    await user.clear(searchInput);
+    await user.type(searchInput, 'Needs Revision');
+    expect(Array.from(creatorSelect.querySelectorAll('option')).map((option) => option.textContent)).toEqual([
+      expect.stringContaining('gamma_creator'),
+    ]);
+  });
+});
