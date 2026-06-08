@@ -16,6 +16,7 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: 'Last contact date', key: 'lastContactDate' },
   { header: 'Last follow-up count', key: 'lastFollowUpCount' },
   { header: 'Notes', key: 'notes' },
+  { header: 'Tracking status', key: 'trackingStatus' },
   { header: 'Last message scenario', key: 'lastMessageScenario' },
   { header: 'Last message channel', key: 'lastMessageChannel' },
   { header: 'Last message sent at', key: 'lastMessageSentAt' },
@@ -35,7 +36,13 @@ export type EditableCreatorField =
   | 'firstVideoPostedDate'
   | 'lastContactDate'
   | 'lastFollowUpCount'
-  | 'notes';
+  | 'notes'
+  | 'trackingStatus'
+  | 'lastMessageScenario'
+  | 'lastMessageChannel'
+  | 'lastMessageSentAt'
+  | 'nextFollowUpDate'
+  | 'lastCreatorResponse';
 
 function getBrowserStorage(): Storage | null {
   if (typeof window === 'undefined') return null;
@@ -94,6 +101,12 @@ export function createBlankCreatorRow(productName = '', requiredVideos = 2): Cre
     lastContactDate: '',
     lastFollowUpCount: 0,
     notes: '',
+    trackingStatus: '',
+    lastMessageScenario: '',
+    lastMessageChannel: '',
+    lastMessageSentAt: '',
+    nextFollowUpDate: '',
+    lastCreatorResponse: '',
   };
 }
 

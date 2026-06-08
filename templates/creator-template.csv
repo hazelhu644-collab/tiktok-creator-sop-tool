@@ -1,2 +1,2 @@
-Creator username,Creator profile link,Contact method,Product,Current status,Sample shipping status,Sample delivered date,Video progress,First video posted date,Last contact date,Last follow-up count,Notes
-sample_creator,,TikTok DM,Steam Grooming Brush,Posted 1 Video / Waiting for 2nd Video,Delivered,2026-06-01,1 of 2,2026-06-03,2026-06-04,1,Use 1 of 2 to avoid spreadsheet date auto-conversion
+Creator username,Creator profile link,Contact method,Product,Current status,Sample shipping status,Sample delivered date,Video progress,First video posted date,Last contact date,Last follow-up count,Notes,Tracking status,Last message scenario,Last message channel,Last message sent at,Next follow-up date,Last creator response
+sample_creator,,TikTok DM,Steam Grooming Brush,Posted 1 Video / Waiting for 2nd Video,Delivered,2026-06-01,1 of 2,2026-06-03,2026-06-04,1,Use 1 of 2 to avoid spreadsheet date auto-conversion,,,,,,

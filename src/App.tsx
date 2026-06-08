@@ -152,6 +152,7 @@ function normalizedTaskSearchText(task: Task, requiredVideos: number): string {
     task.username,
     task.product,
     task.currentStatus,
+    task.trackingStatus,
     task.contactMethod,
     priorityLabel[task.priority],
     task.priority,
@@ -232,6 +233,19 @@ function completedVideoProgress(currentProgress: string, requiredVideos: number)
   const progress = normalizeVideoProgress(currentProgress, requiredVideos);
   if (typeof progress.postedCount === 'number' && progress.postedCount >= requiredVideos) return progress.normalized;
   return `${requiredVideos} of ${requiredVideos}`;
+}
+
+function appendUniqueNote(existingNotes: string, note: string): string {
+  const trimmedNote = note.trim();
+  if (!trimmedNote) return existingNotes;
+  if (existingNotes.includes(trimmedNote)) return existingNotes;
+  return [existingNotes.trim(), trimmedNote].filter(Boolean).join('\n');
+}
+
+function trackingRowClass(row: CreatorRow): string | undefined {
+  if (row.trackingStatus === 'Completed') return 'tracking-row-completed';
+  if (row.trackingStatus === 'Failed') return 'tracking-row-failed';
+  return undefined;
 }
 
 function App() {
@@ -323,9 +337,13 @@ function App() {
     if (!generatedMessageCreatorId) return;
     const today = formatDate(new Date());
 
-    setRows((currentRows) => currentRows.map((row) => (
-      row.id === generatedMessageCreatorId ? updater(row, today) : row
-    )));
+    setRows((currentRows) => {
+      const updatedRows = currentRows.map((row) => (
+        row.id === generatedMessageCreatorId ? updater(row, today) : row
+      ));
+      saveCreatorRows(updatedRows);
+      return updatedRows;
+    });
     setTrackingStatus(confirmation);
   }
 
@@ -348,13 +366,14 @@ function App() {
         ...row,
         lastContactDate: today,
         lastFollowUpCount: row.lastFollowUpCount + 1,
+        trackingStatus: 'Followed Up',
         lastMessageScenario: scenarioLabel[scenario] ?? scenario,
         lastMessageChannel: channel,
         lastMessageSentAt: today,
         nextFollowUpDate: nextDate,
         followUpHistory: [...(row.followUpHistory ?? []), entry],
       };
-    }, '已标记为发送，并更新最后联系时间和跟进次数。');
+    }, '已标记为发送，并同步更新数据表格。');
     setNextFollowUpRecommendation({ date: nextDate, action: nextAction });
   }
 
@@ -367,11 +386,12 @@ function App() {
       ...row,
       lastContactDate: today,
       lastCreatorResponse: trimmedNote,
+      trackingStatus: 'Replied',
       followUpHistory: [
         ...(row.followUpHistory ?? []),
         { date: today, action: 'Creator Replied', note: trimmedNote },
       ],
-    }), '已记录达人回复。');
+    }), '已记录达人回复，并同步更新数据表格。');
   }
 
   function handleMarkCompleted() {
@@ -381,6 +401,7 @@ function App() {
     updateGeneratedCreator((row, today) => ({
       ...row,
       currentStatus: 'Completed',
+      trackingStatus: 'Completed',
       videoProgress: completedVideoProgress(row.videoProgress, requiredVideos),
       videoProgressWarning: undefined,
       lastContactDate: today,
@@ -388,22 +409,28 @@ function App() {
         ...(row.followUpHistory ?? []),
         { date: today, action: 'Completed' },
       ],
-    }), '已标记合作完成。');
+    }), '已标记合作完成，并同步更新数据表格。');
   }
 
   function handleMarkFailed() {
     const confirmed = window.confirm('确定要标记这个达人合作失败吗？');
     if (!confirmed) return;
+    const note = window.prompt('记录失败原因或备注（可选）：');
+    if (note === null) return;
+    const trimmedNote = note.trim();
 
     updateGeneratedCreator((row, today) => ({
       ...row,
       currentStatus: 'Failed',
+      trackingStatus: 'Failed',
       lastContactDate: today,
+      lastCreatorResponse: trimmedNote || row.lastCreatorResponse,
+      notes: appendUniqueNote(row.notes, trimmedNote),
       followUpHistory: [
         ...(row.followUpHistory ?? []),
-        { date: today, action: 'Failed' },
+        { date: today, action: 'Failed', note: trimmedNote },
       ],
-    }), '已标记合作失败。');
+    }), '已标记合作失败，并同步更新数据表格。');
   }
 
   function handleEditFilmingRequirements() {
@@ -750,12 +777,18 @@ function App() {
                     <th>最后联系时间</th>
                     <th>跟进次数</th>
                     <th>备注</th>
+                    <th>Tracking status</th>
+                    <th>Last message scenario</th>
+                    <th>Last message channel</th>
+                    <th>Last message sent at</th>
+                    <th>Next follow-up date</th>
+                    <th>Last creator response</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.id}>
+                    <tr key={row.id} className={trackingRowClass(row)}>
                       <EditableCell label="Creator username" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} autoFocus={selectedCreatorId === row.id && row.username === ''} />
                       <EditableCell label="Creator profile link" value={row.profileLink} onChange={(value) => handleEditCreator(row.id, 'profileLink', value)} />
                       <EditableCell label="Contact method" value={row.contactMethod} onChange={(value) => handleEditCreator(row.id, 'contactMethod', value)} />
@@ -773,6 +806,12 @@ function App() {
                       <EditableCell label="Last contact date" value={row.lastContactDate} onChange={(value) => handleEditCreator(row.id, 'lastContactDate', value)} />
                       <EditableCell label="Last follow-up count" type="number" value={String(row.lastFollowUpCount)} onChange={(value) => handleEditCreator(row.id, 'lastFollowUpCount', value)} />
                       <EditableCell label="Notes" multiline value={row.notes} onChange={(value) => handleEditCreator(row.id, 'notes', value)} />
+                      <EditableCell label="Tracking status" value={row.trackingStatus ?? ''} onChange={(value) => handleEditCreator(row.id, 'trackingStatus', value)} />
+                      <EditableCell label="Last message scenario" value={row.lastMessageScenario ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageScenario', value)} />
+                      <EditableCell label="Last message channel" value={row.lastMessageChannel ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageChannel', value)} />
+                      <EditableCell label="Last message sent at" value={row.lastMessageSentAt ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageSentAt', value)} />
+                      <EditableCell label="Next follow-up date" value={row.nextFollowUpDate ?? ''} onChange={(value) => handleEditCreator(row.id, 'nextFollowUpDate', value)} />
+                      <EditableCell label="Last creator response" multiline value={row.lastCreatorResponse ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastCreatorResponse', value)} />
                       <td>
                         <button type="button" className="secondary danger row-action" onClick={() => handleDeleteCreator(row.id)}>删除</button>
                       </td>
