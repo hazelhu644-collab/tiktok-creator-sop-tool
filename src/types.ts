@@ -70,6 +70,7 @@ export type UrgencyLevel = '极高' | '高' | '中' | '低' | '归档';
 export type CommunicationAction =
   | '未合作邀约'
   | '样品运输中建联'
+  | '物流异常确认'
   | '样品到货催拍'
   | '剩余视频履约'
   | '视频修改'
