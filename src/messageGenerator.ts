@@ -1,5 +1,5 @@
 import { normalizeVideoProgress, parseRequiredVideos } from './sopRules';
-import type { Channel, GeneratedMessage, Task } from './types';
+import type { Channel, CommunicationAction, GeneratedMessage, Task, UrgencyLevel } from './types';
 
 export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message', 'Email', 'WhatsApp'];
 
@@ -32,6 +32,15 @@ const chineseCharacterPattern = /[\u3400-\u9fff]/;
 
 type MessageScenario = {
   scenario: string;
+  reason: string;
+  highRisk: boolean;
+  urgencyLevel: UrgencyLevel;
+  communicationAction: CommunicationAction;
+};
+
+export type CreatorFollowUpClassification = {
+  urgencyLevel: UrgencyLevel;
+  communicationAction: CommunicationAction;
   reason: string;
   highRisk: boolean;
 };
@@ -93,6 +102,119 @@ function clearlyMeetsFinalFailedCandidateConditions(task: Task, configuredRequir
     || task.failedWarnings.some((warning) => warning.includes('样品已到货') && warning.includes('视频进度仍为 0/'));
 }
 
+export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2): CreatorFollowUpClassification {
+  const progress = progressForTask(task, configuredRequiredVideos);
+  const postedCount = progress.postedCount ?? 0;
+  const requiredVideos = progress.requiredVideos ?? configuredRequiredVideos;
+  const currentStatus = task.currentStatus.trim() || '未填写';
+  const sampleShippingStatus = task.sampleShippingStatus.trim() || '未填写';
+  const status = normalizeForScenario(task.currentStatus);
+  const shippingStatus = normalizeForScenario(task.sampleShippingStatus);
+  const hasDeliveredEvidence = hasSampleDeliveredEvidence(task);
+  const hasInTransitEvidence = hasSampleInTransitEvidence(task);
+  const isCompleted = isCompletedTask(task, configuredRequiredVideos);
+  const isFailed = statusIncludes(task, ['failed']);
+  const needsRevision = statusIncludes(task, ['needs revision', 'revision'])
+    || /revision|revise|edit|修改|调整|重拍/i.test(task.notes);
+  const partialCompletion = postedCount > 0 && postedCount < requiredVideos;
+  const finalFollowUp = clearlyMeetsFinalFailedCandidateConditions(task, configuredRequiredVideos);
+  const hasNoSampleStarted = !shippingStatus || shippingStatus === 'not shipped' || shippingStatus === 'not started' || shippingStatus === 'pending';
+  const isFirstOutreach = (!status || status.includes('to contact'))
+    && hasNoSampleStarted
+    && !task.sampleDeliveredDate.trim()
+    && postedCount === 0;
+
+  if (isFailed) {
+    return {
+      urgencyLevel: '归档',
+      communicationAction: '合作失败归档',
+      reason: `当前状态为 ${currentStatus}，应从活跃跟进队列归档，只做最终 campaign status 确认。`,
+      highRisk: false,
+    };
+  }
+
+  if (isCompleted) {
+    return {
+      urgencyLevel: '归档',
+      communicationAction: '合作完成维护',
+      reason: `当前状态为 ${currentStatus}，或视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成，应做维护而不是催发视频。`,
+      highRisk: false,
+    };
+  }
+
+  if (needsRevision) {
+    return {
+      urgencyLevel: task.priority === 'Highest' ? '极高' : '高',
+      communicationAction: '视频修改',
+      reason: `当前状态或备注显示需要修改视频，应清楚说明修改点并推动达人完成调整。`,
+      highRisk: false,
+    };
+  }
+
+  if (finalFollowUp) {
+    return {
+      urgencyLevel: '极高',
+      communicationAction: '最后确认',
+      reason: `达人跟进次数较高或已有失败风险提醒，合作仍未完成，需要今天确认是否还能继续履约。`,
+      highRisk: true,
+    };
+  }
+
+  if (partialCompletion) {
+    const urgent = task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0;
+    return {
+      urgencyLevel: urgent ? '极高' : '高',
+      communicationAction: '剩余视频履约',
+      reason: `达人已发布部分视频，但当前视频进度为 ${postedCount}/${requiredVideos}，仍有剩余视频未完成${urgent ? '，且已有较高跟进压力或风险提醒' : ''}。`,
+      highRisk: urgent,
+    };
+  }
+
+  if (hasDeliveredEvidence && postedCount === 0) {
+    const urgent = task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0;
+    return {
+      urgencyLevel: urgent ? '极高' : '高',
+      communicationAction: '样品到货催拍',
+      reason: `物流状态为 ${sampleShippingStatus}，样品到货日期${task.sampleDeliveredDate.trim() ? '已填写' : '未填写'}；样品已送达或已填写到货日期，但当前视频进度为 0/${requiredVideos}，需要确认拍摄和发布时间。`,
+      highRisk: urgent,
+    };
+  }
+
+  if (hasInTransitEvidence) {
+    return {
+      urgencyLevel: task.priority === 'High' || task.priority === 'Highest' ? '高' : '中',
+      communicationAction: '样品运输中建联',
+      reason: `物流状态为 ${sampleShippingStatus} 或 Current status 为 ${currentStatus}，物流状态已发货/运输中，达人已进入样品合作流程，应提醒收货和后续拍摄安排。`,
+      highRisk: false,
+    };
+  }
+
+  if (isFirstOutreach) {
+    return {
+      urgencyLevel: '低',
+      communicationAction: '未合作邀约',
+      reason: `当前状态为 ${currentStatus}，样品尚未发出且没有到货或视频进度，适合发送首次合作邀约。`,
+      highRisk: false,
+    };
+  }
+
+  if (statusIncludes(task, ['sample requested', 'invited', 'waiting for sample request', 'contacted', 'waiting for reply', 'no reply'])) {
+    return {
+      urgencyLevel: '中',
+      communicationAction: '未合作邀约',
+      reason: `达人处于正常建联或样品申请推进阶段，当前不紧急，但需要保持合作流程继续移动。`,
+      highRisk: false,
+    };
+  }
+
+  return {
+    urgencyLevel: task.priority === 'Low' || task.priority === 'None' ? '低' : '中',
+    communicationAction: '未合作邀约',
+    reason: `当前状态为 ${currentStatus}，未命中特定样品或视频阶段，按常规合作进度确认处理。`,
+    highRisk: false,
+  };
+}
+
 function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageScenario {
   const progress = progressForTask(task, configuredRequiredVideos);
   const postedCount = progress.postedCount ?? 0;
@@ -101,118 +223,56 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
   const sampleShippingStatus = task.sampleShippingStatus.trim() || '未填写';
   const hasDeliveredEvidence = hasSampleDeliveredEvidence(task);
   const hasInTransitEvidence = hasSampleInTransitEvidence(task);
+  const classification = classifyCreatorFollowUp(task, configuredRequiredVideos);
+  const withClassification = (scenario: string, reason = classification.reason, highRisk = classification.highRisk): MessageScenario => ({
+    scenario,
+    reason,
+    highRisk,
+    urgencyLevel: classification.urgencyLevel,
+    communicationAction: classification.communicationAction,
+  });
 
-  if (statusIncludes(task, ['failed'])) {
-    return {
-      scenario: 'Failed Archive Confirmation',
-      reason: `当前状态为 ${currentStatus}，适合做合作失败归档确认，不默认催促达人继续发布。`,
-      highRisk: false,
-    };
-  }
-
-  if (isCompletedTask(task, configuredRequiredVideos)) {
-    return {
-      scenario: 'Completed Thank You',
-      reason: hasDeliveredEvidence
-        ? `物流或到货信息显示达人已进入样品合作流程，且视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成。`
-        : `当前状态为 ${currentStatus}，或视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成。`,
-      highRisk: false,
-    };
-  }
-
-  if (statusIncludes(task, ['needs revision', 'revision'])) {
-    return {
-      scenario: 'Needs Revision Reminder',
-      reason: `当前状态为 ${currentStatus}，需要专业说明视频修改点并提醒达人调整。`,
-      highRisk: false,
-    };
-  }
-
-  if (clearlyMeetsFinalFailedCandidateConditions(task, configuredRequiredVideos)) {
-    return {
-      scenario: 'Final Follow-up Before Failed Candidate',
-      reason: `跟进次数或风险提醒较高，且合作动作尚未完成，需要在归档失败前做最后一次明确确认。`,
-      highRisk: true,
-    };
-  }
-
-  if (hasDeliveredEvidence && postedCount > 0 && postedCount < requiredVideos) {
-    return {
-      scenario: 'Partial Video Completion Follow-up',
-      reason: `物流或到货信息显示达人已进入样品合作流程，视频进度为 ${postedCount}/${requiredVideos}，应跟进剩余视频。`,
-      highRisk: false,
-    };
-  }
-
-  if (hasDeliveredEvidence && postedCount === 0) {
-    return {
-      scenario: 'Sample Delivered Follow-up',
-      reason: `虽然 Current status 为 ${currentStatus}，但物流状态为 ${sampleShippingStatus} 或样品到货日期已填写，说明达人已进入样品合作流程，因此生成样品到货后催拍。`,
-      highRisk: false,
-    };
-  }
-
-  if (hasInTransitEvidence) {
-    return {
-      scenario: 'Sample In Transit Reminder',
-      reason: `物流状态为 ${sampleShippingStatus}，物流状态已发货/运输中，优先按样品流程生成话术。`,
-      highRisk: false,
-    };
-  }
+  if (classification.communicationAction === '合作失败归档') return withClassification('Failed Archive Confirmation');
+  if (classification.communicationAction === '合作完成维护') return withClassification('Completed Thank You');
+  if (classification.communicationAction === '视频修改') return withClassification('Needs Revision Reminder');
+  if (classification.communicationAction === '最后确认') return withClassification('Final Follow-up Before Failed Candidate');
+  if (classification.communicationAction === '剩余视频履约') return withClassification('Partial Video Completion Follow-up');
+  if (classification.communicationAction === '样品到货催拍') return withClassification('Sample Delivered Follow-up');
+  if (classification.communicationAction === '样品运输中建联') return withClassification('Sample In Transit Reminder');
 
   if (statusIncludes(task, ['to contact'])) {
-    return {
-      scenario: 'First Outreach',
-      reason: `当前状态为 ${currentStatus}，还未正式建联，因此生成首次合作介绍话术。`,
-      highRisk: false,
-    };
+    return withClassification('First Outreach', `当前状态为 ${currentStatus}，还未正式建联，因此生成首次合作介绍话术。`, false);
   }
 
   if (statusIncludes(task, ['contacted', 'waiting for reply', 'no reply'])) {
-    return {
-      scenario: 'No Reply Follow-up',
-      reason: `当前状态为 ${currentStatus}，重点是简短确认达人是否仍有合作兴趣。`,
-      highRisk: false,
-    };
+    return withClassification('No Reply Follow-up', `当前状态为 ${currentStatus}，重点是简短确认达人是否仍有合作兴趣。`, false);
   }
 
   if (statusIncludes(task, ['invited', 'waiting for sample request'])) {
-    return {
-      scenario: 'Sample Request Reminder',
-      reason: `当前状态为 ${currentStatus}，达人已收到邀请但还需要申请样品。`,
-      highRisk: false,
-    };
+    return withClassification('Sample Request Reminder', `当前状态为 ${currentStatus}，达人已收到邀请但还需要申请样品。`, false);
   }
 
   if (statusIncludes(task, ['sample requested'])) {
-    return {
-      scenario: 'Sample Request Confirmation',
-      reason: `当前状态为 ${currentStatus}，适合确认样品申请已收到并说明下一步。`,
-      highRisk: false,
-    };
+    return withClassification('Sample Request Confirmation', `当前状态为 ${currentStatus}，适合确认样品申请已收到并说明下一步。`, false);
   }
 
-  if (statusIncludes(task, ['posted video', 'waiting for next video']) || (postedCount > 0 && postedCount < requiredVideos)) {
-    return {
-      scenario: 'Partial Video Completion Follow-up',
-      reason: `视频进度为 ${postedCount}/${requiredVideos}，已发布部分视频但剩余 deliverables 尚未完成。`,
-      highRisk: false,
-    };
+  if (hasDeliveredEvidence && postedCount > 0 && postedCount < requiredVideos) {
+    return withClassification('Partial Video Completion Follow-up');
+  }
+
+  if (hasDeliveredEvidence && postedCount === 0) {
+    return withClassification('Sample Delivered Follow-up', `虽然 Current status 为 ${currentStatus}，但物流状态为 ${sampleShippingStatus} 或样品到货日期已填写，说明达人已进入样品合作流程，因此生成样品到货后催拍。`, false);
+  }
+
+  if (hasInTransitEvidence) {
+    return withClassification('Sample In Transit Reminder', `物流状态为 ${sampleShippingStatus}，物流状态已发货/运输中，优先按样品流程生成话术。`, false);
   }
 
   if (task.priority === 'Medium') {
-    return {
-      scenario: 'Second Follow-up',
-      reason: `系统优先级为中，说明此前已跟进但合作仍未完成，需要再次确认进展。`,
-      highRisk: true,
-    };
+    return withClassification('Second Follow-up', `系统优先级为中，说明此前已跟进但合作仍未完成，需要再次确认进展。`, true);
   }
 
-  return {
-    scenario: 'Light Follow-up',
-    reason: `当前状态为 ${currentStatus}，未命中特定阶段，生成轻量合作进度确认话术。`,
-    highRisk: false,
-  };
+  return withClassification('Light Follow-up', `当前状态为 ${currentStatus}，未命中特定阶段，生成轻量合作进度确认话术。`, false);
 }
 
 function matchesFilmingRequirementsProduct(task: Task, filmingRequirements: CreatorFilmingRequirements): boolean {
@@ -402,6 +462,8 @@ export function generateMessage(
     chineseExplanation: buildChineseExplanation(scenario, channel, hasReferenceLinks),
     scenario,
     scenarioReason: scenarioSelection.reason,
+    urgencyLevel: scenarioSelection.urgencyLevel,
+    communicationAction: scenarioSelection.communicationAction,
   };
 }
 

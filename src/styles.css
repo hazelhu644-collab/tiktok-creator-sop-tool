@@ -508,3 +508,15 @@ button.danger {
   display: grid;
   gap: 10px;
 }
+
+.queue-message-meta {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: #134e4a;
+  font-weight: 900;
+}
+
+.queue-message-meta p {
+  margin: 0;
+}
