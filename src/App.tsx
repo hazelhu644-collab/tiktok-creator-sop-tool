@@ -57,6 +57,7 @@ const scenarioLabel: Record<string, string> = {
   'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
   'Sample Delivered Follow-up': '样品到货后催拍',
   'Second Video Reminder': '第二条视频提醒',
+  'Partial Video Completion Follow-up': '已发布部分视频，跟进剩余视频',
   'Second Follow-up': '第二次跟进',
   'Light Follow-up': '轻量跟进',
 };

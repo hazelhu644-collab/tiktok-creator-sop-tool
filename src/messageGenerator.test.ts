@@ -111,6 +111,102 @@ describe('generateMessage high-risk and final follow-up style', () => {
   });
 });
 
+describe('generateMessage partial video completion follow-up', () => {
+  it('uses partial completion follow-up for postedCount > 0 and postedCount < requiredVideos', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Posted Video / Waiting for Next Video',
+      priority: 'High',
+      priorityRank: 2,
+      videoProgress: '1 of 2',
+      firstVideoPostedDate: '2026-06-04',
+    }), 'TikTok Shop Affiliate Message');
+
+    expect(message.scenario).toBe('Partial Video Completion Follow-up');
+    expect(message.chineseExplanation).toContain('已发布部分视频，跟进剩余视频');
+    expect(message.english).toContain('Thank you for posting the first video');
+    expect(message.english).toContain('content looks good');
+    expect(message.english).toContain('preparing to review it for ad testing');
+    expect(message.english).toContain('Could you please confirm when you expect to post the remaining video?');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it.each([
+    ['1 of 2', ['每位达人 2 条视频'], '1 remaining video'],
+    ['1 of 3', ['每位达人 3 条视频'], '2 remaining videos'],
+    ['4 of 5', ['每位达人 5 条视频'], '1 remaining video'],
+  ])('uses a dynamic remaining count for %s', (videoProgress, requirementLines, expectedPhrase) => {
+    const message = generateMessage(task({
+      currentStatus: 'Posted Video / Waiting for Next Video',
+      priority: 'High',
+      priorityRank: 2,
+      videoProgress,
+      firstVideoPostedDate: '2026-06-04',
+    }), 'Email', requirements({ requirements: requirementLines }));
+
+    expect(message.scenario).toBe('Partial Video Completion Follow-up');
+    expect(message.english).toContain(expectedPhrase);
+    expect(message.english).toContain('Please confirm the expected posting date');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('keeps partial completion filming reminders light instead of listing every requirement or selling point', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Posted Video / Waiting for Next Video',
+      priority: 'High',
+      priorityRank: 2,
+      videoProgress: '1 of 3',
+      firstVideoPostedDate: '2026-06-04',
+    }), 'TikTok Shop Affiliate Message', requirements({
+      requirements: ['每位达人 3 条视频', '每条视频 60 秒以上', '必须 tag 品牌账号', '必须挂 TikTok Shop 产品链接'],
+      keyContentPoints: ['展示雾化功能', '展示梳下来的浮毛', '展示宠物真实反应'],
+    }));
+
+    expect(message.english).toContain('please keep following the filming guidelines');
+    expect(message.english).toContain('TikTok Shop product link is attached');
+    expect(message.english).not.toContain('keep each video at least 60 seconds');
+    expect(message.english).not.toContain('tag the brand account');
+    expect(message.english).not.toContain('show the mist feature');
+  });
+
+  it('includes reference links naturally and limits them to 3 for partial completion follow-ups', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Posted Video / Waiting for Next Video',
+      priority: 'High',
+      priorityRank: 2,
+      videoProgress: '1 of 3',
+      firstVideoPostedDate: '2026-06-04',
+    }), 'TikTok DM', requirements({
+      requirements: ['每位达人 3 条视频'],
+      referenceLinks: [
+        'https://example.com/ref-1',
+        'https://example.com/ref-2',
+        'https://example.com/ref-3',
+        'https://example.com/ref-4',
+      ],
+    }));
+
+    expect(message.scenario).toBe('Partial Video Completion Follow-up');
+    expect(message.english).toContain('You can also use these reference videos as direction for the next post');
+    expect(message.english).toContain('https://example.com/ref-1');
+    expect(message.english).toContain('https://example.com/ref-2');
+    expect(message.english).toContain('https://example.com/ref-3');
+    expect(message.english).not.toContain('https://example.com/ref-4');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('does not mention links for partial completion follow-ups when no reference links exist', () => {
+    const message = generateMessage(task({
+      currentStatus: 'Posted Video / Waiting for Next Video',
+      priority: 'High',
+      priorityRank: 2,
+      videoProgress: '1 of 2',
+      firstVideoPostedDate: '2026-06-04',
+    }), 'TikTok Shop Affiliate Message', requirements({ referenceLinks: [] }));
+
+    expect(message.english).not.toContain('reference videos');
+  });
+});
+
 describe('generateMessage reference video links', () => {
   it('includes reference links and the Chinese explanation when links are present', () => {
     const message = generateMessage(task(), 'WhatsApp', requirements({
@@ -165,9 +261,9 @@ describe('generateMessage reference video links', () => {
       suggestedAction: '提醒补发第二条视频',
     }), 'WhatsApp', requirements({ referenceLinks: ['https://example.com/remaining-video'] }));
 
-    expect(message.scenario).toBe('Second Video Reminder');
-    expect(message.english).toContain('remaining content');
-    expect(message.english).toContain('Here are a few reference videos you can use for filming direction');
+    expect(message.scenario).toBe('Partial Video Completion Follow-up');
+    expect(message.english).toContain('remaining video');
+    expect(message.english).toContain('You can also use these reference videos as direction for the next post');
     expect(message.english).toContain('https://example.com/remaining-video');
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });

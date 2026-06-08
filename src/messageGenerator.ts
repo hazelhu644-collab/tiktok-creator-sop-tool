@@ -34,10 +34,27 @@ function hasChineseCharacters(value: string): boolean {
   return chineseCharacterPattern.test(value);
 }
 
+function isPartialVideoCompletionTask(task: Task): boolean {
+  const requiredVideos = task.videoProgress.match(/\/\s*(\d+)/)?.[1];
+  const fallbackRequiredVideos = requiredVideos ? Number.parseInt(requiredVideos, 10) : undefined;
+  const progress = normalizeVideoProgress(task.videoProgress, fallbackRequiredVideos);
+  return typeof progress.postedCount === 'number'
+    && progress.postedCount > 0
+    && typeof progress.requiredVideos === 'number'
+    && progress.postedCount < progress.requiredVideos;
+}
+
+function clearlyMeetsFinalFailedCandidateConditions(task: Task): boolean {
+  const warningText = task.failedWarnings.join(' ');
+  return /长期未回复|没有明确拍摄计划|合作状态较差|不愿意修改视频|long-time no reply|long time no reply|no filming plan|bad cooperation|unwilling/i.test(warningText)
+    || task.failedWarnings.some((warning) => warning.includes('样品已到货') && warning.includes('视频进度仍为 0/'));
+}
+
 function scenarioForTask(task: Task): string {
+  if (isPartialVideoCompletionTask(task) && !clearlyMeetsFinalFailedCandidateConditions(task)) return 'Partial Video Completion Follow-up';
   if (task.failedWarnings.length > 0) return 'Final Follow-up Before Failed Candidate';
   if (task.priority === 'Highest') return 'Sample Delivered Follow-up';
-  if (task.priority === 'High') return 'Second Video Reminder';
+  if (task.priority === 'High') return 'Partial Video Completion Follow-up';
   if (task.priority === 'Medium') return 'Second Follow-up';
   return 'Light Follow-up';
 }
@@ -114,11 +131,25 @@ function referenceLinksLine(scenario: string, filmingRequirements: CreatorFilmin
 
   const linksText = referenceLinks.join('; ');
 
+  if (scenario === 'Partial Video Completion Follow-up') {
+    return `You can also use these reference videos as direction for the next post: ${linksText}.`;
+  }
+
   if (isHighRiskScenario(scenario)) {
     return `You can use the reference links as direction for the remaining video(s): ${linksText}.`;
   }
 
   return `Here are a few reference videos you can use for filming direction: ${linksText}.`;
+}
+
+function remainingVideoPhrase(count: number | null): string {
+  if (count === null || count <= 0) return 'remaining video(s)';
+  return `${count} remaining ${count === 1 ? 'video' : 'videos'}`;
+}
+
+function partialCompletionGuidelinesLine(hasReferenceLinks: boolean): string {
+  const referenceDirection = hasReferenceLinks ? ' and reference direction' : '';
+  return `For the remaining video, please keep following the filming guidelines${referenceDirection} we shared, and make sure the TikTok Shop product link is attached.`;
 }
 
 function filmingGuidelinesLine(task: Task, filmingRequirements: CreatorFilmingRequirements): string {
@@ -148,22 +179,25 @@ export function generateMessage(
   const name = task.username.startsWith('@') ? task.username : `@${task.username}`;
   const product = toEnglishProductName(task.product || filmingRequirements.productName);
   const highRisk = isHighRiskScenario(scenario);
+  const hasReferenceLinks = (filmingRequirements.referenceLinks ?? []).map((link) => link.trim()).filter(Boolean).length > 0;
   const filmingRequirementsReminder = [
-    highRisk ? '' : filmingGuidelinesLine(task, filmingRequirements),
+    highRisk ? '' : scenario === 'Partial Video Completion Follow-up' ? partialCompletionGuidelinesLine(hasReferenceLinks) : filmingGuidelinesLine(task, filmingRequirements),
     referenceLinksLine(scenario, filmingRequirements),
   ].filter(Boolean).join(' ');
-  const requiredVideos = parseRequiredVideos(filmingRequirements);
+  const configuredRequiredVideos = parseRequiredVideos(filmingRequirements);
+  const progressRequiredVideos = task.videoProgress.match(/(?:\/|of\s+)(\d+)/i)?.[1];
+  const requiredVideos = progressRequiredVideos ? Number.parseInt(progressRequiredVideos, 10) : configuredRequiredVideos;
   const progress = normalizeVideoProgress(task.videoProgress, requiredVideos);
   const missingVideos = typeof progress.postedCount === 'number' ? Math.max(0, requiredVideos - progress.postedCount) : null;
+  const remainingVideos = remainingVideoPhrase(missingVideos);
 
   let english = '';
 
   if (scenario === 'Sample Delivered Follow-up') {
     const request = `Just checking in now that the ${product} sample has been delivered. Please follow the filming guidelines we shared and let us know your expected posting date for the first video.`;
     english = byChannel(channel, name, request, filmingRequirementsReminder, highRisk);
-  } else if (scenario === 'Second Video Reminder') {
-    const request = `Thanks for posting ${progress.postedCount ?? 'part of the'} ${typeof progress.postedCount === 'number' && progress.postedCount === 1 ? 'video' : 'videos'} for ${product}. The collaboration still has ${missingVideos !== null && missingVideos > 0 ? `${missingVideos} ${missingVideos === 1 ? 'video' : 'videos'}` : 'remaining video(s)'} incomplete; please confirm when you plan to post the remaining content.`;
-    english = byChannel(channel, name, request, filmingRequirementsReminder, highRisk);
+  } else if (scenario === 'Partial Video Completion Follow-up') {
+    english = partialCompletionMessage(channel, name, remainingVideos, filmingRequirementsReminder);
   } else if (scenario === 'Second Follow-up') {
     const request = `I’m checking in on the ${product} collaboration. The required video(s) are still incomplete on our side. Please let us know if you’re still able to complete the remaining video(s), and if so, confirm your expected posting date. If you’re no longer able to continue, please let us know so we can update the campaign status on our end.`;
     english = byChannel(channel, name, request, filmingRequirementsReminder, highRisk);
@@ -177,9 +211,50 @@ export function generateMessage(
 
   return {
     english,
-    chineseExplanation: buildChineseExplanation(scenario, channel, (filmingRequirements.referenceLinks ?? []).filter(Boolean).length > 0),
+    chineseExplanation: buildChineseExplanation(scenario, channel, hasReferenceLinks),
     scenario,
   };
+}
+
+
+function partialCompletionMessage(channel: Channel, name: string, remainingVideos: string, filmingRequirementsReminder: string): string {
+  const partialReferenceLinks = filmingRequirementsReminder.includes('You can also use these reference videos')
+    ? ` ${filmingRequirementsReminder.slice(filmingRequirementsReminder.indexOf('You can also use these reference videos'))}`
+    : '';
+  const acknowledgement = 'Thank you for posting the first video — the content looks good, and we’re preparing to review it for ad testing.';
+  const pending = `There is still ${remainingVideos} pending for this collaboration.`;
+  const confirmQuestion = 'Could you please confirm when you expect to post the remaining video?';
+
+  if (channel === 'TikTok DM') {
+    return `Hi ${name}, thanks for posting the first video — it looks good, and we’re preparing to review it for ad testing. There is still ${remainingVideos} pending. Could you confirm when you expect to post it? Please keep following the filming guidelines and attach the product link.${partialReferenceLinks}`;
+  }
+
+  if (channel === 'TikTok Shop Affiliate Message') {
+    return `Hi ${name},
+
+${acknowledgement}
+
+${pending} ${filmingRequirementsReminder}
+
+${confirmQuestion}
+
+Thank you.`;
+  }
+
+  if (channel === 'WhatsApp') {
+    return `Hi ${name}, ${acknowledgement} ${pending} Could you confirm when you expect to post the remaining video? Please keep following the filming guidelines and attach the product link.${partialReferenceLinks}`;
+  }
+
+  return `Hi ${name},
+
+${acknowledgement}
+
+${pending} ${filmingRequirementsReminder}
+
+Please confirm the expected posting date for the remaining video so we can keep the collaboration timeline clear.
+
+Thank you,
+Brand Team`;
 }
 
 function byChannel(channel: Channel, name: string, request: string, filmingRequirementsReminder: string, highRisk: boolean): string {
@@ -227,6 +302,10 @@ function buildChineseExplanation(scenario: string, channel: Channel, hasReferenc
   const referenceLinksNote = hasReferenceLinks
     ? ' 参考视频链接用于给达人参考拍摄模板、内容灵感或后续视频优化方向。'
     : '';
+
+  if (scenario === 'Partial Video Completion Follow-up') {
+    return `这条消息用于「已发布部分视频，跟进剩余视频」场景。这个话术适用于达人已经发布部分视频，但还没有完成全部视频的场景。语气先肯定已发布内容，再专业提醒剩余视频履约。重点不是施压，而是让达人确认剩余视频的发布时间。如果已有参考链接，可作为后续视频优化方向。${channelNote[channel]}${referenceLinksNote}`;
+  }
 
   return `这条消息用于「${scenario}」场景。语气保持专业、冷静、直接，不使用过度兴奋、道歉或施压式表达。${channelNote[channel]} 文案重点是让达人明确下一步：确认是否还能完成合作、给出发布时间，或说明是否无法继续，以便我们更新 campaign 状态。${referenceLinksNote}`;
 }
