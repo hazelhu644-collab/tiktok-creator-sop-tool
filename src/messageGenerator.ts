@@ -53,6 +53,20 @@ function normalizeForScenario(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function normalizeTrackingStatus(value: string | undefined): string {
+  const normalized = normalizeForScenario(value ?? '');
+  if (normalized === 'replied' || normalized === 'creator replied' || normalized === 'reply pending' || normalized === '达人已回复' || normalized === '达人回复待处理') return 'reply-pending';
+  if (normalized === 'followed up' || normalized === '已发送待回复') return 'sent-waiting';
+  if (normalized === 'completed' || normalized === '已完成') return 'completed';
+  if (normalized === 'failed' || normalized === '已失败') return 'failed';
+  return normalized;
+}
+
+function isReplyPendingTask(task: Task): boolean {
+  return normalizeTrackingStatus(task.trackingStatus) === 'reply-pending'
+    && Boolean(task.lastCreatorResponse?.trim());
+}
+
 function statusIncludes(task: Task, terms: string[]): boolean {
   const status = normalizeForScenario(task.currentStatus);
   return terms.some((term) => status.includes(term));
@@ -118,8 +132,9 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
   const shippingStatus = normalizeForScenario(task.sampleShippingStatus);
   const hasDeliveredEvidence = hasSampleDeliveredEvidence(task);
   const hasInTransitEvidence = hasSampleInTransitEvidence(task);
-  const isCompleted = isCompletedTask(task, configuredRequiredVideos);
-  const isFailed = statusIncludes(task, ['failed']);
+  const trackingStatus = normalizeTrackingStatus(task.trackingStatus);
+  const isCompleted = isCompletedTask(task, configuredRequiredVideos) || trackingStatus === 'completed';
+  const isFailed = statusIncludes(task, ['failed']) || trackingStatus === 'failed';
   const needsRevision = statusIncludes(task, ['needs revision', 'revision'])
     || /revision|revise|edit|修改|调整|重拍/i.test(task.notes);
   const partialCompletion = postedCount > 0 && postedCount < requiredVideos;
@@ -141,6 +156,15 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
       urgencyLevel: '归档',
       communicationAction: '合作失败归档',
       reason: `当前状态为 ${currentStatus}，应从活跃跟进队列归档，只做最终 campaign status 确认。`,
+      highRisk: false,
+    };
+  }
+
+  if (isReplyPendingTask(task)) {
+    return {
+      urgencyLevel: '高',
+      communicationAction: '回复达人消息',
+      reason: `达人已回复且「达人回复/下一步备注」不为空，需要基于达人回复继续推进沟通，而不是只记录回复。`,
       highRisk: false,
     };
   }
@@ -262,6 +286,7 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
     communicationAction: classification.communicationAction,
   });
 
+  if (classification.communicationAction === '回复达人消息') return withClassification('Creator Reply Follow-up');
   if (classification.communicationAction === '合作失败归档') return withClassification('Failed Archive Confirmation');
   if (classification.communicationAction === '合作完成维护') return withClassification('Completed Thank You');
   if (classification.communicationAction === '视频修改') return withClassification('Needs Revision Reminder');
@@ -436,6 +461,7 @@ export function generateMessage(
   task: Task,
   channel: Channel,
   filmingRequirements: CreatorFilmingRequirements = defaultCreatorFilmingRequirements,
+  userReplyFocus = '',
 ): GeneratedMessage {
   const configuredRequiredVideos = parseRequiredVideos(filmingRequirements);
   const scenarioSelection = scenarioForTask(task, configuredRequiredVideos);
@@ -472,6 +498,8 @@ export function generateMessage(
     english = sampleInTransitMessage(channel, name, product, filmingRequirementsReminder);
   } else if (scenario === 'Logistics Exception Confirmation') {
     english = logisticsExceptionMessage(channel, name, product, filmingRequirementsReminder);
+  } else if (scenario === 'Creator Reply Follow-up') {
+    english = creatorReplyMessage(channel, name, product, task, userReplyFocus, filmingRequirementsReminder);
   } else if (scenario === 'Sample Delivered Follow-up') {
     const request = `Just checking in now that the ${product} sample has been delivered. Please confirm your expected posting date for the first video. ${filmingRequirementsReminder}`;
     english = byChannel(channel, name, request, '', highRisk);
@@ -641,6 +669,70 @@ Thank you,
 Brand Team`;
 }
 
+
+function sanitizeEnglishText(value: string): string {
+  return removeChineseCharacters(value)
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function summarizeCreatorReplyForEnglish(replyNote: string): string {
+  const normalized = normalizeForScenario(replyNote);
+  if (/too long|long|60\s*sec|60 seconds|length|duration|shorter/.test(normalized)) return 'the video length requirement';
+  if (/friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|post|posting|publish|date|schedule/.test(normalized)) return 'your posting timing update';
+  if (/not arrived|hasn.?t arrived|haven.?t arrived|no package|package|delivery|shipping|tracking|lost|stuck/.test(normalized)) return 'the package delivery update';
+  if (/requirement|guideline|brief|what do you need|details|link|tag|video/.test(normalized)) return 'your question about the campaign requirements';
+  if (/can.?t|cannot|unable|not continue|no longer|stop|cancel|quit|not able/.test(normalized)) return 'your update that you may not be able to continue';
+  return 'your update';
+}
+
+function englishFocusFromUserInput(userReplyFocus: string): string {
+  const normalized = normalizeForScenario(userReplyFocus);
+  if (!normalized) return '';
+  if (/60|时长|秒|太长|length|duration/.test(normalized)) return 'Clarify that the target length is 60 seconds, while asking what format would be workable for the creator.';
+  if (/周五|friday/.test(normalized)) return 'Confirm that posting on Friday works and ask the creator to send the post link after publishing.';
+  if (/挂车|产品链接|shop|link/.test(normalized)) return 'Remind the creator to attach the TikTok Shop product link.';
+  if (/2\s*条|两条|短视频|videos?/.test(normalized)) return 'Confirm whether the creator can adjust the plan to two short videos.';
+  const cleanFocus = sanitizeEnglishText(userReplyFocus);
+  return cleanFocus;
+}
+
+function nextStepForCreatorReply(replyNote: string, userReplyFocus: string, filmingRequirementsReminder: string): string {
+  const normalized = normalizeForScenario(`${replyNote} ${userReplyFocus}`);
+  const cleanFocus = englishFocusFromUserInput(userReplyFocus);
+
+  if (cleanFocus) return cleanFocus;
+  if (/too long|long|60\s*sec|60 seconds|length|duration|shorter/.test(normalized)) return 'The 60-second direction is the campaign target, but please let us know what format would be workable for you while still showing the product clearly.';
+  if (/friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|post|posting|publish|date|schedule/.test(normalized)) return 'That posting timing works. Please keep the TikTok Shop product link attached and send us the post link once it is live.';
+  if (/not arrived|hasn.?t arrived|haven.?t arrived|no package|package|delivery|shipping|tracking|lost|stuck/.test(normalized)) return 'Please keep checking the delivery updates and let us know if the package still does not arrive or if you see any shipping issue.';
+  if (/requirement|guideline|brief|what do you need|details|link|tag|video/.test(normalized)) return filmingRequirementsReminder || 'Please follow the filming guidelines we shared, include the required tag, and attach the TikTok Shop product link.';
+  if (/can.?t|cannot|unable|not continue|no longer|stop|cancel|quit|not able/.test(normalized)) return 'Thank you for letting us know. We will update the campaign status on our side based on your confirmation.';
+  return 'Please confirm the next step or timing when you can, so we can keep the campaign status accurate on our side.';
+}
+
+function creatorReplyMessage(channel: Channel, name: string, product: string, task: Task, userReplyFocus: string, filmingRequirementsReminder: string): string {
+  const replyTopic = summarizeCreatorReplyForEnglish(task.lastCreatorResponse ?? '');
+  const nextStep = nextStepForCreatorReply(task.lastCreatorResponse ?? '', userReplyFocus, filmingRequirementsReminder);
+  const statusLine = `I saw your reply about ${replyTopic} for the ${product} collaboration.`;
+  const request = `${statusLine} ${nextStep} Please reply with the clearest next update when you have it.`;
+
+  if (channel === 'Email') {
+    return `Hi ${name},
+
+${statusLine}
+
+${nextStep}
+
+Please reply with the clearest next update when you have it so we can keep the campaign status accurate.
+
+Best,
+Brand Team`;
+  }
+
+  return byChannel(channel, name, request, '', false);
+}
+
 function byChannel(channel: Channel, name: string, request: string, filmingRequirementsReminder: string, highRisk: boolean): string {
   const cleanReminder = filmingRequirementsReminder.trim();
 
@@ -693,6 +785,7 @@ function buildChineseExplanation(scenario: string, channel: Channel, hasReferenc
     'Failed Archive Confirmation': '合作失败归档，默认不催促，只做 campaign status 更新确认。',
     'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进，重点是让达人明确是否还能完成合作。',
     'Second Follow-up': '第二次跟进，重点是再次确认进度和明确发布时间。',
+    'Creator Reply Follow-up': '这个话术用于达人已经回复后继续推进沟通。系统结合达人回复内容和你填写的回复重点生成下一步话术。重点是让沟通继续流动，而不是只记录回复。',
     'Light Follow-up': '轻量跟进，适合未命中特定阶段时确认当前合作进展。',
   };
 

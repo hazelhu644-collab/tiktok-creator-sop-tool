@@ -23,7 +23,7 @@ export type FollowUpHistoryEntry = {
   note?: string;
 };
 
-export type TrackingStatus = 'Followed Up' | 'Replied' | 'Completed' | 'Failed' | '';
+export type TrackingStatus = 'Followed Up' | 'Replied' | 'Reply Pending' | 'Completed' | 'Failed' | '';
 
 export type CreatorRow = {
   id: string;
@@ -78,6 +78,7 @@ export type CommunicationAction =
   | '剩余视频履约'
   | '视频修改'
   | '最后确认'
+  | '回复达人消息'
   | '合作完成维护'
   | '合作失败归档';
 

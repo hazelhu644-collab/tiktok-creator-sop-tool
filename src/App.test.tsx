@@ -725,3 +725,114 @@ describe('creator follow-up queue selection', () => {
     expect(screen.getByText('没有匹配的达人，请调整搜索词或切换筛选。')).toBeInTheDocument();
   });
 });
+
+describe('second full-day table and creator reply optimizations', () => {
+  function seedCreators(rows: CreatorRow[]) {
+    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
+  }
+
+  function optionTexts(): string[] {
+    return Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
+  }
+
+  it('renders the editable table in an internal scroll container with sticky header and sticky creator column styles', () => {
+    seedCreators(Array.from({ length: 12 }, (_, index) => creatorRow({ id: `creator-${index}`, username: `creator_${index}` })));
+
+    render(<App />);
+
+    const scrollContainer = screen.getByTestId('editable-table-scroll-container');
+    expect(scrollContainer).toHaveClass('editable-table-wrap');
+    expect(scrollContainer).toHaveStyle({ maxHeight: '620px', overflow: 'auto' });
+    expect(screen.getByRole('columnheader', { name: '达人账号' })).toHaveClass('sticky-creator-column');
+    expect(screen.getByRole('columnheader', { name: '紧急度' }).closest('thead')).toHaveClass('sticky-table-header');
+  });
+
+  it('collapses and expands the editable table summary', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow(), creatorRow({ id: 'creator-2', username: 'second_creator' })]);
+
+    render(<App />);
+
+    expect(screen.getByTestId('editable-table-scroll-container')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '收起表格' }));
+    expect(screen.getByText('当前共 2 位达人，点击展开查看或编辑数据表。')).toBeInTheDocument();
+    expect(screen.queryByTestId('editable-table-scroll-container')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '展开表格' }));
+    expect(screen.getByTestId('editable-table-scroll-container')).toBeInTheDocument();
+  });
+
+  it('toggles compact mode on the editable table', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow()]);
+
+    render(<App />);
+
+    const compactToggle = screen.getByLabelText('紧凑模式');
+    expect(screen.getByTestId('editable-table-scroll-container')).not.toHaveClass('compact-table-mode');
+    await user.click(compactToggle);
+    expect(screen.getByTestId('editable-table-scroll-container')).toHaveClass('compact-table-mode');
+  });
+
+  it('keeps replied creators in the queue, shows saved reply details, and generates focused reply copy', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({
+        id: 'reply-pending',
+        username: 'reply_creator',
+        trackingStatus: 'Replied',
+        lastCreatorResponse: 'The package has not arrived yet.',
+        followUpHistory: [{ date: '2026-06-08', action: 'Creator Replied', note: 'The package has not arrived yet.' }],
+        currentStatus: 'Sample Shipped',
+        sampleShippingStatus: 'In Transit',
+        sampleDeliveredDate: '',
+      }),
+      creatorRow({ id: 'failed-replied', username: 'failed_replied', trackingStatus: 'Replied', lastCreatorResponse: 'I cannot continue.', currentStatus: 'Failed' }),
+    ]);
+
+    render(<App />);
+
+    expect(optionTexts().join('\n')).toContain('高 · 回复达人消息 · reply_creator');
+    expect(optionTexts().join('\n')).toContain('归档 · 合作失败归档 · failed_replied');
+    expect(screen.getByText('达人回复内容')).toBeInTheDocument();
+    expect(screen.getAllByText('The package has not arrived yet.').length).toBeGreaterThan(0);
+    expect(screen.getByText('最近回复日期：2026-06-08')).toBeInTheDocument();
+    expect(screen.getByLabelText('我想回复的重点（可选）')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('我想回复的重点（可选）'), '提醒继续查看物流');
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    const englishMessage = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
+    expect(screen.getByText(/沟通动作：回复达人消息/)).toBeInTheDocument();
+    expect(englishMessage).toContain('delivery');
+    expect(englishMessage).toContain('delivery updates');
+    expect(englishMessage).not.toMatch(/[\u3400-\u9fff]/);
+  });
+
+  it('updates tracking status and history after sending a generated creator reply message while keeping the saved reply note', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'I can post this Friday.',
+      followUpHistory: [{ date: '2026-06-08', action: 'Creator Replied', note: 'I can post this Friday.' }],
+    })]);
+
+    render(<App />);
+    await user.type(screen.getByLabelText('我想回复的重点（可选）'), '同意她周五发布');
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
+
+    const today = new Date().toISOString().slice(0, 10);
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
+      expect(saved.trackingStatus).toBe('Followed Up');
+      expect(saved.lastContactDate).toBe(today);
+      expect(saved.lastFollowUpCount).toBe(1);
+      expect(saved.lastCreatorResponse).toBe('I can post this Friday.');
+      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
+        expect.objectContaining({ action: 'Creator Replied', note: 'I can post this Friday.' }),
+        expect.objectContaining({ action: 'Message Sent', scenario: '回复达人消息', date: today }),
+      ]));
+    });
+  });
+});
