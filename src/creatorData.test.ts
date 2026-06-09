@@ -71,12 +71,22 @@ describe('editable creator data helpers', () => {
     expect(loadCreatorRows()).toEqual([{ ...blankRow, followUpHistory: [] }]);
   });
 
-  it('exports the current rows with the template columns plus optional tracking fields', () => {
+  it('exports the current rows with UTF-8 BOM, Chinese headers, and compact tracking counts', () => {
     const csv = creatorRowsToCsv([
-      row({ username: 'creator, one', notes: 'Line 1\nLine 2' }),
+      row({
+        username: 'creator, one',
+        notes: 'Line 1\nLine 2',
+        followUpHistory: [
+          { date: '2026-06-01', action: 'Message Sent' },
+          { date: '2026-06-02', action: 'Creator Replied', note: 'Will post tomorrow' },
+        ],
+      }),
     ]);
 
-    expect(csv.split('\n')[0]).toBe('Creator username,Creator profile link,Contact method,Product,Current status,Sample shipping status,Sample delivered date,Video progress,First video posted date,Last contact date,Last follow-up count,Notes,Tracking status,Last message scenario,Last message channel,Last message sent at,Next follow-up date,Last creator response');
+    expect(csv.startsWith('\ufeff')).toBe(true);
+    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复/下一步备注,跟进记录,备注');
+    expect(csv).toContain('2 条记录');
+    expect(csv).not.toContain('{"date"');
     expect(csv).toContain('"creator, one"');
     expect(csv).toContain('"Line 1\nLine 2"');
   });
@@ -96,6 +106,45 @@ describe('editable creator data helpers', () => {
       lastMessageSentAt: '',
       nextFollowUpDate: '',
       lastCreatorResponse: '',
+    });
+  });
+
+  it('imports new Chinese exported headers into the same internal fields', () => {
+    const imported = normalizeRecord({
+      '达人账号': 'cn_creator',
+      '主页链接': 'https://example.com/cn_creator',
+      '联系渠道': 'Email',
+      '产品': '中文产品',
+      '合作状态': '已完成',
+      '物流状态': 'Delivered',
+      '样品到货日期': '2026-06-01',
+      '视频进度': '2 of 2',
+      '首条视频发布日期': '2026-06-03',
+      '最近联系日期': '2026-06-04',
+      '跟进次数': '2',
+      '跟进状态': '已完成',
+      '最近沟通动作': '合作完成维护',
+      '最近沟通渠道': 'TikTok DM',
+      '下次跟进日期': '2026-06-06',
+      '达人回复/下一步备注': '继续维护',
+      '备注': 'general note',
+    }, 1);
+
+    expect(imported).toMatchObject({
+      username: 'cn_creator',
+      profileLink: 'https://example.com/cn_creator',
+      contactMethod: 'Email',
+      product: '中文产品',
+      currentStatus: '已完成',
+      sampleDeliveredDate: '2026-06-01',
+      lastContactDate: '2026-06-04',
+      lastFollowUpCount: 2,
+      trackingStatus: '已完成',
+      lastMessageScenario: '合作完成维护',
+      lastMessageChannel: 'TikTok DM',
+      nextFollowUpDate: '2026-06-06',
+      lastCreatorResponse: '继续维护',
+      notes: 'general note',
     });
   });
 });

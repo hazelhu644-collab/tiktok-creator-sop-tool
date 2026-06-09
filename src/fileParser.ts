@@ -2,26 +2,26 @@ import type { CreatorRow } from './types';
 import { normalizeText, normalizeVideoProgress } from './sopRules';
 
 const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory'>, string[]> = {
-  username: ['creator username', 'username', 'creator', 'creator handle'],
-  profileLink: ['creator profile link', 'profile link', 'creator link', 'profile'],
-  contactMethod: ['contact method', 'contact', 'channel'],
-  product: ['product', 'product name'],
-  currentStatus: ['current status', 'status', 'creator status'],
-  sampleShippingStatus: ['sample shipping status', 'shipping status', 'sample status'],
-  sampleDeliveredDate: ['sample delivered date', 'delivered date', 'delivery date'],
-  videoProgress: ['video progress', 'videos', 'progress'],
-  firstVideoPostedDate: ['first video posted date', 'first video date', 'video 1 date'],
-  lastContactDate: ['last contact date', 'last contacted date', 'contacted date'],
-  notes: ['notes', 'note', 'remarks'],
-  trackingStatus: ['tracking status', 'follow-up tracking status', 'follow up tracking status'],
-  lastMessageScenario: ['last message scenario'],
-  lastMessageChannel: ['last message channel'],
+  username: ['creator username', 'username', 'creator', 'creator handle', '达人账号'],
+  profileLink: ['creator profile link', 'profile link', 'creator link', 'profile', '主页链接'],
+  contactMethod: ['contact method', 'contact', 'channel', '联系渠道'],
+  product: ['product', 'product name', '产品'],
+  currentStatus: ['current status', 'status', 'creator status', '合作状态', '当前状态'],
+  sampleShippingStatus: ['sample shipping status', 'shipping status', 'sample status', '物流状态'],
+  sampleDeliveredDate: ['sample delivered date', 'delivered date', 'delivery date', '样品到货日期', '样品到货时间'],
+  videoProgress: ['video progress', 'videos', 'progress', '视频进度'],
+  firstVideoPostedDate: ['first video posted date', 'first video date', 'video 1 date', '首条视频发布日期', '首条视频发布时间'],
+  lastContactDate: ['last contact date', 'last contacted date', 'contacted date', '最近联系日期', '最后联系时间', 'last message sent at'],
+  notes: ['notes', 'note', 'remarks', '备注'],
+  trackingStatus: ['tracking status', 'follow-up tracking status', 'follow up tracking status', '跟进状态'],
+  lastMessageScenario: ['last message scenario', '最近沟通动作'],
+  lastMessageChannel: ['last message channel', '最近沟通渠道'],
   lastMessageSentAt: ['last message sent at'],
-  nextFollowUpDate: ['next follow-up date', 'next follow up date'],
-  lastCreatorResponse: ['last creator response'],
+  nextFollowUpDate: ['next follow-up date', 'next follow up date', '下次跟进日期'],
+  lastCreatorResponse: ['last creator response', '达人回复/下一步备注', '达人回复', '下一步备注'],
 };
 
-const FOLLOW_UP_ALIASES = ['last follow-up count', 'last follow up count', 'follow-up count', 'follow up count', 'followups'];
+const FOLLOW_UP_ALIASES = ['last follow-up count', 'last follow up count', 'follow-up count', 'follow up count', 'followups', '跟进次数'];
 
 function normalizeHeader(header: string): string {
   return header.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -37,6 +37,8 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
   const lastFollowUpValue = pickValue(record, FOLLOW_UP_ALIASES);
   const followUpCount = Number.parseInt(lastFollowUpValue || '0', 10);
   const progressResult = normalizeVideoProgress(pickValue(record, COLUMN_ALIASES.videoProgress), requiredVideos);
+  const lastMessageSentAt = pickValue(record, COLUMN_ALIASES.lastMessageSentAt);
+  const lastContactDate = pickValue(record, COLUMN_ALIASES.lastContactDate) || lastMessageSentAt;
 
   return {
     id: `${index}-${pickValue(record, COLUMN_ALIASES.username) || 'creator'}`,
@@ -50,13 +52,13 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
     videoProgress: progressResult.normalized,
     videoProgressWarning: progressResult.warning,
     firstVideoPostedDate: pickValue(record, COLUMN_ALIASES.firstVideoPostedDate),
-    lastContactDate: pickValue(record, COLUMN_ALIASES.lastContactDate),
+    lastContactDate,
     lastFollowUpCount: Number.isNaN(followUpCount) ? 0 : followUpCount,
     notes: pickValue(record, COLUMN_ALIASES.notes),
     trackingStatus: pickValue(record, COLUMN_ALIASES.trackingStatus),
     lastMessageScenario: pickValue(record, COLUMN_ALIASES.lastMessageScenario),
     lastMessageChannel: pickValue(record, COLUMN_ALIASES.lastMessageChannel),
-    lastMessageSentAt: pickValue(record, COLUMN_ALIASES.lastMessageSentAt),
+    lastMessageSentAt,
     nextFollowUpDate: pickValue(record, COLUMN_ALIASES.nextFollowUpDate),
     lastCreatorResponse: pickValue(record, COLUMN_ALIASES.lastCreatorResponse),
     followUpHistory: [],

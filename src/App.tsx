@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   clearSavedCreatorRows,
   createBlankCreatorRow,
@@ -30,6 +30,93 @@ const priorityLabel: Record<Priority, string> = {
   Low: '低',
   None: '无',
 };
+
+
+const urgencyBadgeClass: Record<UrgencyLevel, string> = {
+  极高: 'badge urgency-highest',
+  高: 'badge urgency-high',
+  中: 'badge urgency-medium',
+  低: 'badge urgency-low',
+  归档: 'badge urgency-archived',
+};
+
+const trackingStatusDisplay: Record<string, string> = {
+  '': '未发送',
+  'Followed Up': '已发送待回复',
+  Replied: '达人已回复',
+  Completed: '已完成',
+  Failed: '已失败',
+  未发送: '未发送',
+  已发送待回复: '已发送待回复',
+  达人已回复: '达人已回复',
+  需再次跟进: '需再次跟进',
+  已完成: '已完成',
+  已失败: '已失败',
+};
+
+function normalizeStatusToken(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function cooperationStatusDisplay(value: string): string {
+  const status = normalizeStatusToken(value);
+  if (!status) return '未填写';
+  if (status.includes('completed') || status.includes('已完成')) return '已完成';
+  if (status.includes('failed') || status.includes('失败') || status.includes('已失败')) return '已失败';
+  if (status.includes('to contact') || status.includes('待建联')) return '待建联';
+  if (status.includes('sample shipped') || status.includes('样品已发')) return '样品已发';
+  if (status.includes('in transit') || status.includes('运输中')) return '运输中';
+  if (status.includes('delivered') || status.includes('waiting for video') || status.includes('样品已到')) return '样品已到待拍';
+  if (status.includes('posted') || status.includes('partial') || status.includes('部分视频')) return '已发部分视频';
+  return value.trim();
+}
+
+function cooperationStatusClass(value: string): string {
+  const display = cooperationStatusDisplay(value);
+  const classByDisplay: Record<string, string> = {
+    未填写: 'badge status-empty',
+    待建联: 'badge status-to-contact',
+    样品已发: 'badge status-sample-shipped',
+    运输中: 'badge status-in-transit',
+    样品已到待拍: 'badge status-delivered',
+    已发部分视频: 'badge status-posted-partial',
+    已完成: 'badge status-completed',
+    已失败: 'badge status-failed',
+  };
+  return classByDisplay[display] ?? 'badge status-default';
+}
+
+function trackingStatusLabel(value: string | undefined): string {
+  return trackingStatusDisplay[value ?? ''] ?? value?.trim() ?? '未发送';
+}
+
+function trackingStatusClass(value: string | undefined): string {
+  const display = trackingStatusLabel(value);
+  const classByDisplay: Record<string, string> = {
+    未发送: 'badge tracking-not-sent',
+    已发送待回复: 'badge tracking-sent',
+    达人已回复: 'badge tracking-replied',
+    需再次跟进: 'badge tracking-needs-follow-up',
+    已完成: 'badge tracking-completed',
+    已失败: 'badge tracking-failed',
+  };
+  return classByDisplay[display] ?? 'badge tracking-default';
+}
+
+function followUpHistoryLabel(row: CreatorRow): string {
+  const count = row.followUpHistory?.length ?? 0;
+  return count === 0 ? '暂无记录' : `${count} 条记录`;
+}
+
+function followUpActionLabel(action: FollowUpHistoryEntry['action']): string {
+  const actionLabels: Record<FollowUpHistoryEntry['action'], string> = {
+    'Message Sent': '已发送',
+    'Creator Replied': '达人已回复',
+    Completed: '合作完成',
+    Failed: '合作失败',
+  };
+  return actionLabels[action] ?? action;
+}
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = 'tiktokCreatorSop.filmingRequirements';
 
@@ -242,10 +329,17 @@ function appendUniqueNote(existingNotes: string, note: string): string {
   return [existingNotes.trim(), trimmedNote].filter(Boolean).join('\n');
 }
 
-function trackingRowClass(row: CreatorRow): string | undefined {
-  if (row.trackingStatus === 'Completed') return 'tracking-row-completed';
-  if (row.trackingStatus === 'Failed') return 'tracking-row-failed';
-  return undefined;
+function trackingRowClass(row: CreatorRow, task: Task | undefined, requiredVideos: number): string {
+  const classes: string[] = [];
+  const trackingLabel = trackingStatusLabel(row.trackingStatus);
+  if (trackingLabel === '已完成') classes.push('tracking-row-completed');
+  if (trackingLabel === '已失败') classes.push('tracking-row-failed');
+
+  const urgencyLevel = task ? classifyCreatorFollowUp(task, requiredVideos).urgencyLevel : undefined;
+  if (urgencyLevel === '极高') classes.push('urgency-row-highest');
+  if (urgencyLevel === '高') classes.push('urgency-row-high');
+
+  return classes.join(' ');
 }
 
 function App() {
@@ -288,6 +382,7 @@ function App() {
   const selectedTask = generatorTasks.find((task) => task.id === selectedCreatorId) ?? generatorTasks[0];
   const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
   const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
+  const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
 
   useEffect(() => {
     saveCreatorRows(rows);
@@ -765,62 +860,88 @@ function App() {
               <table className="editable-table">
                 <thead>
                   <tr>
+                    <th>紧急度</th>
                     <th>达人账号</th>
                     <th>主页链接</th>
                     <th>联系渠道</th>
                     <th>产品</th>
-                    <th>当前状态</th>
+                    <th>合作状态</th>
                     <th>物流状态</th>
-                    <th>样品到货时间</th>
+                    <th>样品到货日期</th>
                     <th>视频进度</th>
-                    <th>首条视频发布时间</th>
-                    <th>最后联系时间</th>
+                    <th>首条视频发布日期</th>
+                    <th>最近联系日期</th>
                     <th>跟进次数</th>
+                    <th>跟进状态</th>
+                    <th>最近沟通动作</th>
+                    <th>最近沟通渠道</th>
+                    <th>下次跟进日期</th>
+                    <th>达人回复/下一步备注</th>
+                    <th>跟进记录</th>
                     <th>备注</th>
-                    <th>Tracking status</th>
-                    <th>Last message scenario</th>
-                    <th>Last message channel</th>
-                    <th>Last message sent at</th>
-                    <th>Next follow-up date</th>
-                    <th>Last creator response</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id} className={trackingRowClass(row)}>
-                      <EditableCell label="Creator username" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} autoFocus={selectedCreatorId === row.id && row.username === ''} />
-                      <EditableCell label="Creator profile link" value={row.profileLink} onChange={(value) => handleEditCreator(row.id, 'profileLink', value)} />
-                      <EditableCell label="Contact method" value={row.contactMethod} onChange={(value) => handleEditCreator(row.id, 'contactMethod', value)} />
-                      <EditableCell label="Product" value={row.product} onChange={(value) => handleEditCreator(row.id, 'product', value)} />
-                      <EditableCell label="Current status" value={row.currentStatus} onChange={(value) => handleEditCreator(row.id, 'currentStatus', value)} />
-                      <EditableCell label="Sample shipping status" value={row.sampleShippingStatus} onChange={(value) => handleEditCreator(row.id, 'sampleShippingStatus', value)} />
-                      <EditableCell label="Sample delivered date" value={row.sampleDeliveredDate} onChange={(value) => handleEditCreator(row.id, 'sampleDeliveredDate', value)} />
+                  {rows.map((row) => {
+                    const rowTask = tasksById.get(row.id);
+                    const urgencyLevel = rowTask ? classifyCreatorFollowUp(rowTask, requiredVideos).urgencyLevel : '低';
+
+                    return (
+                    <tr key={row.id} className={trackingRowClass(row, rowTask, requiredVideos)}>
+                      <td><span className={urgencyBadgeClass[urgencyLevel]}>紧急度：{urgencyLevel}</span></td>
+                      <EditableCell label="达人账号" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} autoFocus={selectedCreatorId === row.id && row.username === ''} />
+                      <EditableCell label="主页链接" value={row.profileLink} onChange={(value) => handleEditCreator(row.id, 'profileLink', value)} />
+                      <EditableCell label="联系渠道" value={row.contactMethod} onChange={(value) => handleEditCreator(row.id, 'contactMethod', value)} />
+                      <EditableCell label="产品" value={row.product} onChange={(value) => handleEditCreator(row.id, 'product', value)} />
+                      <EditableCell label="合作状态" value={row.currentStatus} onChange={(value) => handleEditCreator(row.id, 'currentStatus', value)} badge={<span className={cooperationStatusClass(row.currentStatus)}>{cooperationStatusDisplay(row.currentStatus)}</span>} />
+                      <EditableCell label="物流状态" value={row.sampleShippingStatus} onChange={(value) => handleEditCreator(row.id, 'sampleShippingStatus', value)} />
+                      <EditableCell label="样品到货日期" value={row.sampleDeliveredDate} onChange={(value) => handleEditCreator(row.id, 'sampleDeliveredDate', value)} />
                       <EditableCell
-                        label="Video progress"
+                        label="视频进度"
                         value={row.videoProgress}
                         warning={normalizeVideoProgress(row.videoProgress, requiredVideos).warning}
                         onChange={(value) => handleEditCreator(row.id, 'videoProgress', value)}
                       />
-                      <EditableCell label="First video posted date" value={row.firstVideoPostedDate} onChange={(value) => handleEditCreator(row.id, 'firstVideoPostedDate', value)} />
-                      <EditableCell label="Last contact date" value={row.lastContactDate} onChange={(value) => handleEditCreator(row.id, 'lastContactDate', value)} />
-                      <EditableCell label="Last follow-up count" type="number" value={String(row.lastFollowUpCount)} onChange={(value) => handleEditCreator(row.id, 'lastFollowUpCount', value)} />
-                      <EditableCell label="Notes" multiline value={row.notes} onChange={(value) => handleEditCreator(row.id, 'notes', value)} />
-                      <EditableCell label="Tracking status" value={row.trackingStatus ?? ''} onChange={(value) => handleEditCreator(row.id, 'trackingStatus', value)} />
-                      <EditableCell label="Last message scenario" value={row.lastMessageScenario ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageScenario', value)} />
-                      <EditableCell label="Last message channel" value={row.lastMessageChannel ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageChannel', value)} />
-                      <EditableCell label="Last message sent at" value={row.lastMessageSentAt ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageSentAt', value)} />
-                      <EditableCell label="Next follow-up date" value={row.nextFollowUpDate ?? ''} onChange={(value) => handleEditCreator(row.id, 'nextFollowUpDate', value)} />
-                      <EditableCell label="Last creator response" multiline value={row.lastCreatorResponse ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastCreatorResponse', value)} />
+                      <EditableCell label="首条视频发布日期" value={row.firstVideoPostedDate} onChange={(value) => handleEditCreator(row.id, 'firstVideoPostedDate', value)} />
+                      <EditableCell label="最近联系日期" value={row.lastContactDate} onChange={(value) => handleEditCreator(row.id, 'lastContactDate', value)} />
+                      <EditableCell label="跟进次数" type="number" value={String(row.lastFollowUpCount)} onChange={(value) => handleEditCreator(row.id, 'lastFollowUpCount', value)} />
+                      <EditableCell label="跟进状态" value={row.trackingStatus ?? ''} onChange={(value) => handleEditCreator(row.id, 'trackingStatus', value)} badge={<span className={trackingStatusClass(row.trackingStatus)}>{trackingStatusLabel(row.trackingStatus)}</span>} />
+                      <EditableCell label="最近沟通动作" value={row.lastMessageScenario ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageScenario', value)} />
+                      <EditableCell label="最近沟通渠道" value={row.lastMessageChannel ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageChannel', value)} />
+                      <EditableCell label="下次跟进日期" value={row.nextFollowUpDate ?? ''} onChange={(value) => handleEditCreator(row.id, 'nextFollowUpDate', value)} />
+                      <EditableCell label="达人回复/下一步备注" multiline value={row.lastCreatorResponse ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastCreatorResponse', value)} />
+                      <td className="history-cell">
+                        <details>
+                          <summary>{followUpHistoryLabel(row)}</summary>
+                          {(row.followUpHistory?.length ?? 0) === 0 ? (
+                            <p className="empty compact-empty">暂无记录</p>
+                          ) : (
+                            <ul className="compact-history-list">
+                              {(row.followUpHistory ?? []).slice(-5).reverse().map((entry, index) => (
+                                <li key={`${entry.date}-${entry.action}-${index}`}>
+                                  <strong>{entry.date}</strong> · {followUpActionLabel(entry.action)}
+                                  {entry.channel && <> · {entry.channel}</>}
+                                  {entry.scenario && <> · {entry.scenario}</>}
+                                  {entry.note && <p>{entry.note}</p>}
+                                  {entry.message && <p>{messagePreview(entry.message)}</p>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </details>
+                      </td>
+                      <EditableCell label="备注" multiline value={row.notes} onChange={(value) => handleEditCreator(row.id, 'notes', value)} />
                       <td>
                         <button type="button" className="secondary danger row-action" onClick={() => handleDeleteCreator(row.id)}>删除</button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            <p className="muted">当前共 {rows.length} 行。导出时会保留原始模板列结构。</p>
+            <p className="muted">当前共 {rows.length} 行。导出使用中文表头，并保留旧英文表头导入兼容。</p>
           </>
         )}
       </section>
@@ -850,7 +971,7 @@ function App() {
                     <th>优先级</th>
                     <th>达人</th>
                     <th>产品</th>
-                    <th>当前状态</th>
+                    <th>合作状态</th>
                     <th>触发原因</th>
                     <th>建议动作</th>
                     <th>联系渠道</th>
@@ -861,10 +982,10 @@ function App() {
                 <tbody>
                   {followUpTasks.map((task) => (
                     <tr key={task.id}>
-                      <td><span className={priorityClass[task.priority]}>{priorityLabel[task.priority]}</span></td>
+                      <td><span className="sr-only">{priorityLabel[task.priority]}</span><span className={urgencyBadgeClass[classifyCreatorFollowUp(task, requiredVideos).urgencyLevel]}>{classifyCreatorFollowUp(task, requiredVideos).urgencyLevel}</span></td>
                       <td>{displayCreatorName(task.username)}</td>
                       <td>{task.product}</td>
-                      <td>{task.currentStatus || '—'}</td>
+                      <td><span className={cooperationStatusClass(task.currentStatus)}>{cooperationStatusDisplay(task.currentStatus)}</span></td>
                       <td>{task.triggerReason}</td>
                       <td>{task.suggestedAction}</td>
                       <td>{task.contactMethod || '—'}</td>
@@ -957,7 +1078,7 @@ function App() {
             {message && (
               <div className="message-output">
                 <div className="queue-message-meta">
-                  <p>紧急程度：{message.urgencyLevel}</p>
+                  <p><span className="sr-only">紧急程度：{message.urgencyLevel}</span>紧急程度：<span className={urgencyBadgeClass[message.urgencyLevel]}>{message.urgencyLevel}</span></p>
                   <p>沟通动作：{message.communicationAction}</p>
                   <p>原因：{message.scenarioReason}</p>
                 </div>
@@ -1022,6 +1143,7 @@ function EditableCell({
   warning,
   multiline = false,
   autoFocus = false,
+  badge,
 }: {
   label: string;
   value: string;
@@ -1030,9 +1152,11 @@ function EditableCell({
   warning?: string;
   multiline?: boolean;
   autoFocus?: boolean;
+  badge?: ReactNode;
 }) {
   return (
     <td>
+      {badge && <div className="cell-badge">{badge}</div>}
       {multiline ? (
         <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} rows={2} />
       ) : (

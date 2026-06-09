@@ -528,3 +528,117 @@ button.danger {
 .queue-message-meta p {
   margin: 0;
 }
+
+.badge {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .76rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.urgency-highest { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+.urgency-high { background: #ffedd5; border-color: #fed7aa; color: #9a3412; }
+.urgency-medium { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
+.urgency-low { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+.urgency-archived { background: #f8fafc; border-color: #e2e8f0; color: #64748b; }
+
+.status-empty,
+.status-default { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
+.status-to-contact { background: #e0f2fe; border-color: #bae6fd; color: #075985; }
+.status-sample-shipped { background: #f3e8ff; border-color: #e9d5ff; color: #6b21a8; }
+.status-in-transit { background: #cffafe; border-color: #a5f3fc; color: #155e75; }
+.status-delivered { background: #fef3c7; border-color: #fde68a; color: #92400e; }
+.status-posted-partial { background: #ffedd5; border-color: #fed7aa; color: #9a3412; }
+.status-completed { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+.status-failed { background: #fee2e2; border-color: #cbd5e1; color: #7f1d1d; }
+
+.tracking-not-sent,
+.tracking-default { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+.tracking-sent { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
+.tracking-replied { background: #f3e8ff; border-color: #e9d5ff; color: #6b21a8; }
+.tracking-needs-follow-up { background: #ffedd5; border-color: #fed7aa; color: #9a3412; }
+.tracking-completed { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+.tracking-failed { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+
+.cell-badge {
+  margin-bottom: 6px;
+}
+
+.editable-table tr.urgency-row-highest td:first-child {
+  border-left: 4px solid #ef4444;
+}
+
+.editable-table tr.urgency-row-high td:first-child {
+  border-left: 4px solid #f97316;
+}
+
+.editable-table tr.urgency-row-highest td {
+  background: #fffafa;
+}
+
+.editable-table tr.urgency-row-high td {
+  background: #fffaf5;
+}
+
+.editable-table tr.tracking-row-completed td {
+  background: #f7fbf8;
+  color: #475569;
+}
+
+.editable-table tr.tracking-row-failed td {
+  background: #fbf7f7;
+  color: #475569;
+}
+
+.history-cell {
+  min-width: 240px;
+}
+
+.history-cell details {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 9px 10px;
+}
+
+.history-cell summary {
+  cursor: pointer;
+  font-weight: 900;
+  color: #0f766e;
+}
+
+.compact-empty {
+  margin: 8px 0 0;
+}
+
+.compact-history-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.compact-history-list li + li {
+  margin-top: 8px;
+}
+
+.compact-history-list p {
+  margin: 4px 0 0;
+  color: #475569;
+}
+
+.sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
