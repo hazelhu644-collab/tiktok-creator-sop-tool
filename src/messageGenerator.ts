@@ -96,9 +96,16 @@ function clearlyMeetsFinalFailedCandidateConditions(task: Task, configuredRequir
   if (isCompletedTask(task, configuredRequiredVideos) || statusIncludes(task, ['failed']) || !hasSampleDeliveredEvidence(task)) return false;
 
   const warningText = task.failedWarnings.join(' ');
+  const deliveredDate = task.sampleDeliveredDate.trim();
+  const deliveredAgeInDays = deliveredDate
+    ? Math.floor((Date.now() - new Date(`${deliveredDate}T00:00:00Z`).getTime()) / 86_400_000)
+    : 0;
+  const hasStaleZeroPostWarning = task.failedWarnings.some((warning) => warning.includes('样品已到货') && warning.includes('视频进度仍为 0/'));
+
   return task.lastFollowUpCount >= 2
-    || /长期未回复|没有明确拍摄计划|合作状态较差|不愿意修改视频|long-time no reply|long time no reply|no filming plan|bad cooperation|unwilling/i.test(warningText)
-    || task.failedWarnings.some((warning) => warning.includes('样品已到货') && warning.includes('视频进度仍为 0/'));
+    || deliveredAgeInDays >= 30
+    || (hasStaleZeroPostWarning && task.lastFollowUpCount === 0 && !task.triggerReason.includes('达人还没有发布视频'))
+    || /长期未回复|没有明确拍摄计划|合作状态较差|不愿意修改视频|long-time no reply|long time no reply|no filming plan|bad cooperation|unwilling/i.test(warningText);
 }
 
 export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2): CreatorFollowUpClassification {
@@ -477,7 +484,7 @@ export function generateMessage(
   } else if (scenario === 'Failed Archive Confirmation') {
     english = failedArchiveMessage(channel, name, product);
   } else if (scenario === 'Second Follow-up' || scenario === 'Final Follow-up Before Failed Candidate') {
-    const request = `I’m checking in on the ${product} collaboration. The required video(s) are still incomplete on our side. Please let us know if you’re still able to complete the remaining video(s), and if so, confirm your expected posting date. If you’re no longer able to continue, please let us know so we can update the campaign status on our end.`;
+    const request = `I’m checking in to confirm the current status of the ${product} collaboration. We haven’t seen the remaining deliverable completed yet, so I’d like to confirm whether you’re still able to complete the remaining video(s) and what posting timeline we should expect. The required video(s) are still incomplete on our side, so please confirm your expected posting date if you are continuing. If you’re no longer able to continue, please let us know so we can update the campaign status on our end.`;
     english = byChannel(channel, name, request, filmingRequirementsReminder, true);
   } else {
     const request = `I’m checking in on the ${product} collaboration. Please send a quick update on the current status so we can keep the campaign status accurate on our side.`;
