@@ -724,3 +724,108 @@ button.danger {
   .overview-group-heading,
   .active-filter-banner { align-items: flex-start; display: grid; }
 }
+
+.editable-table-wrap {
+  max-height: 620px;
+  overflow: auto;
+  position: relative;
+}
+
+.editable-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.editable-table th:nth-child(2),
+.editable-table td:nth-child(2) {
+  left: 0;
+  position: sticky;
+  z-index: 2;
+}
+
+.editable-table th:nth-child(2) {
+  z-index: 4;
+}
+
+.editable-table td:nth-child(2) {
+  background: inherit;
+  box-shadow: 1px 0 0 #e2e8f0;
+}
+
+.table-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.compact-mode-toggle {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  color: #475569;
+  display: inline-flex;
+  font-size: .86rem;
+  font-weight: 900;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.compact-mode-toggle input {
+  margin: 0;
+}
+
+.table-collapsed-summary {
+  background: #f0fdfa;
+  border: 1px dashed #99f6e4;
+  border-radius: 16px;
+  color: #0f766e;
+  font-weight: 900;
+  margin: 0;
+  padding: 18px;
+}
+
+.compact-table-mode th,
+.compact-table-mode td {
+  padding: 6px 8px;
+}
+
+.compact-table-mode .editable-table input,
+.compact-table-mode .editable-table textarea {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.compact-table-mode .editable-table textarea {
+  min-height: 46px;
+}
+
+.creator-reply-panel {
+  background: #f8fafc;
+  border: 1px solid #dbe3ef;
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  grid-column: 1 / -1;
+  padding: 14px;
+}
+
+.creator-reply-panel h3,
+.creator-reply-panel p {
+  margin: 0;
+}
+
+.creator-reply-panel p:not(.muted) {
+  color: #334155;
+  font-weight: 800;
+}
+
+.creator-reply-panel textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 12px 14px;
+  resize: vertical;
+  width: 100%;
+}

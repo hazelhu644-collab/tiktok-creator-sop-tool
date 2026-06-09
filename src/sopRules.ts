@@ -209,11 +209,20 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
   const missingVideos = missingVideoCount(progress, requiredVideos);
   const hasPostedAnyVideo = typeof progress.postedCount === 'number' && progress.postedCount > 0;
   const isIncomplete = missingVideos === null || missingVideos > 0;
+  const trackingStatus = normalizeText(row.trackingStatus).toLowerCase();
+  const hasPendingCreatorReply = ['replied', 'reply pending', '达人已回复', '达人回复待处理'].includes(trackingStatus)
+    && Boolean(normalizeText(row.lastCreatorResponse))
+    && !isCompleted(row, requiredVideos)
+    && !includesAny(normalizeText(row.currentStatus).toLowerCase(), ['failed', '失败']);
   let priority: Priority = 'None';
   let triggerReason = '根据当前 MVP 规则，今天暂无必须跟进的任务。';
   let suggestedAction = '稍后复查。';
 
-  if (hasDeliveredEvidence(row) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 2) {
+  if (hasPendingCreatorReply) {
+    priority = 'High';
+    triggerReason = '达人已经回复，需要处理回复内容并继续推进沟通。';
+    suggestedAction = '生成「回复达人消息」话术，基于达人回复内容给出下一步回应。';
+  } else if (hasDeliveredEvidence(row) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 2) {
     priority = 'Highest';
     triggerReason = `样品已到货 ${deliveredDays} 天，但达人还没有发布视频。`;
     suggestedAction = `发送第一次拍摄跟进，提醒达人按照达人拍摄要求完成 ${requiredVideos} 条视频。`;

@@ -44,11 +44,13 @@ const trackingStatusDisplay: Record<string, string> = {
   '': '未发送',
   'Followed Up': '已发送待回复',
   Replied: '达人已回复',
+  'Reply Pending': '达人回复待处理',
   Completed: '已完成',
   Failed: '已失败',
   未发送: '未发送',
   已发送待回复: '已发送待回复',
   达人已回复: '达人已回复',
+  达人回复待处理: '达人回复待处理',
   需再次跟进: '需再次跟进',
   已完成: '已完成',
   已失败: '已失败',
@@ -96,6 +98,7 @@ function trackingStatusClass(value: string | undefined): string {
     未发送: 'badge tracking-not-sent',
     已发送待回复: 'badge tracking-sent',
     达人已回复: 'badge tracking-replied',
+    达人回复待处理: 'badge tracking-replied',
     需再次跟进: 'badge tracking-needs-follow-up',
     已完成: 'badge tracking-completed',
     已失败: 'badge tracking-failed',
@@ -154,6 +157,7 @@ const scenarioLabel: Record<string, string> = {
   'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
   'Second Video Reminder': '第二条视频提醒',
   'Second Follow-up': '第二次跟进',
+  'Creator Reply Follow-up': '回复达人消息',
   'Light Follow-up': '轻量跟进',
 };
 
@@ -366,7 +370,7 @@ function matchesOverviewFilter(task: Task, overviewFilter: OverviewFilterKey | '
     case '已发送待回复':
       return trackingLabel === '已发送待回复';
     case '达人已回复':
-      return trackingLabel === '达人已回复';
+      return trackingLabel === '达人已回复' || trackingLabel === '达人回复待处理';
     case '已完成':
       return isCompletedCreator(task);
     case '已失败':
@@ -469,6 +473,9 @@ function App() {
   const [trackingStatus, setTrackingStatus] = useState('');
   const [generatedMessageCreatorId, setGeneratedMessageCreatorId] = useState('');
   const [nextFollowUpRecommendation, setNextFollowUpRecommendation] = useState<{ date: string; action: string } | null>(null);
+  const [isCreatorTableCollapsed, setIsCreatorTableCollapsed] = useState(false);
+  const [isCompactTableMode, setIsCompactTableMode] = useState(false);
+  const [replyFocus, setReplyFocus] = useState('');
   const generatorSectionRef = useRef<HTMLElement | null>(null);
 
   const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
@@ -505,6 +512,7 @@ function App() {
   ]), [tasks, requiredVideos]);
   const activeOverviewFilterLabel = activeOverviewFilter === 'today' ? '今日需跟进' : activeOverviewFilter;
   const selectedTask = generatorTasks.find((task) => task.id === selectedCreatorId) ?? generatorTasks[0];
+  const selectedCreatorReplyDate = selectedTask?.followUpHistory?.slice().reverse().find((entry) => entry.action === 'Creator Replied')?.date;
   const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
   const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
@@ -536,7 +544,7 @@ function App() {
 
   function handleGenerateMessage() {
     if (!selectedTask) return;
-    setMessage(generateMessage(selectedTask, channel, filmingRequirements));
+    setMessage(generateMessage(selectedTask, channel, filmingRequirements, replyFocus));
     setGeneratedMessageCreatorId(selectedTask.id);
     setNextFollowUpRecommendation(null);
     setTrackingStatus('');
@@ -774,6 +782,7 @@ function App() {
     setGeneratedMessageCreatorId('');
     setNextFollowUpRecommendation(null);
     setTrackingStatus('');
+    setReplyFocus('');
   }
 
   function handleDeleteCreator(rowId: string) {
@@ -820,6 +829,7 @@ function App() {
     setGeneratedMessageCreatorId('');
     setNextFollowUpRecommendation(null);
     setTrackingStatus('');
+    setReplyFocus('');
     scrollToGeneratorQueue();
   }
 
@@ -828,6 +838,7 @@ function App() {
     setCreatorQuickFilter('all');
     setSelectedCreatorId('');
     setMessage(null);
+    setReplyFocus('');
   }
 
   return (
@@ -1003,6 +1014,17 @@ function App() {
           </div>
           <div className="table-heading-actions">
             <button type="button" onClick={handleAddCreator}>新增达人</button>
+            {rows.length > 0 && (
+              <div className="table-view-controls" aria-label="数据表显示控制">
+                <button type="button" className="secondary compact" onClick={() => setIsCreatorTableCollapsed((collapsed) => !collapsed)}>
+                  {isCreatorTableCollapsed ? '展开表格' : '收起表格'}
+                </button>
+                <label className="compact-mode-toggle">
+                  <input type="checkbox" checked={isCompactTableMode} onChange={(event) => setIsCompactTableMode(event.target.checked)} />
+                  紧凑模式
+                </label>
+              </div>
+            )}
             <p className="hint">{videoProgressHint}</p>
           </div>
         </div>
@@ -1010,12 +1032,15 @@ function App() {
           <p className="empty creator-empty-state">当前还没有达人数据。你可以上传表格，或点击「新增达人」手动添加。</p>
         ) : (
           <>
-            <div className="table-wrap editable-table-wrap">
+            {isCreatorTableCollapsed ? (
+              <p className="table-collapsed-summary">当前共 {rows.length} 位达人，点击展开查看或编辑数据表。</p>
+            ) : (
+            <div className={isCompactTableMode ? 'table-wrap editable-table-wrap compact-table-mode' : 'table-wrap editable-table-wrap'} style={{ maxHeight: 620, overflow: 'auto' }} data-testid="editable-table-scroll-container">
               <table className="editable-table">
-                <thead>
+                <thead className="sticky-table-header">
                   <tr>
                     <th>紧急度</th>
-                    <th>达人账号</th>
+                    <th className="sticky-creator-column">达人账号</th>
                     <th>主页链接</th>
                     <th>联系渠道</th>
                     <th>产品</th>
@@ -1044,7 +1069,7 @@ function App() {
                     return (
                     <tr key={row.id} className={trackingRowClass(row, rowTask, requiredVideos)}>
                       <td><span className={urgencyBadgeClass[urgencyLevel]}>紧急度：{urgencyLevel}</span></td>
-                      <EditableCell label="达人账号" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} autoFocus={selectedCreatorId === row.id && row.username === ''} />
+                      <EditableCell className="sticky-creator-column" label="达人账号" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} autoFocus={selectedCreatorId === row.id && row.username === ''} />
                       <EditableCell label="主页链接" value={row.profileLink} onChange={(value) => handleEditCreator(row.id, 'profileLink', value)} />
                       <EditableCell label="联系渠道" value={row.contactMethod} onChange={(value) => handleEditCreator(row.id, 'contactMethod', value)} />
                       <EditableCell label="产品" value={row.product} onChange={(value) => handleEditCreator(row.id, 'product', value)} />
@@ -1095,6 +1120,7 @@ function App() {
                 </tbody>
               </table>
             </div>
+            )}
             <p className="muted">当前共 {rows.length} 行。导出使用中文表头，并保留旧英文表头导入兼容。</p>
           </>
         )}
@@ -1150,7 +1176,7 @@ function App() {
             <h2>4. 按优先级排序的今日待办</h2>
             <div className="table-wrap">
               <table>
-                <thead>
+                <thead className="sticky-table-header">
                   <tr>
                     <th>优先级</th>
                     <th>达人</th>
@@ -1262,6 +1288,22 @@ function App() {
                   {CHANNELS.map((item) => <option key={item}>{item}</option>)}
                 </select>
               </label>
+              {selectedTask?.lastCreatorResponse?.trim() && (
+                <section className="creator-reply-panel" aria-labelledby="creator-reply-content-title">
+                  <h3 id="creator-reply-content-title">达人回复内容</h3>
+                  <p>{selectedTask.lastCreatorResponse}</p>
+                  {selectedCreatorReplyDate && <p className="muted">最近回复日期：{selectedCreatorReplyDate}</p>}
+                  <label>
+                    我想回复的重点（可选）
+                    <textarea
+                      value={replyFocus}
+                      onChange={(event) => setReplyFocus(event.target.value)}
+                      placeholder="例如：解释 60 秒要求、同意她周五发布、提醒挂车、确认是否可以改成 2 条短视频…"
+                      rows={3}
+                    />
+                  </label>
+                </section>
+              )}
               <button onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
             </div>
 
@@ -1326,6 +1368,7 @@ function App() {
 }
 
 function EditableCell({
+  className,
   label,
   value,
   onChange,
@@ -1335,6 +1378,7 @@ function EditableCell({
   autoFocus = false,
   badge,
 }: {
+  className?: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -1345,7 +1389,7 @@ function EditableCell({
   badge?: ReactNode;
 }) {
   return (
-    <td>
+    <td className={className}>
       {badge && <div className="cell-badge">{badge}</div>}
       {multiline ? (
         <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} rows={2} />

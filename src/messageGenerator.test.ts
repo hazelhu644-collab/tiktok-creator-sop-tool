@@ -557,3 +557,47 @@ describe('generateMessage status-aware communication center scenarios', () => {
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
 });
+
+describe('creator reply follow-up generator', () => {
+  it('classifies replied creators with saved notes as reply messages instead of archived work', () => {
+    const classification = classifyCreatorFollowUp(task({
+      currentStatus: 'Sample Delivered',
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'The 60 seconds requirement is too long for me.',
+      priority: 'None',
+      priorityRank: 99,
+      needsFollowUp: false,
+    }));
+
+    expect(classification.communicationAction).toBe('回复达人消息');
+    expect(classification.urgencyLevel).toBe('高');
+  });
+
+  it('generates an English-only reply that responds to the saved creator reply note', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'The video length is too long. Can it be shorter?',
+      currentStatus: 'Sample Delivered',
+    }), 'TikTok DM');
+
+    expect(message.communicationAction).toBe('回复达人消息');
+    expect(message.scenario).toBe('Creator Reply Follow-up');
+    expect(message.english).toContain('video length requirement');
+    expect(message.english).toContain('60-second direction');
+    expect(message.english).toContain('what format would be workable');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+    expect(message.chineseExplanation).toContain('这个话术用于达人已经回复后继续推进沟通');
+  });
+
+  it('uses optional reply focus while keeping the generated English message free of Chinese characters', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'I can post this Friday.',
+      currentStatus: 'Sample Delivered',
+    }), 'Email', requirements(), '同意她周五发布，提醒挂车');
+
+    expect(message.english).toContain('Friday');
+    expect(message.english).toContain('post link');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+});
