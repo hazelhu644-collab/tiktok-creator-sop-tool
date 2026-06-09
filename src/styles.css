@@ -642,3 +642,85 @@ button.danger {
   white-space: nowrap;
   width: 1px;
 }
+
+.overview-group {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.overview-group-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.overview-group-heading h3 {
+  margin: 0;
+}
+
+.overview-group-heading span {
+  color: #64748b;
+  font-size: .85rem;
+  font-weight: 800;
+}
+
+.action-summary-grid {
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+}
+
+.result-summary-grid {
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+}
+
+.summary-card.clickable {
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  width: 100%;
+}
+
+.summary-card.clickable:hover,
+.summary-card.clickable:focus-visible {
+  border-color: #0f766e;
+  box-shadow: 0 10px 30px rgba(15, 118, 110, .12);
+  transform: translateY(-1px);
+}
+
+.summary-card.active {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
+}
+
+.summary-card-blue { background: #eff6ff; border-color: #bfdbfe; }
+.summary-card-cyan { background: #ecfeff; border-color: #a5f3fc; }
+.summary-card-gold { background: #fffbeb; border-color: #fde68a; }
+.summary-card-orange { background: #fff7ed; border-color: #fed7aa; }
+.summary-card-purple { background: #faf5ff; border-color: #e9d5ff; }
+.summary-card-green { background: #f0fdf4; border-color: #bbf7d0; }
+.summary-card-red { background: #fef2f2; border-color: #fecaca; }
+.summary-card-red-gray { background: #fff7f7; border-color: #e5e7eb; }
+.summary-card-gray { background: #f8fafc; border-color: #cbd5e1; }
+
+.active-filter-banner {
+  align-items: center;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 14px;
+  color: #0f766e;
+  display: flex;
+  font-weight: 900;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+@media (max-width: 900px) {
+  .action-summary-grid,
+  .result-summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .overview-group-heading,
+  .active-filter-banner { align-items: flex-start; display: grid; }
+}

@@ -584,6 +584,112 @@ describe('creator follow-up queue selection', () => {
     expect(optionTexts().join('\n')).toContain('alpha_creator');
   });
 
+
+  it('filters the follow-up queue when overview cards are clicked and jumps to the queue', async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    seedCreators([
+      creatorRow({ id: 'urgent', username: 'urgent_creator', currentStatus: 'Delivered / Waiting for Video', sampleDeliveredDate: '2026-06-02', sampleShippingStatus: 'Delivered', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'high', username: 'high_partial_creator', currentStatus: 'Posted Video / Waiting for Next Video', sampleDeliveredDate: '2026-06-08', sampleShippingStatus: 'Delivered', videoProgress: '1 of 2' }),
+      creatorRow({ id: 'logistics', username: 'logistics_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'delivered', username: 'delivered_zero_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-08', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'sent', username: 'sent_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', trackingStatus: 'Followed Up' }),
+      creatorRow({ id: 'replied', username: 'replied_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', trackingStatus: 'Replied' }),
+      creatorRow({ id: 'completed', username: 'completed_creator', currentStatus: 'Completed', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '2 of 2', trackingStatus: 'Completed' }),
+      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', sampleDeliveredDate: '', sampleShippingStatus: '', trackingStatus: 'Failed' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '筛选极高' }));
+    expect(screen.getByText('当前筛选：极高')).toBeInTheDocument();
+    expect(optionTexts().join('\n')).toContain('urgent_creator');
+
+    await user.click(screen.getByRole('button', { name: '筛选高' }));
+    expect(screen.getByText('当前筛选：高')).toBeInTheDocument();
+    expect(optionTexts().join('\n')).toContain('high_partial_creator');
+    expect(screen.getByRole('combobox', { name: '选择达人' }).querySelector('option:checked')?.textContent).toMatch(/高/);
+    expect(scrollIntoView).toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '筛选物流待确认' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('logistics_creator')]);
+
+    await user.click(screen.getByRole('button', { name: '筛选样品到货待拍' }));
+    expect(optionTexts().join('\n')).toContain('delivered_zero_creator');
+
+    await user.click(screen.getByRole('button', { name: '筛选剩余视频待履约' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('high_partial_creator')]);
+
+    await user.click(screen.getByRole('button', { name: '筛选已发送待回复' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('sent_creator')]);
+
+    await user.click(screen.getByRole('button', { name: '筛选达人已回复' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('replied_creator')]);
+
+    await user.click(screen.getByRole('button', { name: '筛选已完成' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('completed_creator')]);
+
+    await user.click(screen.getByRole('button', { name: '筛选已失败' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('failed_creator')]);
+  });
+
+  it('shows the overview empty state and clears overview filters', async () => {
+    const user = userEvent.setup();
+    Element.prototype.scrollIntoView = vi.fn();
+    seedCreators([
+      creatorRow({ id: 'active', username: 'active_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '0 of 2' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '筛选已失败' }));
+    expect(screen.getByText('当前筛选：已失败')).toBeInTheDocument();
+    expect(screen.getByText('当前没有匹配的达人。')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '清除筛选' }));
+    expect(screen.queryByText('当前筛选：已失败')).not.toBeInTheDocument();
+    expect(optionTexts().join('\n')).toContain('active_creator');
+  });
+
+  it('updates overview result counts immediately after tracking actions', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'prompt').mockReturnValue('Creator replied');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    seedCreators([
+      creatorRow({ id: 'trackable', username: 'trackable_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-08', videoProgress: '0 of 2' }),
+    ]);
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    expect(screen.getByRole('button', { name: '筛选已发送待回复' })).toHaveTextContent('0');
+    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '筛选已发送待回复' })).toHaveTextContent('1'));
+
+    await user.click(screen.getByRole('button', { name: '标记达人已回复' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '筛选达人已回复' })).toHaveTextContent('1'));
+
+    await user.click(screen.getByRole('button', { name: '标记合作完成' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '筛选已完成' })).toHaveTextContent('1'));
+  });
+
+  it('updates the failed overview result count after marking a creator failed', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'prompt').mockReturnValue('Creator missed deadline');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    seedCreators([
+      creatorRow({ id: 'fail-trackable', username: 'fail_trackable_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-08', videoProgress: '0 of 2' }),
+    ]);
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    expect(screen.getByRole('button', { name: '筛选已失败' })).toHaveTextContent('0');
+    await user.click(screen.getByRole('button', { name: '标记合作失败' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '筛选已失败' })).toHaveTextContent('1'));
+  });
+
   it('shows urgency, communication action, and reason above English-only generated messages', async () => {
     const user = userEvent.setup();
     seedCreators([

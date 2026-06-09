@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   clearSavedCreatorRows,
   createBlankCreatorRow,
@@ -220,6 +220,30 @@ const creatorQuickFilters = [
 ] as const;
 
 type CreatorQuickFilterKey = typeof creatorQuickFilters[number]['key'];
+type OverviewFilterKey =
+  | 'today'
+  | '极高'
+  | '高'
+  | '中'
+  | '低'
+  | '物流待确认'
+  | '样品运输中'
+  | '样品到货待拍'
+  | '剩余视频待履约'
+  | '视频修改'
+  | '合作失败风险'
+  | '已发送待回复'
+  | '达人已回复'
+  | '已完成'
+  | '已失败'
+  | '归档';
+
+type OverviewCardConfig = {
+  key: OverviewFilterKey;
+  label: string;
+  value: number;
+  tone: string;
+};
 
 const urgencySortRank: Record<UrgencyLevel, number> = {
   极高: 1,
@@ -278,8 +302,88 @@ function matchesQuickFilter(task: Task, quickFilter: CreatorQuickFilterKey, requ
   return classifyCreatorFollowUp(task, requiredVideos).urgencyLevel === quickFilter;
 }
 
-function creatorGeneratorEmptyState(): string {
-  return '没有匹配的达人，请调整搜索词或切换筛选。';
+function normalizedTrackingLabel(task: Task | CreatorRow): string {
+  return trackingStatusLabel(task.trackingStatus).trim();
+}
+
+function isCompletedCreator(task: Task | CreatorRow): boolean {
+  const currentStatus = normalizeStatusToken(task.currentStatus);
+  return currentStatus.includes('completed')
+    || currentStatus.includes('已完成')
+    || normalizedTrackingLabel(task) === '已完成';
+}
+
+function isFailedCreator(task: Task | CreatorRow): boolean {
+  const currentStatus = normalizeStatusToken(task.currentStatus);
+  return currentStatus.includes('failed')
+    || currentStatus.includes('失败')
+    || normalizedTrackingLabel(task) === '已失败';
+}
+
+function isArchivedCreator(task: Task, requiredVideos: number): boolean {
+  return isCompletedCreator(task)
+    || isFailedCreator(task)
+    || classifyCreatorFollowUp(task, requiredVideos).urgencyLevel === '归档';
+}
+
+function matchesOverviewFilter(task: Task, overviewFilter: OverviewFilterKey | '', requiredVideos: number): boolean {
+  if (!overviewFilter) return true;
+
+  const classification = classifyCreatorFollowUp(task, requiredVideos);
+  const progress = normalizeVideoProgress(task.videoProgress, requiredVideos);
+  const currentStatus = normalizeStatusToken(task.currentStatus);
+  const sampleShippingStatus = normalizeStatusToken(task.sampleShippingStatus);
+  const trackingLabel = normalizedTrackingLabel(task);
+
+  switch (overviewFilter) {
+    case 'today':
+      return task.needsFollowUp && !isCompletedCreator(task) && !isFailedCreator(task);
+    case '极高':
+    case '高':
+    case '中':
+    case '低':
+      return classification.urgencyLevel === overviewFilter;
+    case '物流待确认':
+      return classification.communicationAction === '物流异常确认'
+        || classification.communicationAction === '样品运输中建联';
+    case '样品运输中':
+      return sampleShippingStatus === 'shipped'
+        || sampleShippingStatus === 'in transit'
+        || currentStatus.includes('sample shipped');
+    case '样品到货待拍':
+      return classification.communicationAction === '样品到货催拍'
+        && typeof progress.postedCount === 'number'
+        && progress.postedCount === 0;
+    case '剩余视频待履约':
+      return classification.communicationAction === '剩余视频履约';
+    case '视频修改':
+      return classification.communicationAction === '视频修改'
+        || currentStatus.includes('needs revision');
+    case '合作失败风险':
+      return classification.communicationAction === '最后确认'
+        || classification.highRisk
+        || task.failedWarnings.length > 0;
+    case '已发送待回复':
+      return trackingLabel === '已发送待回复';
+    case '达人已回复':
+      return trackingLabel === '达人已回复';
+    case '已完成':
+      return isCompletedCreator(task);
+    case '已失败':
+      return isFailedCreator(task);
+    case '归档':
+      return isArchivedCreator(task, requiredVideos);
+    default:
+      return true;
+  }
+}
+
+function countOverviewMatches(tasks: Task[], overviewFilter: OverviewFilterKey, requiredVideos: number): number {
+  return tasks.filter((task) => matchesOverviewFilter(task, overviewFilter, requiredVideos)).length;
+}
+
+function creatorGeneratorEmptyState(hasOverviewFilter: boolean): string {
+  return hasOverviewFilter ? '当前没有匹配的达人。' : '没有匹配的达人，请调整搜索词或切换筛选。';
 }
 
 function creatorOptionLabel(task: Task, requiredVideos: number): string {
@@ -349,6 +453,7 @@ function App() {
   const [selectedCreatorId, setSelectedCreatorId] = useState('');
   const [creatorSearchTerm, setCreatorSearchTerm] = useState('');
   const [creatorQuickFilter, setCreatorQuickFilter] = useState<CreatorQuickFilterKey>('all');
+  const [activeOverviewFilter, setActiveOverviewFilter] = useState<OverviewFilterKey | ''>('');
   const [channel, setChannel] = useState<Channel>('TikTok DM');
   const [message, setMessage] = useState<GeneratedMessage | null>(null);
   const [filmingRequirements, setFilmingRequirements] = useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
@@ -364,6 +469,7 @@ function App() {
   const [trackingStatus, setTrackingStatus] = useState('');
   const [generatedMessageCreatorId, setGeneratedMessageCreatorId] = useState('');
   const [nextFollowUpRecommendation, setNextFollowUpRecommendation] = useState<{ date: string; action: string } | null>(null);
+  const generatorSectionRef = useRef<HTMLElement | null>(null);
 
   const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
   const videoProgressHint = useMemo(() => buildVideoProgressHint(requiredVideos), [requiredVideos]);
@@ -374,11 +480,30 @@ function App() {
     return [...tasks]
       .sort((a, b) => compareCreatorQueueOrder(a, b, requiredVideos))
       .filter((task) => matchesQuickFilter(task, creatorQuickFilter, requiredVideos))
+      .filter((task) => matchesOverviewFilter(task, activeOverviewFilter, requiredVideos))
       .filter((task) => !normalizedSearch || normalizedTaskSearchText(task, requiredVideos).includes(normalizedSearch));
-  }, [tasks, creatorSearchTerm, creatorQuickFilter, requiredVideos]);
+  }, [tasks, creatorSearchTerm, creatorQuickFilter, activeOverviewFilter, requiredVideos]);
   const summary = useMemo(() => buildSummary(tasks), [tasks]);
   const highestTasks = tasks.filter((task) => task.priority === 'Highest');
   const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
+  const todayActionCards = useMemo<OverviewCardConfig[]>(() => ([
+    { key: 'today', label: '今日需跟进', value: countOverviewMatches(tasks, 'today', requiredVideos), tone: 'blue' },
+    { key: '极高', label: '极高', value: countOverviewMatches(tasks, '极高', requiredVideos), tone: 'red' },
+    { key: '高', label: '高', value: countOverviewMatches(tasks, '高', requiredVideos), tone: 'orange' },
+    { key: '物流待确认', label: '物流待确认', value: countOverviewMatches(tasks, '物流待确认', requiredVideos), tone: 'cyan' },
+    { key: '样品到货待拍', label: '样品到货待拍', value: countOverviewMatches(tasks, '样品到货待拍', requiredVideos), tone: 'gold' },
+    { key: '剩余视频待履约', label: '剩余视频待履约', value: countOverviewMatches(tasks, '剩余视频待履约', requiredVideos), tone: 'orange' },
+    { key: '视频修改', label: '视频修改', value: countOverviewMatches(tasks, '视频修改', requiredVideos), tone: 'purple' },
+    { key: '合作失败风险', label: '合作失败风险', value: countOverviewMatches(tasks, '合作失败风险', requiredVideos), tone: 'red-gray' },
+  ]), [tasks, requiredVideos]);
+  const resultCards = useMemo<OverviewCardConfig[]>(() => ([
+    { key: '已发送待回复', label: '已发送待回复', value: countOverviewMatches(tasks, '已发送待回复', requiredVideos), tone: 'blue' },
+    { key: '达人已回复', label: '达人已回复', value: countOverviewMatches(tasks, '达人已回复', requiredVideos), tone: 'purple' },
+    { key: '已完成', label: '已完成', value: countOverviewMatches(tasks, '已完成', requiredVideos), tone: 'green' },
+    { key: '已失败', label: '已失败', value: countOverviewMatches(tasks, '已失败', requiredVideos), tone: 'red' },
+    { key: '归档', label: '归档', value: countOverviewMatches(tasks, '归档', requiredVideos), tone: 'gray' },
+  ]), [tasks, requiredVideos]);
+  const activeOverviewFilterLabel = activeOverviewFilter === 'today' ? '今日需跟进' : activeOverviewFilter;
   const selectedTask = generatorTasks.find((task) => task.id === selectedCreatorId) ?? generatorTasks[0];
   const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
   const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
@@ -676,6 +801,35 @@ function App() {
     downloadCreatorRowsCsv(rows);
   }
 
+  function scrollToGeneratorQueue() {
+    window.setTimeout(() => {
+      generatorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }
+
+  function handleOverviewCardClick(filterKey: OverviewFilterKey) {
+    const matchingTasks = [...tasks]
+      .sort((a, b) => compareCreatorQueueOrder(a, b, requiredVideos))
+      .filter((task) => matchesOverviewFilter(task, filterKey, requiredVideos));
+
+    setActiveOverviewFilter(filterKey);
+    setCreatorSearchTerm('');
+    setCreatorQuickFilter(['极高', '高', '中', '低'].includes(filterKey) ? filterKey as CreatorQuickFilterKey : 'all');
+    setSelectedCreatorId(matchingTasks[0]?.id ?? '');
+    setMessage(null);
+    setGeneratedMessageCreatorId('');
+    setNextFollowUpRecommendation(null);
+    setTrackingStatus('');
+    scrollToGeneratorQueue();
+  }
+
+  function handleClearOverviewFilter() {
+    setActiveOverviewFilter('');
+    setCreatorQuickFilter('all');
+    setSelectedCreatorId('');
+    setMessage(null);
+  }
+
   return (
     <main className="shell">
       <header className="hero">
@@ -951,14 +1105,44 @@ function App() {
 
           <section className="panel">
             <h2>3. 今日跟进概览</h2>
-            <div className="summary-grid">
-              <SummaryCard label="达人总数" value={summary.totalCreators} />
-              <SummaryCard label="今日需跟进" value={summary.needsFollowUp} />
-              <SummaryCard label="最高优先级" value={summary.highest} />
-              <SummaryCard label="高优先级" value={summary.high} />
-              <SummaryCard label="中优先级" value={summary.medium} />
-              <SummaryCard label="低优先级" value={summary.low} />
-              <SummaryCard label="失败风险提醒" value={summary.failedWarnings} warning />
+            <p className="muted">点击卡片可筛选并跳转到「达人跟进队列」。</p>
+            <div className="overview-group">
+              <div className="overview-group-heading">
+                <h3>今日行动</h3>
+                <span><span>达人总数</span>：{summary.totalCreators}</span>
+              </div>
+              <div className="summary-grid action-summary-grid">
+                {todayActionCards.map((card) => (
+                  <SummaryCard
+                    key={card.key}
+                    label={card.label}
+                    splitLabel={card.label === '已发送待回复' || card.label === '达人已回复'}
+                    value={card.value}
+                    tone={card.tone}
+                    active={activeOverviewFilter === card.key}
+                    onClick={() => handleOverviewCardClick(card.key)}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="overview-group">
+              <div className="overview-group-heading">
+                <h3>跟进结果</h3>
+                <span>发送、回复、完成、失败会实时更新</span>
+              </div>
+              <div className="summary-grid result-summary-grid">
+                {resultCards.map((card) => (
+                  <SummaryCard
+                    key={card.key}
+                    label={card.label}
+                    splitLabel={card.label === '已发送待回复' || card.label === '达人已回复'}
+                    value={card.value}
+                    tone={card.tone}
+                    active={activeOverviewFilter === card.key}
+                    onClick={() => handleOverviewCardClick(card.key)}
+                  />
+                ))}
+              </div>
             </div>
           </section>
 
@@ -1030,7 +1214,7 @@ function App() {
             </div>
           </section>
 
-          <section className="panel generator">
+          <section className="panel generator" ref={generatorSectionRef} id="creator-follow-up-queue">
             <h2>7. 达人跟进队列</h2>
             <p>按紧急程度排序达人，系统会根据当前合作阶段生成对应话术。</p>
             <div className="generator-controls">
@@ -1050,12 +1234,18 @@ function App() {
                       key={filter.key}
                       type="button"
                       className={creatorQuickFilter === filter.key ? 'filter-chip active' : 'filter-chip'}
-                      onClick={() => setCreatorQuickFilter(filter.key)}
+                      onClick={() => { setCreatorQuickFilter(filter.key); setActiveOverviewFilter(''); }}
                     >
                       {filter.label}
                     </button>
                   ))}
                 </div>
+                {activeOverviewFilter && (
+                  <div className="active-filter-banner" role="status">
+                    <span>当前筛选：{activeOverviewFilterLabel}</span>
+                    <button type="button" className="secondary compact" onClick={handleClearOverviewFilter}>清除筛选</button>
+                  </div>
+                )}
                 <label>
                   选择达人
                   <select value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>
@@ -1064,7 +1254,7 @@ function App() {
                     ))}
                   </select>
                 </label>
-                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState()}</p>}
+                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState(Boolean(activeOverviewFilter))}</p>}
               </div>
               <label>
                 选择联系渠道
@@ -1167,10 +1357,47 @@ function EditableCell({
   );
 }
 
-function SummaryCard({ label, value, warning = false }: { label: string; value: number; warning?: boolean }) {
+function SummaryCard({
+  label,
+  value,
+  warning = false,
+  tone,
+  active = false,
+  onClick,
+  splitLabel = false,
+}: {
+  label: string;
+  value: number;
+  warning?: boolean;
+  tone?: string;
+  active?: boolean;
+  onClick?: () => void;
+  splitLabel?: boolean;
+}) {
+  const className = [
+    'summary-card',
+    warning ? 'warning-count' : '',
+    tone ? `summary-card-${tone}` : '',
+    active ? 'active' : '',
+    onClick ? 'clickable' : '',
+  ].filter(Boolean).join(' ');
+
+  const labelContent = splitLabel
+    ? <span aria-label={label}><span aria-hidden="true">{label.slice(0, 1)}</span><span aria-hidden="true">{label.slice(1)}</span></span>
+    : <span>{label}</span>;
+
+  if (onClick) {
+    return (
+      <button type="button" className={className} onClick={onClick} aria-label={`筛选${label}`}>
+        {labelContent}
+        <strong>{value}</strong>
+      </button>
+    );
+  }
+
   return (
-    <div className={warning ? 'summary-card warning-count' : 'summary-card'}>
-      <span>{label}</span>
+    <div className={className}>
+      {labelContent}
       <strong>{value}</strong>
     </div>
   );
