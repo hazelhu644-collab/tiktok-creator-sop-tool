@@ -379,6 +379,66 @@ describe('post-message tracking workflow', () => {
   });
 });
 
+
+describe('editable creator table v1.5 organization and visibility', () => {
+  function seedCreators(rows: CreatorRow[]) {
+    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
+  }
+
+  it('uses Chinese headers, removes duplicate last-message-sent column, and shows no-history text', () => {
+    seedCreators([creatorRow({ followUpHistory: [] })]);
+
+    render(<App />);
+
+    const editableTable = screen.getByRole('columnheader', { name: '跟进记录' }).closest('table');
+    expect(editableTable).not.toBeNull();
+    const editableTableQueries = within(editableTable as HTMLElement);
+
+    ['达人账号', '主页链接', '联系渠道', '产品', '合作状态', '物流状态', '样品到货日期', '视频进度', '首条视频发布日期', '最近联系日期', '跟进次数', '跟进状态', '最近沟通动作', '最近沟通渠道', '下次跟进日期', '达人回复/下一步备注', '跟进记录', '备注'].forEach((header) => {
+      expect(editableTableQueries.getByRole('columnheader', { name: header })).toBeInTheDocument();
+    });
+    expect(editableTableQueries.queryByRole('columnheader', { name: 'Last message sent at' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('暂无记录').length).toBeGreaterThan(0);
+  });
+
+  it('shows follow-up history counts and compact record details in the table', () => {
+    seedCreators([
+      creatorRow({
+        followUpHistory: [
+          { date: '2026-06-01', action: 'Message Sent', channel: 'TikTok DM', scenario: '样品到货后催拍', message: 'Hi @fluffy_creator, checking in.' },
+          { date: '2026-06-02', action: 'Creator Replied', note: 'Will post tomorrow' },
+        ],
+      }),
+    ]);
+
+    render(<App />);
+
+    expect(screen.getByText('2 条记录')).toBeInTheDocument();
+    expect(screen.getByText(/已发送/)).toBeInTheDocument();
+    expect(screen.getByText(/达人已回复/)).toBeInTheDocument();
+    expect(screen.getByText('Will post tomorrow')).toBeInTheDocument();
+  });
+
+  it('renders urgency, cooperation status, and tracking status badges for active and archived rows', () => {
+    seedCreators([
+      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleDeliveredDate: '2026-06-07', trackingStatus: 'Followed Up' }),
+      creatorRow({ id: 'completed', username: 'done_creator', currentStatus: 'Completed', trackingStatus: 'Completed', sampleDeliveredDate: '', videoProgress: '2 of 2' }),
+      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', trackingStatus: 'Failed', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'replied', username: 'reply_creator', currentStatus: 'To Contact', trackingStatus: 'Replied', sampleDeliveredDate: '' }),
+    ]);
+
+    render(<App />);
+
+    expect(screen.getAllByText(/紧急度：高|紧急度：极高/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('样品已到待拍').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('待建联').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已发送待回复').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('达人已回复').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已失败').length).toBeGreaterThan(0);
+  });
+});
+
 describe('creator follow-up queue selection', () => {
   function seedCreators(rows: CreatorRow[]) {
     window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
@@ -544,7 +604,7 @@ describe('creator follow-up queue selection', () => {
     expect(screen.getByRole('button', { name: '复制话术' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '标记为已发送' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '标记达人已回复' })).toBeInTheDocument();
-    expect(screen.getByText('跟进记录')).toBeInTheDocument();
+    expect(screen.getAllByText('跟进记录').length).toBeGreaterThan(0);
   });
 
   it('shows a helpful generic empty state when filters or search have no matches', async () => {

@@ -4,24 +4,24 @@ import { normalizeText, normalizeVideoProgress } from './sopRules';
 export const CREATOR_ROWS_STORAGE_KEY = 'tiktok-creator-sop-tool.creatorRows.v1';
 
 export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof CreatorRow }> = [
-  { header: 'Creator username', key: 'username' },
-  { header: 'Creator profile link', key: 'profileLink' },
-  { header: 'Contact method', key: 'contactMethod' },
-  { header: 'Product', key: 'product' },
-  { header: 'Current status', key: 'currentStatus' },
-  { header: 'Sample shipping status', key: 'sampleShippingStatus' },
-  { header: 'Sample delivered date', key: 'sampleDeliveredDate' },
-  { header: 'Video progress', key: 'videoProgress' },
-  { header: 'First video posted date', key: 'firstVideoPostedDate' },
-  { header: 'Last contact date', key: 'lastContactDate' },
-  { header: 'Last follow-up count', key: 'lastFollowUpCount' },
-  { header: 'Notes', key: 'notes' },
-  { header: 'Tracking status', key: 'trackingStatus' },
-  { header: 'Last message scenario', key: 'lastMessageScenario' },
-  { header: 'Last message channel', key: 'lastMessageChannel' },
-  { header: 'Last message sent at', key: 'lastMessageSentAt' },
-  { header: 'Next follow-up date', key: 'nextFollowUpDate' },
-  { header: 'Last creator response', key: 'lastCreatorResponse' },
+  { header: '达人账号', key: 'username' },
+  { header: '主页链接', key: 'profileLink' },
+  { header: '联系渠道', key: 'contactMethod' },
+  { header: '产品', key: 'product' },
+  { header: '合作状态', key: 'currentStatus' },
+  { header: '物流状态', key: 'sampleShippingStatus' },
+  { header: '样品到货日期', key: 'sampleDeliveredDate' },
+  { header: '视频进度', key: 'videoProgress' },
+  { header: '首条视频发布日期', key: 'firstVideoPostedDate' },
+  { header: '最近联系日期', key: 'lastContactDate' },
+  { header: '跟进次数', key: 'lastFollowUpCount' },
+  { header: '跟进状态', key: 'trackingStatus' },
+  { header: '最近沟通动作', key: 'lastMessageScenario' },
+  { header: '最近沟通渠道', key: 'lastMessageChannel' },
+  { header: '下次跟进日期', key: 'nextFollowUpDate' },
+  { header: '达人回复/下一步备注', key: 'lastCreatorResponse' },
+  { header: '跟进记录', key: 'followUpHistory' },
+  { header: '备注', key: 'notes' },
 ];
 
 export type EditableCreatorField =
@@ -148,6 +148,15 @@ export function updateCreatorField(row: CreatorRow, field: EditableCreatorField,
   return { ...row, [field]: rawValue };
 }
 
+function exportValue(row: CreatorRow, key: keyof CreatorRow): unknown {
+  if (key === 'followUpHistory') {
+    const count = row.followUpHistory?.length ?? 0;
+    return count === 0 ? '暂无记录' : `${count} 条记录`;
+  }
+
+  return row[key];
+}
+
 function escapeCsvValue(value: unknown): string {
   const text = String(value ?? '');
   if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
@@ -157,10 +166,10 @@ function escapeCsvValue(value: unknown): string {
 export function creatorRowsToCsv(rows: CreatorRow[]): string {
   const header = CREATOR_TEMPLATE_COLUMNS.map((column) => escapeCsvValue(column.header)).join(',');
   const body = rows.map((row) => (
-    CREATOR_TEMPLATE_COLUMNS.map((column) => escapeCsvValue(row[column.key])).join(',')
+    CREATOR_TEMPLATE_COLUMNS.map((column) => escapeCsvValue(exportValue(row, column.key))).join(',')
   ));
 
-  return [header, ...body].join('\n');
+  return `\ufeff${[header, ...body].join('\n')}`;
 }
 
 export function downloadCreatorRowsCsv(rows: CreatorRow[]): void {
