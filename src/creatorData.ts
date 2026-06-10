@@ -21,6 +21,8 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: '下次跟进日期', key: 'nextFollowUpDate' },
   { header: '达人回复/下一步备注', key: 'lastCreatorResponse' },
   { header: '跟进记录', key: 'followUpHistory' },
+  { header: '产品项目备注', key: 'notes' },
+  { header: '当前拍摄要求', key: 'notes' },
   { header: '备注', key: 'notes' },
 ];
 

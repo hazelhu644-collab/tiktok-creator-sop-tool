@@ -12,7 +12,8 @@ import {
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
 import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
-import type { Channel, CreatorRow, GeneratedMessage, Task } from './types';
+import { campaignToFilmingRequirements, createCampaignFromName, loadCampaigns, mergeDetectedCampaigns, saveCampaigns } from './campaignData';
+import type { Campaign, Channel, CreatorRow, GeneratedMessage, Task } from './types';
 import './styles.css';
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = 'tiktokCreatorSop.filmingRequirements';
@@ -98,6 +99,8 @@ type TemplateMessage = {
   english: string;
   chinese: string;
 };
+
+const navIcons: Record<ModuleKey, string> = { dashboard: '⌁', creators: '◌', templates: '✦', samples: '◇', followup: '↗', review: '✓', ads: '◆', settings: '⚙' };
 
 const navItems: Array<{ key: ModuleKey; label: string; helper: string }> = [
   { key: 'dashboard', label: '数据看板', helper: '今日跟进总览' },
@@ -335,6 +338,8 @@ function App() {
   const [trackingStatus, setTrackingStatus] = useState('');
   const [templateForm, setTemplateForm] = useState<TemplateForm>(() => emptyTemplateForm);
   const [filmingRequirements, setFilmingRequirements] = useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => loadCampaigns());
+  const [selectedCampaign, setSelectedCampaign] = useState('ALL');
   const [isEditingFilmingRequirements, setIsEditingFilmingRequirements] = useState(false);
   const [filmingProductNameDraft, setFilmingProductNameDraft] = useState(() => defaultCreatorFilmingRequirements.productName);
   const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => listToText(defaultCreatorFilmingRequirements.requirements));
@@ -345,13 +350,34 @@ function App() {
   const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState('');
   const [promptCopyStatus, setPromptCopyStatus] = useState('');
 
-  const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
-  const tasks = useMemo(() => analyzeCreators(rows, undefined, requiredVideos), [rows, requiredVideos]);
+  const mergedCampaigns = useMemo(() => mergeDetectedCampaigns(campaigns, rows, filmingRequirements), [campaigns, rows, filmingRequirements]);
+  const activeCampaign = selectedCampaign === 'ALL' ? undefined : mergedCampaigns.find((campaign) => campaign.productName === selectedCampaign);
+  const activeFilmingRequirements = useMemo(() => campaignToFilmingRequirements(activeCampaign, filmingRequirements), [activeCampaign, filmingRequirements]);
+  const requiredVideos = useMemo(() => parseRequiredVideos(activeFilmingRequirements), [activeFilmingRequirements]);
+  const visibleRows = useMemo(() => selectedCampaign === 'ALL' ? rows : rows.filter((row) => row.product.trim() === selectedCampaign), [rows, selectedCampaign]);
+  const tasks = useMemo(() => analyzeCreators(visibleRows, undefined, requiredVideos), [visibleRows, requiredVideos]);
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const selectedTask = tasks.find((task) => task.id === selectedCreatorId) ?? tasks[0];
   const templateMessages = useMemo(() => buildTemplateMessages(templateForm), [templateForm]);
 
   useEffect(() => saveCreatorRows(rows), [rows]);
+  useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
+  useEffect(() => {
+    if (selectedCampaign !== 'ALL' && !mergedCampaigns.some((campaign) => campaign.productName === selectedCampaign)) setSelectedCampaign('ALL');
+  }, [mergedCampaigns, selectedCampaign]);
+  useEffect(() => {
+    const target = activeCampaign ?? mergedCampaigns[0];
+    if (!target) return;
+    setTemplateForm((form) => ({
+      ...form,
+      productName: target.productName,
+      sellingPoint: target.sellingPoints,
+      requirement: [...target.requirements, ...target.keyContentPoints].filter(Boolean).join('; '),
+      length: target.videoLength || form.length,
+      videos: target.videoCount || String(parseRequiredVideos(campaignToFilmingRequirements(target, filmingRequirements))),
+      tagRequirement: target.tagRequirement || form.tagRequirement,
+    }));
+  }, [activeCampaign, mergedCampaigns, filmingRequirements]);
 
   useEffect(() => {
     if (!toast) return;
@@ -359,7 +385,7 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const enrichedRows = useMemo(() => rows.map((row) => ({
+  const enrichedRows = useMemo(() => visibleRows.map((row) => ({
     row,
     task: tasksById.get(row.id),
     status: inferStatus(row, requiredVideos),
@@ -367,7 +393,7 @@ function App() {
     followers: followerCount(row),
     avgViews: avgViews(row),
     gmv: gmvRange(row),
-  })), [rows, tasksById, requiredVideos]);
+  })), [visibleRows, tasksById, requiredVideos]);
 
   const filteredRows = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -429,7 +455,10 @@ function App() {
   }
 
   function handleAddCreator() {
-    const newRow = createBlankCreatorRow(filmingRequirements.productName, requiredVideos);
+    const choice = window.prompt('所属产品（输入现有产品名称，或输入新产品项目名称）：', selectedCampaign === 'ALL' ? (mergedCampaigns[0]?.productName ?? filmingRequirements.productName) : selectedCampaign);
+    const productName = (choice?.trim() || (selectedCampaign === 'ALL' ? mergedCampaigns[0]?.productName : selectedCampaign) || filmingRequirements.productName);
+    if (!mergedCampaigns.some((campaign) => campaign.productName === productName)) setCampaigns((current) => [...current, createCampaignFromName(productName, filmingRequirements)]);
+    const newRow = createBlankCreatorRow(productName, requiredVideos);
     setRows((currentRows) => [newRow, ...currentRows]);
     setSelectedCreatorId(newRow.id);
     setActiveModule('creators');
@@ -464,10 +493,11 @@ function App() {
   }
 
   function buildOutreachForRow(row: CreatorRow) {
-    const product = outgoingEnglishValue(row.product || filmingRequirements.productName, '[Product Name]');
+    const campaignRequirements = campaignToFilmingRequirements(mergedCampaigns.find((campaign) => campaign.productName === row.product), filmingRequirements);
+    const product = outgoingEnglishValue(row.product || campaignRequirements.productName, '[Product Name]');
     const creator = outgoingEnglishValue(displayName(row), '[Creator Name]').replace(/^@/, '');
     const greetingName = creator.startsWith('[') ? creator : `@${creator}`;
-    return `Hi ${greetingName}, we love your TikTok pet content and would like to invite you to collaborate on ${product}. Are you open to receiving a sample and creating ${requiredVideos} TikTok Shop video(s)?`;
+    return `Hi ${greetingName}, we love your TikTok pet content and would like to invite you to collaborate on ${product}. Are you open to receiving a sample and creating ${parseRequiredVideos(campaignRequirements)} TikTok Shop video(s)?`;
   }
 
   function handleBulkCopyOutreach() {
@@ -478,7 +508,8 @@ function App() {
 
   function handleGenerateMessage() {
     if (!selectedTask) return;
-    const generated = generateMessage(selectedTask, channel, filmingRequirements);
+    const creatorCampaign = mergedCampaigns.find((campaign) => campaign.productName === selectedTask.product);
+    const generated = generateMessage(selectedTask, channel, campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements));
     setMessage(generated);
     setSelectedCreatorId(selectedTask.id);
   }
@@ -565,7 +596,7 @@ function App() {
   }
 
   function buildChatGptPrompt() {
-    return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。\n\n【产品信息】\n- 产品名称：${filmingRequirements.productName}\n- 产品卖点：${promptHelperForm.sellingPoints || '请补充'}\n- 目标视频数量：${promptHelperForm.videoCount || requiredVideos}\n- 单条视频时长要求：${promptHelperForm.durationRequirement || '40s+'}\n- 目标宠物 / 使用场景：${promptHelperForm.targetPetOrScene || '真实宠物使用场景'}\n- 必须展示的画面：${promptHelperForm.mustShowShots || '开箱、使用过程、CTA'}\n- 不希望达人这样拍：${promptHelperForm.avoidShots || '避免违规表述'}\n- 对标视频链接（可选）：${promptHelperForm.referenceLinks || '无'}\n\n请按以下结构输出，全部使用简体中文：\n1. 产品名称\n2. 达人拍摄要求\n3. 重点拍摄内容`;
+    return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。\n\n【产品信息】\n- 产品名称：${activeFilmingRequirements.productName}\n- 产品卖点：${promptHelperForm.sellingPoints || '请补充'}\n- 目标视频数量：${promptHelperForm.videoCount || requiredVideos}\n- 单条视频时长要求：${promptHelperForm.durationRequirement || '40s+'}\n- 目标宠物 / 使用场景：${promptHelperForm.targetPetOrScene || '真实宠物使用场景'}\n- 必须展示的画面：${promptHelperForm.mustShowShots || '开箱、使用过程、CTA'}\n- 不希望达人这样拍：${promptHelperForm.avoidShots || '避免违规表述'}\n- 对标视频链接（可选）：${promptHelperForm.referenceLinks || '无'}\n\n请按以下结构输出，全部使用简体中文：\n1. 产品名称\n2. 达人拍摄要求\n3. 重点拍摄内容`;
   }
 
   function renderPageHeader(title: string, description: string, action?: ReactNode) {
@@ -578,6 +609,68 @@ function App() {
         </div>
         {action}
       </div>
+    );
+  }
+
+
+  function renderCampaignSelector() {
+    return (
+      <section className="campaign-switcher" aria-label="当前产品项目">
+        <label>当前产品项目
+          <select value={selectedCampaign} onChange={(event) => { setSelectedCampaign(event.target.value); setSelectedIds([]); setMessage(null); }}>
+            <option value="ALL">全部产品</option>
+            {mergedCampaigns.map((campaign) => <option key={campaign.id} value={campaign.productName}>{campaign.productName}</option>)}
+          </select>
+        </label>
+        <div className="campaign-context">
+          <strong>{selectedCampaign === 'ALL' ? '全部产品组合视图' : selectedCampaign}</strong>
+          <span>{selectedCampaign === 'ALL' ? '看板、表格、队列合并显示，所有明细展示产品标签。' : '当前页面按该产品项目过滤，并使用该产品的拍摄要求与参考链接。'}</span>
+        </div>
+      </section>
+    );
+  }
+
+  function campaignStats(campaign: Campaign) {
+    const campaignRows = rows.filter((row) => row.product.trim() === campaign.productName);
+    const campaignRequirements = campaignToFilmingRequirements(campaign, filmingRequirements);
+    const campaignRequiredVideos = parseRequiredVideos(campaignRequirements);
+    const campaignTasks = analyzeCreators(campaignRows, undefined, campaignRequiredVideos);
+    const campaignTaskMap = new Map(campaignTasks.map((task) => [task.id, task]));
+    return {
+      creatorCount: campaignRows.length,
+      todayFollowUp: campaignTasks.filter((task) => task.needsFollowUp).length,
+      highest: campaignTasks.filter((task) => task.priority === 'Highest').length,
+      high: campaignTasks.filter((task) => task.priority === 'High').length,
+      inTransit: campaignRows.filter((row) => inferStatus(row, campaignRequiredVideos) === 'Sample Shipped').length,
+      deliveredPending: campaignRows.filter((row) => ['Delivered', 'Waiting Video'].includes(inferStatus(row, campaignRequiredVideos))).length,
+      remainingVideos: campaignRows.reduce((sum, row) => {
+        const progress = normalizeVideoProgress(row.videoProgress, campaignRequiredVideos);
+        return sum + Math.max(0, (progress.requiredVideos ?? campaignRequiredVideos) - (progress.postedCount ?? 0));
+      }, 0),
+      completed: campaignRows.filter((row) => inferStatus(row, campaignRequiredVideos) === 'Completed' || campaignTaskMap.get(row.id)?.trackingStatus === 'Completed').length,
+      failed: campaignRows.filter((row) => inferStatus(row, campaignRequiredVideos) === 'Lost' || campaignTaskMap.get(row.id)?.trackingStatus === 'Failed').length,
+    };
+  }
+
+  function renderCampaignOverview() {
+    return (
+      <section className="campaign-overview">
+        <div className="section-heading"><div><h2>产品项目概览</h2><p className="muted">按产品 Campaign 分离达人、样品、视频履约和失败风险。</p></div></div>
+        <div className="campaign-card-grid">
+          {mergedCampaigns.map((campaign) => {
+            const stats = campaignStats(campaign);
+            return (
+              <button type="button" key={campaign.id} className="campaign-card" onClick={() => setSelectedCampaign(campaign.productName)}>
+                <span className="product-badge">{campaign.productName}</span>
+                <strong>{stats.creatorCount} 位达人</strong>
+                <div className="campaign-metrics">
+                  <span>今日需跟进 <b>{stats.todayFollowUp}</b></span><span>极高 <b>{stats.highest}</b></span><span>高 <b>{stats.high}</b></span><span>样品运输中 <b>{stats.inTransit}</b></span><span>到货待拍 <b>{stats.deliveredPending}</b></span><span>剩余视频 <b>{stats.remainingVideos}</b></span><span>已完成 <b>{stats.completed}</b></span><span>已失败 <b>{stats.failed}</b></span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
     );
   }
 
@@ -608,6 +701,7 @@ function App() {
     return (
       <>
         {renderPageHeader('数据看板', '每日运营数据概览、优先待办和下一步动作集中在这里。', <button type="button" onClick={() => setActiveModule('creators')}>打开达人数据库</button>)}
+        {renderCampaignOverview()}
         <section className="dashboard-grid">
           {dashboardCards.map((card) => (
             <button type="button" key={card.label} className="metric-card" onClick={() => handleDashboardCardClick(card)}>
@@ -635,6 +729,7 @@ function App() {
                   <article className="todo-card" key={task.id}>
                     <div>
                       <strong>{displayName(task)}</strong>
+                      <span className="product-badge">{task.product || '缺少产品名称'}</span>
                       <span className={statusTone(status)}>{displayStatus(status)}</span>
                     </div>
                     <p><b>触发原因：</b>{task.triggerReason || sampleHint(task, requiredVideos)}</p>
@@ -690,7 +785,7 @@ function App() {
                     <th>GMV 区间</th>
                     <th>达人类型</th>
                     <th>合作状态</th>
-                    <th>产品名称</th>
+                    <th>产品</th>
                     <th>样品物流</th>
                     <th>最近联系日期</th>
                     <th>下次跟进日期</th>
@@ -709,7 +804,7 @@ function App() {
                       <td>{entry.gmv}</td>
                       <td>{entry.creatorType}</td>
                       <td><select aria-label="合作状态" value={entry.status} onChange={(event) => applyStatusToRows([entry.row.id], event.target.value as CreatorStatus)}>{creatorStatuses.map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}</select></td>
-                      <td><input aria-label="产品名称" value={entry.row.product} onChange={(event) => updateRow(entry.row.id, 'product', event.target.value)} /></td>
+                      <td><span className={entry.row.product.trim() ? "product-badge" : "product-warning"}>{entry.row.product.trim() || "缺少产品名称"}</span><input aria-label="产品名称" value={entry.row.product} onChange={(event) => updateRow(entry.row.id, 'product', event.target.value)} /></td>
                       <td><input aria-label="样品物流" value={entry.row.sampleShippingStatus} onChange={(event) => updateRow(entry.row.id, 'sampleShippingStatus', event.target.value)} /></td>
                       <td><input aria-label="最近联系日期" type="date" value={entry.row.lastContactDate} onChange={(event) => updateRow(entry.row.id, 'lastContactDate', event.target.value)} /></td>
                       <td><input aria-label="下次跟进日期" type="date" value={entry.row.nextFollowUpDate ?? ''} onChange={(event) => updateRow(entry.row.id, 'nextFollowUpDate', event.target.value)} /></td>
@@ -757,7 +852,7 @@ function App() {
     return (
       <>
         {renderPageHeader('样品追踪', '围绕物流状态跟踪样品，自动提示卡点动作。')}
-        <section className="panel table-panel"><div className="table-wrap"><table className="ops-table"><thead><tr><th>达人名称</th><th>产品名称</th><th>样品状态</th><th>物流商</th><th>物流单号</th><th>寄出日期</th><th>签收日期</th><th>签收后天数</th><th>下一步跟进动作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product || '—'}</td><td><span className={statusTone(inferStatus(row, requiredVideos))}>{displayStatus(inferStatus(row, requiredVideos))}</span></td><td>{parseNumberFromNotes(row.notes, ['carrier'])}</td><td>{parseNumberFromNotes(row.notes, ['tracking', 'tracking number'])}</td><td>{parseNumberFromNotes(row.notes, ['shipped date'])}</td><td>{row.sampleDeliveredDate || '—'}</td><td>{daysDelivered(row) ?? '—'}</td><td>{sampleHint(row, requiredVideos)}</td></tr>)}</tbody></table></div></section>
+        <section className="panel table-panel"><div className="table-wrap"><table className="ops-table"><thead><tr><th>达人名称</th><th>产品名称</th><th>样品状态</th><th>物流商</th><th>物流单号</th><th>寄出日期</th><th>签收日期</th><th>签收后天数</th><th>下一步跟进动作</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product || '—'}</td><td><span className={statusTone(inferStatus(row, requiredVideos))}>{displayStatus(inferStatus(row, requiredVideos))}</span></td><td>{parseNumberFromNotes(row.notes, ['carrier'])}</td><td>{parseNumberFromNotes(row.notes, ['tracking', 'tracking number'])}</td><td>{parseNumberFromNotes(row.notes, ['shipped date'])}</td><td>{row.sampleDeliveredDate || '—'}</td><td>{daysDelivered(row) ?? '—'}</td><td>{sampleHint(row, requiredVideos)}</td></tr>)}</tbody></table></div></section>
       </>
     );
   }
@@ -768,11 +863,11 @@ function App() {
         {renderPageHeader('达人跟进中心', '按紧急程度和合作阶段筛选达人，生成下一步英文沟通话术。')}
         <section className="panel generator-panel">
           <div className="generator-controls">
-            <label>选择达人<select aria-label="选择达人" value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>{tasks.map((task) => <option key={task.id} value={task.id}>{displayName(task)} · {displayStatus(inferStatus(task, requiredVideos))} · {task.suggestedAction}</option>)}</select></label>
+            <label>选择达人<select aria-label="选择达人" value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>{tasks.map((task) => <option key={task.id} value={task.id}>{task.priority === 'Highest' ? '极高' : task.priority === 'High' ? '高' : task.priority === 'Medium' ? '中' : '低'} · {task.suggestedAction} · {displayName(task)} · {task.product || '缺少产品名称'} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}</option>)}</select></label>
             <label>渠道<select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>{CHANNELS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <button type="button" onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
           </div>
-          {message && <div className="message-output"><h3>场景 / 沟通动作</h3><p>{message.scenario} · {message.communicationAction}</p><h3>英文话术</h3><pre>{message.english}</pre><h3>中文对照 / 中文解释</h3><p>{message.chineseExplanation}</p><h3>发送后追踪</h3><p>发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制英文话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
+          <div className="queue-list">{tasks.map((task) => <button type="button" key={task.id} className="queue-item" onClick={() => setSelectedCreatorId(task.id)}>{task.priority === 'Highest' ? '极高' : task.priority === 'High' ? '高' : task.priority === 'Medium' ? '中' : '低'} · {task.suggestedAction} · {displayName(task)} · {task.product || '缺少产品名称'} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}</button>)}</div>{message && <div className="message-output"><h3>场景 / 沟通动作</h3><p>{message.scenario} · {message.communicationAction}</p><h3>英文话术</h3><pre>{message.english}</pre><h3>中文对照 / 中文解释</h3><p>{message.chineseExplanation}</p><h3>发送后追踪</h3><p>发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制英文话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
         </section>
       </>
     );
@@ -783,7 +878,7 @@ function App() {
     return (
       <>
         {renderPageHeader('内容审核', '逐条验收达人视频，输出可执行的验收状态。')}
-        <section className="panel review-grid">{rows.map((row) => <article className="review-card" key={row.id}><div><h3>{displayName(row)}</h3><span className={statusTone(inferStatus(row, requiredVideos))}>{displayStatus(inferStatus(row, requiredVideos))}</span></div>{checklist.map((item) => <label key={item} className="check-row"><input type="checkbox" />{item}</label>)}<select defaultValue="Approved"><option value="Approved">审核通过</option><option value="Need Revision">需要修改</option><option value="Product Tag Missing">未挂商品卡</option><option value="Not Usable for Ads">不可投流</option><option value="Ready for Ads">可投流</option></select></article>)}</section>
+        <section className="panel review-grid">{visibleRows.map((row) => <article className="review-card" key={row.id}><div><h3>{displayName(row)}</h3><span className={statusTone(inferStatus(row, requiredVideos))}>{displayStatus(inferStatus(row, requiredVideos))}</span></div>{checklist.map((item) => <label key={item} className="check-row"><input type="checkbox" />{item}</label>)}<select defaultValue="Approved"><option value="Approved">审核通过</option><option value="Need Revision">需要修改</option><option value="Product Tag Missing">未挂商品卡</option><option value="Not Usable for Ads">不可投流</option><option value="Ready for Ads">可投流</option></select></article>)}</section>
       </>
     );
   }
@@ -793,21 +888,36 @@ function App() {
     return (
       <>
         {renderPageHeader('投流素材库', '沉淀可投流 UGC 视频，管理 Spark Ads 和素材授权。')}
-        <section className="panel table-panel"><div className="tag-cloud">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div><div className="table-wrap"><table className="ops-table"><thead><tr><th>达人名称</th><th>产品名称</th><th>视频链接</th><th>Hook 角度</th><th>宠物类型</th><th>使用场景</th><th>视频时长</th><th>自然播放量</th><th>互动表现</th><th>转化潜力</th><th>Spark Ads 状态</th><th>素材授权状态</th><th>跟进记录</th></tr></thead><tbody>{rows.filter((row) => ['Ready for Ads', 'Spark Ads Requested', 'Posted'].includes(inferStatus(row, requiredVideos))).map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product}</td><td>{parseNumberFromNotes(row.notes, ['video url', 'url'])}</td><td>{parseNumberFromNotes(row.notes, ['hook'])}</td><td>{parseNumberFromNotes(row.notes, ['pet type'])}</td><td>{parseNumberFromNotes(row.notes, ['scene'])}</td><td>{parseNumberFromNotes(row.notes, ['length'])}</td><td>{parseNumberFromNotes(row.notes, ['views'])}</td><td>{parseNumberFromNotes(row.notes, ['engagement'])}</td><td>{parseNumberFromNotes(row.notes, ['potential'])}</td><td>{inferStatus(row, requiredVideos) === 'Spark Ads Requested' ? '已申请' : '未申请'}</td><td>{parseNumberFromNotes(row.notes, ['rights'])}</td><td>{row.notes || '—'}</td></tr>)}</tbody></table></div></section>
+        <section className="panel table-panel"><div className="tag-cloud">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div><div className="table-wrap"><table className="ops-table"><thead><tr><th>达人名称</th><th>产品名称</th><th>视频链接</th><th>Hook 角度</th><th>宠物类型</th><th>使用场景</th><th>视频时长</th><th>自然播放量</th><th>互动表现</th><th>转化潜力</th><th>Spark Ads 状态</th><th>素材授权状态</th><th>跟进记录</th></tr></thead><tbody>{visibleRows.filter((row) => ['Ready for Ads', 'Spark Ads Requested', 'Posted'].includes(inferStatus(row, requiredVideos))).map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product}</td><td>{parseNumberFromNotes(row.notes, ['video url', 'url'])}</td><td>{parseNumberFromNotes(row.notes, ['hook'])}</td><td>{parseNumberFromNotes(row.notes, ['pet type'])}</td><td>{parseNumberFromNotes(row.notes, ['scene'])}</td><td>{parseNumberFromNotes(row.notes, ['length'])}</td><td>{parseNumberFromNotes(row.notes, ['views'])}</td><td>{parseNumberFromNotes(row.notes, ['engagement'])}</td><td>{parseNumberFromNotes(row.notes, ['potential'])}</td><td>{inferStatus(row, requiredVideos) === 'Spark Ads Requested' ? '已申请' : '未申请'}</td><td>{parseNumberFromNotes(row.notes, ['rights'])}</td><td>{row.notes || '—'}</td></tr>)}</tbody></table></div></section>
       </>
     );
   }
 
   function renderSettings() {
+    const targetCampaign = activeCampaign ?? mergedCampaigns[0];
     return (
       <>
-        {renderPageHeader('设置', '管理数据、SOP 默认拍摄要求和本地持久化配置。')}
-        <section className="panel">
-          <div className="section-heading"><div><h2>拍摄要求</h2><p className="muted">默认折叠说明，减少页面文字密度。</p></div><button type="button" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button></div>
-          {isEditingFilmingRequirements ? <div className="settings-form"><label>产品名称<input value={filmingProductNameDraft} onChange={(event) => setFilmingProductNameDraft(event.target.value)} /></label><label>拍摄要求（每行一条）<textarea value={filmingRequirementsDraft} onChange={(event) => setFilmingRequirementsDraft(event.target.value)} rows={5} /></label><label>内容重点（每行一条）<textarea value={keyContentPointsDraft} onChange={(event) => setKeyContentPointsDraft(event.target.value)} rows={5} /></label><label>对标视频链接（可选，每行一个）<textarea value={referenceLinksDraft} onChange={(event) => setReferenceLinksDraft(event.target.value)} rows={3} /></label><div className="inline-actions"><button type="button" onClick={handleSaveFilmingRequirements}>保存拍摄要求</button><button type="button" className="secondary" onClick={handleRestoreDefaultFilmingRequirements}>恢复默认拍摄要求</button></div></div> : <details className="collapsed-copy"><summary>{filmingRequirements.productName}</summary><ul>{filmingRequirements.requirements.map((item) => <li key={item}>{item}</li>)}</ul><h3>重点拍摄内容</h3><ul>{filmingRequirements.keyContentPoints.map((item) => <li key={item}>{item}</li>)}</ul>{(filmingRequirements.referenceLinks?.length ?? 0) > 0 && <><h3>参考视频链接</h3><ul>{filmingRequirements.referenceLinks?.map((item) => <li key={item}>{item}</li>)}</ul></>}</details>}
+        {renderPageHeader('设置', '管理产品项目、拍摄要求、提示词助手和本地数据。')}
+        <section className="panel sop-card">
+          <div className="section-heading"><div><h2>产品项目设置</h2><p className="muted">每个产品项目独立保存卖点、拍摄要求、参考视频和备注。</p></div><button type="button" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button></div>
+          {targetCampaign && <div className="settings-form campaign-settings">
+            <label>产品名称<input value={targetCampaign.productName} onChange={(event) => setCampaigns((current) => mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, productName: event.target.value } : campaign))} /></label>
+            <label>产品卖点（项目）<textarea value={targetCampaign.sellingPoints} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, sellingPoints: event.target.value } : campaign))} rows={3} /></label>
+            <label>拍摄要求<textarea value={listToText(targetCampaign.requirements)} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, requirements: normalizeListText(event.target.value) } : campaign))} rows={5} /></label>
+            <label>内容重点<textarea value={listToText(targetCampaign.keyContentPoints)} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, keyContentPoints: normalizeListText(event.target.value) } : campaign))} rows={5} /></label>
+            <label>不希望达人这样拍<textarea value={targetCampaign.avoidShots} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, avoidShots: event.target.value } : campaign))} rows={3} /></label>
+            <label>视频数量<input value={targetCampaign.videoCount} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, videoCount: event.target.value } : campaign))} /></label>
+            <label>视频时长<input value={targetCampaign.videoLength} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, videoLength: event.target.value } : campaign))} /></label>
+            <label>挂车 / Tag 要求<input value={targetCampaign.tagRequirement} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, tagRequirement: event.target.value } : campaign))} /></label>
+            <label>TikTok Shop 产品链接<input value={targetCampaign.productLink} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, productLink: event.target.value } : campaign))} /></label>
+            <label>参考视频链接（项目）<textarea value={listToText(targetCampaign.referenceLinks)} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, referenceLinks: normalizeListText(event.target.value) } : campaign))} rows={3} /></label>
+            <label>产品备注<textarea value={targetCampaign.notes} onChange={(event) => setCampaigns(mergedCampaigns.map((campaign) => campaign.id === targetCampaign.id ? { ...campaign, notes: event.target.value } : campaign))} rows={3} /></label>
+            <p className="ai-status">产品项目设置会自动保存到 localStorage。</p>{targetCampaign.referenceLinks.length > 0 && <div className="collapsed-copy"><h3>参考视频链接</h3><ul>{targetCampaign.referenceLinks.map((link) => <li key={link}>{link}</li>)}</ul></div>}
+          </div>}
+          {isEditingFilmingRequirements && <div className="settings-form"><label>默认产品名称<input value={filmingProductNameDraft} onChange={(event) => setFilmingProductNameDraft(event.target.value)} /></label><label>默认拍摄要求（每行一条）<textarea value={filmingRequirementsDraft} onChange={(event) => setFilmingRequirementsDraft(event.target.value)} rows={5} /></label><label>默认内容重点（每行一条）<textarea value={keyContentPointsDraft} onChange={(event) => setKeyContentPointsDraft(event.target.value)} rows={5} /></label><label>对标视频链接（可选，每行一个）<textarea value={referenceLinksDraft} onChange={(event) => setReferenceLinksDraft(event.target.value)} rows={3} /></label><div className="inline-actions"><button type="button" onClick={handleSaveFilmingRequirements}>保存拍摄要求</button><button type="button" className="secondary" onClick={handleRestoreDefaultFilmingRequirements}>恢复默认拍摄要求</button></div></div>}
         </section>
-        <section className="panel"><div className="section-heading"><div><h2>用 ChatGPT 辅助生成拍摄要求（可选）</h2><p className="muted">这个功能只会生成可复制的提示词，不会自动修改或保存拍摄要求。复制到 ChatGPT 生成结果后，再粘贴到上方「达人拍摄要求」里保存。</p></div><button type="button" className="secondary" onClick={() => isPromptHelperOpen ? setIsPromptHelperOpen(false) : handleOpenPromptHelper()}>{isPromptHelperOpen ? '收起辅助生成' : '展开辅助生成'}</button></div>{isPromptHelperOpen && <div className="settings-form"><label>产品卖点<input value={promptHelperForm.sellingPoints} onChange={(event) => setPromptHelperForm((form) => ({ ...form, sellingPoints: event.target.value }))} /></label><label>单条视频时长要求<input value={promptHelperForm.durationRequirement} onChange={(event) => setPromptHelperForm((form) => ({ ...form, durationRequirement: event.target.value }))} /></label><label>对标视频链接（可选，每行一个）<textarea value={promptHelperForm.referenceLinks} onChange={(event) => setPromptHelperForm((form) => ({ ...form, referenceLinks: event.target.value }))} /></label><button type="button" onClick={() => { setGeneratedChatGptPrompt(buildChatGptPrompt()); setPromptCopyStatus(''); }}>生成可复制提示词</button>{generatedChatGptPrompt && <><p className="ai-status">提示词已生成。请复制到 ChatGPT 使用。</p><p className="prompt-next-step">下一步：复制提示词到 ChatGPT，生成结果后，把适合的内容粘贴到上方「拍摄要求」和「内容重点」里，再点击保存。</p><label>ChatGPT 提示词<textarea value={generatedChatGptPrompt} readOnly rows={8} /></label><button type="button" onClick={() => void copyText(generatedChatGptPrompt, '已复制提示词。').then(() => setPromptCopyStatus('已复制提示词。'))}>复制提示词</button>{promptCopyStatus && <p className="ai-status">{promptCopyStatus}</p>}</>}</div>}</section>
-        <section className="panel"><div className="inline-actions"><button type="button" className="secondary danger" onClick={() => { clearSavedCreatorRows(); setRows([]); setToast({ tone: 'success', text: '已清空本地达人数据。' }); }}>清空当前数据</button></div></section>
+        <section className="panel prompt-helper"><div className="section-heading"><div><h2>用 ChatGPT 辅助生成拍摄要求（可选）</h2><p className="muted">只生成可复制提示词；不会调用 API，也不会自动修改数据。</p></div><button type="button" className="secondary" onClick={() => isPromptHelperOpen ? setIsPromptHelperOpen(false) : handleOpenPromptHelper()}>{isPromptHelperOpen ? '收起辅助生成' : '展开辅助生成'}</button></div>{isPromptHelperOpen && <div className="settings-form"><label>产品卖点<input value={promptHelperForm.sellingPoints} onChange={(event) => setPromptHelperForm((form) => ({ ...form, sellingPoints: event.target.value }))} /></label><label>单条视频时长要求<input value={promptHelperForm.durationRequirement} onChange={(event) => setPromptHelperForm((form) => ({ ...form, durationRequirement: event.target.value }))} /></label><label>对标视频链接（可选，每行一个）<textarea value={promptHelperForm.referenceLinks} onChange={(event) => setPromptHelperForm((form) => ({ ...form, referenceLinks: event.target.value }))} /></label><button type="button" onClick={() => { setGeneratedChatGptPrompt(buildChatGptPrompt()); setPromptCopyStatus(''); }}>生成可复制提示词</button>{generatedChatGptPrompt && <><p className="ai-status">提示词已生成。请复制到 ChatGPT 使用。</p><label>ChatGPT 提示词<textarea value={generatedChatGptPrompt} readOnly rows={8} /></label><button type="button" onClick={() => void copyText(generatedChatGptPrompt, '已复制提示词。').then(() => setPromptCopyStatus('已复制提示词。'))}>复制提示词</button>{promptCopyStatus && <p className="ai-status">{promptCopyStatus}</p>}</>}</div>}</section>
+        <section className="panel danger-zone"><div className="section-heading"><div><h2>危险操作</h2><p className="muted">仅清空当前浏览器 localStorage 中的达人数据，不影响产品项目设置。</p></div><button type="button" className="secondary danger" onClick={() => { clearSavedCreatorRows(); setRows([]); setToast({ tone: 'success', text: '已清空本地达人数据。' }); }}>清空当前数据</button></div></section>
       </>
     );
   }
@@ -828,10 +938,10 @@ function App() {
       <aside className="sidebar">
         <div className="brand"><span>TT</span><div><strong>Creator SOP</strong><small>运营工作台</small></div></div>
         <nav aria-label="主导航">
-          {navItems.map((item) => <button type="button" key={item.key} className={activeModule === item.key ? 'active' : ''} onClick={() => setActiveModule(item.key)}><span>{item.label}</span><small>{item.helper}</small></button>)}
+          {navItems.map((item) => <button type="button" key={item.key} className={activeModule === item.key ? 'active' : ''} onClick={() => setActiveModule(item.key)}><i>{navIcons[item.key]}</i><span>{item.label}</span><small>{item.helper}</small></button>)}
         </nav>
       </aside>
-      <main className="workspace">{renderActiveModule()}</main>
+      <main className="workspace">{renderCampaignSelector()}{renderActiveModule()}</main>
       {toast && <div className={`toast ${toast.tone}`} role="status">{toast.text}</div>}
     </div>
   );
