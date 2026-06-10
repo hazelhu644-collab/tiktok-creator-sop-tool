@@ -63,15 +63,51 @@ const emptyTemplateForm: TemplateForm = {
   deadline: '',
 };
 
+const statusLabels: Record<CreatorStatus, string> = {
+  'Not Contacted': '未联系',
+  Invited: '已邀约',
+  Replied: '已回复',
+  'Sample Requested': '申请样品',
+  'Sample Approved': '样品已通过',
+  'Sample Shipped': '样品已寄出',
+  Delivered: '样品已签收',
+  'Waiting Video': '等待视频',
+  Posted: '已发布',
+  'Need Revision': '需修改',
+  'Product Tag Missing': '未挂商品卡',
+  'Ready for Ads': '可投流',
+  'Spark Ads Requested': '已申请 Spark Ads',
+  Completed: '合作完成',
+  Lost: '合作失败',
+};
+
+const templateFieldLabels: Record<keyof TemplateForm, string> = {
+  creatorName: '达人名称',
+  productName: '产品名称',
+  sellingPoint: '产品卖点',
+  requirement: '拍摄要求',
+  length: '视频时长',
+  videos: '视频数量',
+  tagRequirement: '挂车 / Tag 要求',
+  trackingNumber: '物流单号',
+  deadline: '截止时间',
+};
+
+type TemplateMessage = {
+  name: string;
+  english: string;
+  chinese: string;
+};
+
 const navItems: Array<{ key: ModuleKey; label: string; helper: string }> = [
-  { key: 'dashboard', label: 'Dashboard', helper: 'Daily command center' },
-  { key: 'creators', label: 'Creator Database', helper: 'Search, filter, bulk update' },
-  { key: 'templates', label: 'Outreach Templates', helper: 'Variable message generator' },
-  { key: 'samples', label: 'Sample Tracking', helper: 'Shipment bottlenecks' },
-  { key: 'followup', label: 'Follow-up Center', helper: 'Priority action queue' },
-  { key: 'review', label: 'Content Review', helper: 'Acceptance checklist' },
-  { key: 'ads', label: 'Ads Material Library', helper: 'Spark-ready UGC' },
-  { key: 'settings', label: 'Settings', helper: 'Data and SOP defaults' },
+  { key: 'dashboard', label: '数据看板', helper: '今日跟进总览' },
+  { key: 'creators', label: '达人数据库', helper: '搜索、筛选、批量更新' },
+  { key: 'templates', label: '沟通话术模板', helper: '变量化话术生成器' },
+  { key: 'samples', label: '样品追踪', helper: '物流与到货跟进' },
+  { key: 'followup', label: '达人跟进中心', helper: '优先级行动队列' },
+  { key: 'review', label: '内容审核', helper: '视频验收清单' },
+  { key: 'ads', label: '投流素材库', helper: '可投流 UGC 素材' },
+  { key: 'settings', label: '设置', helper: '数据与 SOP 默认值' },
 ];
 
 function loadFilmingRequirements(): CreatorFilmingRequirements {
@@ -119,7 +155,21 @@ function listToText(value: string[] | undefined): string {
 }
 
 function displayName(row: Pick<CreatorRow, 'username'>): string {
-  return row.username.trim() || 'Unnamed creator';
+  return row.username.trim() || '未命名达人';
+}
+
+function displayStatus(status: CreatorStatus): string {
+  return statusLabels[status] ?? status;
+}
+
+function containsChinese(value: string): boolean {
+  return /[\u3400-\u9fff]/.test(value);
+}
+
+function outgoingEnglishValue(value: string, fallback: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || containsChinese(trimmed)) return fallback;
+  return trimmed;
 }
 
 function safeLower(value: string | undefined) {
@@ -200,30 +250,70 @@ function sampleHint(row: CreatorRow, requiredVideos: number) {
   return '按下一次跟进日期复查。';
 }
 
-function buildTemplateMessages(form: TemplateForm) {
-  const creator = form.creatorName.trim() || '[Creator Name]';
-  const product = form.productName.trim() || '[Product Name]';
-  const sellingPoint = form.sellingPoint.trim() || '[Product Selling Point]';
-  const requirement = form.requirement.trim() || '[Video Requirement]';
-  const length = form.length.trim() || '[Video Length]';
-  const videos = form.videos.trim() || '[Number of Videos]';
-  const tag = form.tagRequirement.trim() || '[Product Tag Requirement]';
-  const tracking = form.trackingNumber.trim() || '[Tracking Number]';
-  const deadline = form.deadline.trim() || '[Deadline]';
+function buildTemplateMessages(form: TemplateForm): TemplateMessage[] {
+  const creator = outgoingEnglishValue(form.creatorName, '[Creator Name]');
+  const product = outgoingEnglishValue(form.productName, '[Product Name]');
+  const sellingPoint = outgoingEnglishValue(form.sellingPoint, '[Product Selling Point]');
+  const requirement = outgoingEnglishValue(form.requirement, '[Video Requirement]');
+  const length = outgoingEnglishValue(form.length, '[Video Length]');
+  const videos = outgoingEnglishValue(form.videos, '[Number of Videos]');
+  const tag = outgoingEnglishValue(form.tagRequirement, '[Product Tag Requirement]');
+  const tracking = outgoingEnglishValue(form.trackingNumber, '[Tracking Number]');
+  const deadline = outgoingEnglishValue(form.deadline, '[Deadline]');
 
   return [
-    ['初次邀约', `Hi ${creator}, we love your pet content and would like to invite you to collaborate on ${product}. Key selling point: ${sellingPoint}. The requirement is ${videos} video(s), ${length}, with ${tag}. Are you open to receiving a sample?`],
-    ['达人同意合作', `Amazing, ${creator}! For ${product}, please cover: ${requirement}. Please keep each video ${length}, publish ${videos} video(s), and ${tag}. Deadline target: ${deadline}.`],
-    ['样品已寄出', `Your ${product} sample has been shipped. Tracking number: ${tracking}. Once it arrives, please test it with a real pet scene and share your posting plan.`],
-    ['样品已签收跟进', `Hi ${creator}, tracking shows the ${product} sample was delivered. Could you confirm you received it and let us know your filming schedule?`],
-    ['催发视频', `Hi ${creator}, just checking in on the ${product} video(s). The target is ${videos} video(s) by ${deadline}. Please let us know if you need anything before posting.`],
-    ['提醒挂商品卡', `Thanks for posting! One important fix: please attach the TikTok Shop product card for ${product}. ${tag}`],
-    ['要求修改视频', `Thanks for the draft/post. Could you revise it to include: ${requirement}. Please also keep it ${length} and avoid unsupported claims.`],
-    ['索要 Spark Ads 授权', `This video looks strong for paid boosting. Could you grant Spark Ads authorization / ad code for the ${product} post?`],
-    ['合作取消', `Understood. We will cancel this collaboration for ${product}. Please confirm no further posts will be made under this campaign.`],
-    ['要求退回样品', `Since the collaboration is cancelled, please return the ${product} sample. We can share the return details and next steps.`],
+    {
+      name: '初次邀约',
+      english: `Hi ${creator}, we love your pet content and would like to invite you to collaborate on ${product}. Key selling point: ${sellingPoint}. The requirement is ${videos} video(s), ${length}, with ${tag}. Are you open to receiving a sample?`,
+      chinese: `向 ${creator} 发起首次合作邀约，说明 ${product} 的核心卖点、视频数量、时长和挂车要求，并询问是否愿意收样。`,
+    },
+    {
+      name: '达人同意合作',
+      english: `Amazing, ${creator}! For ${product}, please cover: ${requirement}. Please keep each video ${length}, publish ${videos} video(s), and ${tag}. Deadline target: ${deadline}.`,
+      chinese: `达人同意合作后，确认 ${product} 的拍摄要求、视频时长、视频数量、挂车要求和目标截止时间。`,
+    },
+    {
+      name: '样品已寄出',
+      english: `Your ${product} sample has been shipped. Tracking number: ${tracking}. Once it arrives, please test it with a real pet scene and share your posting plan.`,
+      chinese: `通知达人样品已寄出，提供物流单号，并提醒签收后在真实宠物场景中测试产品、反馈发布计划。`,
+    },
+    {
+      name: '样品已签收跟进',
+      english: `Hi ${creator}, tracking shows the ${product} sample was delivered. Could you confirm you received it and let us know your filming schedule?`,
+      chinese: `物流显示已签收后，确认达人是否收到 ${product}，并推进达人给出拍摄排期。`,
+    },
+    {
+      name: '催发视频',
+      english: `Hi ${creator}, just checking in on the ${product} video(s). The target is ${videos} video(s) by ${deadline}. Please let us know if you need anything before posting.`,
+      chinese: `达人已收样但视频未发布时，提醒 ${videos} 条视频和 ${deadline} 截止时间，同时保留支持口径。`,
+    },
+    {
+      name: '提醒挂商品卡',
+      english: `Thanks for posting! One important fix: please attach the TikTok Shop product card for ${product}. ${tag}`,
+      chinese: `达人已发布但未挂商品卡时，提醒其为 ${product} 补挂 TikTok Shop 商品卡。`,
+    },
+    {
+      name: '要求修改视频',
+      english: `Thanks for the draft/post. Could you revise it to include: ${requirement}. Please also keep it ${length} and avoid unsupported claims.`,
+      chinese: `视频草稿或已发布内容不符合要求时，清楚说明需要补充的拍摄点、时长要求和合规风险。`,
+    },
+    {
+      name: '索要 Spark Ads 授权',
+      english: `This video looks strong for paid boosting. Could you grant Spark Ads authorization / ad code for the ${product} post?`,
+      chinese: `视频表现适合投流时，向达人索要 ${product} 内容的 Spark Ads 授权或广告码。`,
+    },
+    {
+      name: '合作取消',
+      english: `Understood. We will cancel this collaboration for ${product}. Please confirm no further posts will be made under this campaign.`,
+      chinese: `合作终止时，确认取消 ${product} 合作，并要求达人不要继续发布该 campaign 下的内容。`,
+    },
+    {
+      name: '要求退回样品',
+      english: `Since the collaboration is cancelled, please return the ${product} sample. We can share the return details and next steps.`,
+      chinese: `合作取消且需要追回样品时，说明需退回 ${product} 样品，并表示会提供退回信息。`,
+    },
   ];
-}
+} 
 
 function App() {
   const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
@@ -356,7 +446,7 @@ function App() {
 
   function applyStatusToRows(ids: string[], status: CreatorStatus) {
     setRows((currentRows) => currentRows.map((row) => (ids.includes(row.id) ? { ...row, currentStatus: status } : row)));
-    setToast({ tone: 'success', text: `已更新 ${ids.length} 位达人状态为 ${status}。` });
+    setToast({ tone: 'success', text: `已更新 ${ids.length} 位达人状态为 ${displayStatus(status)}。` });
   }
 
   function handleBulkStatusUpdate() {
@@ -374,7 +464,10 @@ function App() {
   }
 
   function buildOutreachForRow(row: CreatorRow) {
-    return `Hi @${displayName(row)}, we love your TikTok pet content and would like to invite you to collaborate on ${row.product || filmingRequirements.productName}. Are you open to receiving a sample and creating ${requiredVideos} TikTok Shop video(s)?`;
+    const product = outgoingEnglishValue(row.product || filmingRequirements.productName, '[Product Name]');
+    const creator = outgoingEnglishValue(displayName(row), '[Creator Name]').replace(/^@/, '');
+    const greetingName = creator.startsWith('[') ? creator : `@${creator}`;
+    return `Hi ${greetingName}, we love your TikTok pet content and would like to invite you to collaborate on ${product}. Are you open to receiving a sample and creating ${requiredVideos} TikTok Shop video(s)?`;
   }
 
   function handleBulkCopyOutreach() {
@@ -493,16 +586,16 @@ function App() {
       <section className="panel compact-panel">
         <div className="section-heading">
           <div>
-            <h2>Data Import / Export</h2>
+            <h2>数据导入 / 导出</h2>
             <p className="muted">支持 Excel / CSV 导入导出，数据保存在当前浏览器。</p>
           </div>
           <div className="inline-actions">
             <label className="file-button">
-              Import Excel / CSV
+              导入 Excel / CSV
               <input type="file" accept=".csv,.xls,.xlsx" onChange={(event) => void handleFile(event.target.files?.[0])} />
             </label>
-            <button type="button" className="secondary" onClick={() => downloadCreatorRowsCsv(rows)} disabled={rows.length === 0}>Export CSV</button>
-            <button type="button" onClick={handleAddCreator}>Add Creator</button>
+            <button type="button" className="secondary" onClick={() => downloadCreatorRowsCsv(rows)} disabled={rows.length === 0}>导出 CSV</button>
+            <button type="button" onClick={handleAddCreator}>新增达人</button>
           </div>
         </div>
         {fileName && <p className="muted">已加载：{fileName}</p>}
@@ -514,7 +607,7 @@ function App() {
   function renderDashboard() {
     return (
       <>
-        {renderPageHeader('Dashboard', '每日运营数据概览、优先待办和下一步动作集中在这里。', <button type="button" onClick={() => setActiveModule('creators')}>Open Creator Database</button>)}
+        {renderPageHeader('数据看板', '每日运营数据概览、优先待办和下一步动作集中在这里。', <button type="button" onClick={() => setActiveModule('creators')}>打开达人数据库</button>)}
         <section className="dashboard-grid">
           {dashboardCards.map((card) => (
             <button type="button" key={card.label} className="metric-card" onClick={() => handleDashboardCardClick(card)}>
@@ -542,7 +635,7 @@ function App() {
                   <article className="todo-card" key={task.id}>
                     <div>
                       <strong>{displayName(task)}</strong>
-                      <span className={statusTone(status)}>{status}</span>
+                      <span className={statusTone(status)}>{displayStatus(status)}</span>
                     </div>
                     <p><b>触发原因：</b>{task.triggerReason || sampleHint(task, requiredVideos)}</p>
                     <p><b>建议动作：</b>{task.suggestedAction}</p>
@@ -565,63 +658,63 @@ function App() {
     const allSelected = filteredRows.length > 0 && filteredRows.every((entry) => selectedIds.includes(entry.row.id));
     return (
       <>
-        {renderPageHeader('Creator Database', '紧凑表格 + 固定筛选 + 批量操作，替代原来的长页面堆叠。')}
+        {renderPageHeader('达人数据库', '管理达人信息、合作状态、物流状态、视频进度和跟进记录。')}
         {renderImportCard()}
         <section className="panel table-panel">
           <div className="filters-bar">
-            <label>Search<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索达人昵称 / 产品 / 状态" /></label>
-            <label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CreatorStatus | 'All')}><option>All</option>{creatorStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
-            <label>Creator Type<select value={creatorTypeFilter} onChange={(event) => setCreatorTypeFilter(event.target.value)}><option>All</option><option>Pet</option><option>UGC</option><option>Grooming</option></select></label>
-            <label>Follower Count<select value={followerFilter} onChange={(event) => setFollowerFilter(event.target.value)}><option>All</option><option>K</option><option>M</option><option>—</option></select></label>
-            <label>Avg Views<select value={avgViewsFilter} onChange={(event) => setAvgViewsFilter(event.target.value)}><option>All</option><option>K</option><option>M</option><option>—</option></select></label>
-            <label>GMV Range<select value={gmvFilter} onChange={(event) => setGmvFilter(event.target.value)}><option>All</option><option>$</option><option>low</option><option>mid</option><option>high</option><option>—</option></select></label>
+            <label>搜索<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索达人昵称 / 产品 / 状态" /></label>
+            <label>合作状态<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CreatorStatus | 'All')}><option value="All">全部</option>{creatorStatuses.map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}</select></label>
+            <label>达人类型<select value={creatorTypeFilter} onChange={(event) => setCreatorTypeFilter(event.target.value)}><option value="All">全部</option><option>Pet</option><option>UGC</option><option>Grooming</option></select></label>
+            <label>粉丝量级<select value={followerFilter} onChange={(event) => setFollowerFilter(event.target.value)}><option value="All">全部</option><option>K</option><option>M</option><option>—</option></select></label>
+            <label>平均播放<select value={avgViewsFilter} onChange={(event) => setAvgViewsFilter(event.target.value)}><option value="All">全部</option><option>K</option><option>M</option><option>—</option></select></label>
+            <label>GMV 区间<select value={gmvFilter} onChange={(event) => setGmvFilter(event.target.value)}><option value="All">全部</option><option>$</option><option value="low">低</option><option value="mid">中</option><option value="high">高</option><option>—</option></select></label>
           </div>
           <div className="sticky-action-bar">
-            <span>{selectedIds.length} selected</span>
+            <span>已选择 {selectedIds.length} 位达人</span>
             <button type="button" className="secondary" onClick={handleBulkCopyOutreach} disabled={selectedIds.length === 0}>批量复制邀约话术</button>
-            <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as CreatorStatus)}>{creatorStatuses.map((status) => <option key={status}>{status}</option>)}</select>
+            <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as CreatorStatus)}>{creatorStatuses.map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}</select>
             <button type="button" onClick={handleBulkStatusUpdate} disabled={selectedIds.length === 0}>批量更新状态</button>
           </div>
           {filteredRows.length === 0 ? (
-            <div className="empty-state"><strong>没有匹配的达人。</strong><span>下一步：清空筛选、导入 CSV / Excel，或点击 Add Creator。</span></div>
+            <div className="empty-state"><strong>没有匹配的达人。</strong><span>下一步：清空筛选、导入 CSV / Excel，或点击 新增达人。</span></div>
           ) : (
             <div className="table-wrap">
               <table className="ops-table">
                 <thead>
                   <tr>
-                    <th><input aria-label="Select all creators" type="checkbox" checked={allSelected} onChange={toggleSelectAll} /></th>
-                    <th>Creator Name</th>
-                    <th>TikTok Handle</th>
-                    <th>Follower Count</th>
-                    <th>Avg Views</th>
-                    <th>GMV Range</th>
-                    <th>Niche</th>
-                    <th>Status</th>
-                    <th>Product</th>
-                    <th>Sample Tracking</th>
-                    <th>Last Contact Date</th>
-                    <th>Next Follow-up Date</th>
-                    <th>Notes</th>
-                    <th>Actions</th>
+                    <th><input aria-label="全选达人" type="checkbox" checked={allSelected} onChange={toggleSelectAll} /></th>
+                    <th>达人名称</th>
+                    <th>TikTok 账号</th>
+                    <th>粉丝量级</th>
+                    <th>平均播放</th>
+                    <th>GMV 区间</th>
+                    <th>达人类型</th>
+                    <th>合作状态</th>
+                    <th>产品名称</th>
+                    <th>样品物流</th>
+                    <th>最近联系日期</th>
+                    <th>下次跟进日期</th>
+                    <th>跟进记录</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.map((entry) => (
                     <tr key={entry.row.id}>
-                      <td><input aria-label={`Select ${displayName(entry.row)}`} type="checkbox" checked={selectedIds.includes(entry.row.id)} onChange={() => toggleSelected(entry.row.id)} /></td>
-                      <td><input aria-label="Creator Name" value={entry.row.username} onChange={(event) => updateRow(entry.row.id, 'username', event.target.value)} /></td>
-                      <td><input aria-label="TikTok Handle" value={entry.row.profileLink} onChange={(event) => updateRow(entry.row.id, 'profileLink', event.target.value)} placeholder="@handle or URL" /></td>
+                      <td><input aria-label={`选择 ${displayName(entry.row)}` } type="checkbox" checked={selectedIds.includes(entry.row.id)} onChange={() => toggleSelected(entry.row.id)} /></td>
+                      <td><input aria-label="达人名称" value={entry.row.username} onChange={(event) => updateRow(entry.row.id, 'username', event.target.value)} /></td>
+                      <td><input aria-label="TikTok 账号" value={entry.row.profileLink} onChange={(event) => updateRow(entry.row.id, 'profileLink', event.target.value)} placeholder="@账号或主页链接" /></td>
                       <td>{entry.followers}</td>
                       <td>{entry.avgViews}</td>
                       <td>{entry.gmv}</td>
                       <td>{entry.creatorType}</td>
-                      <td><select aria-label="Status" value={entry.status} onChange={(event) => applyStatusToRows([entry.row.id], event.target.value as CreatorStatus)}>{creatorStatuses.map((status) => <option key={status}>{status}</option>)}</select></td>
-                      <td><input aria-label="Product" value={entry.row.product} onChange={(event) => updateRow(entry.row.id, 'product', event.target.value)} /></td>
-                      <td><input aria-label="Sample Tracking" value={entry.row.sampleShippingStatus} onChange={(event) => updateRow(entry.row.id, 'sampleShippingStatus', event.target.value)} /></td>
-                      <td><input aria-label="Last Contact Date" type="date" value={entry.row.lastContactDate} onChange={(event) => updateRow(entry.row.id, 'lastContactDate', event.target.value)} /></td>
-                      <td><input aria-label="Next Follow-up Date" type="date" value={entry.row.nextFollowUpDate ?? ''} onChange={(event) => updateRow(entry.row.id, 'nextFollowUpDate', event.target.value)} /></td>
-                      <td><textarea aria-label="Notes" value={entry.row.notes} onChange={(event) => updateRow(entry.row.id, 'notes', event.target.value)} rows={2} /></td>
-                      <td className="row-actions"><button type="button" className="secondary" onClick={() => void copyText(buildOutreachForRow(entry.row), '已复制邀约话术。')}>Copy</button><button type="button" className="danger secondary" onClick={() => setRows((currentRows) => deleteCreatorRow(currentRows, entry.row.id))}>Delete</button></td>
+                      <td><select aria-label="合作状态" value={entry.status} onChange={(event) => applyStatusToRows([entry.row.id], event.target.value as CreatorStatus)}>{creatorStatuses.map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}</select></td>
+                      <td><input aria-label="产品名称" value={entry.row.product} onChange={(event) => updateRow(entry.row.id, 'product', event.target.value)} /></td>
+                      <td><input aria-label="样品物流" value={entry.row.sampleShippingStatus} onChange={(event) => updateRow(entry.row.id, 'sampleShippingStatus', event.target.value)} /></td>
+                      <td><input aria-label="最近联系日期" type="date" value={entry.row.lastContactDate} onChange={(event) => updateRow(entry.row.id, 'lastContactDate', event.target.value)} /></td>
+                      <td><input aria-label="下次跟进日期" type="date" value={entry.row.nextFollowUpDate ?? ''} onChange={(event) => updateRow(entry.row.id, 'nextFollowUpDate', event.target.value)} /></td>
+                      <td><textarea aria-label="跟进记录" value={entry.row.notes} onChange={(event) => updateRow(entry.row.id, 'notes', event.target.value)} rows={2} /></td>
+                      <td className="row-actions"><button type="button" className="secondary" onClick={() => void copyText(buildOutreachForRow(entry.row), '已复制邀约话术。')}>复制英文话术</button><button type="button" className="danger secondary" onClick={() => setRows((currentRows) => deleteCreatorRow(currentRows, entry.row.id))}>删除达人</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -636,19 +729,22 @@ function App() {
   function renderTemplates() {
     return (
       <>
-        {renderPageHeader('Outreach Templates', '变量化模板生成器：输入一次变量，生成全流程话术。')}
+        {renderPageHeader('沟通话术模板', '输入变量后，生成适合海外达人的英文沟通话术，并提供中文对照。')}
         <section className="panel template-layout">
           <div className="template-form">
             {(Object.keys(templateForm) as Array<keyof TemplateForm>).map((key) => (
-              <label key={key}>{key.replace(/([A-Z])/g, ' $1')}<input value={templateForm[key]} onChange={(event) => setTemplateForm((form) => ({ ...form, [key]: event.target.value }))} /></label>
+              <label key={key}>{templateFieldLabels[key]}<input value={templateForm[key]} onChange={(event) => setTemplateForm((form) => ({ ...form, [key]: event.target.value }))} /></label>
             ))}
           </div>
           <div className="template-results">
-            {templateMessages.map(([label, text]) => (
-              <article className="template-card" key={label}>
-                <h3>{label}</h3>
-                <p>{text}</p>
-                <div className="inline-actions"><button type="button" className="secondary" onClick={() => void copyText(text, '话术已复制。')}>Copy</button><button type="button" className="secondary" disabled={selectedIds.length === 0}>Apply to selected creator</button><button type="button" onClick={() => setToast({ tone: 'success', text: '已标记为 sent。' })}>Mark as sent</button></div>
+            {templateMessages.map((template) => (
+              <article className="template-card" key={template.name}>
+                <h3>{template.name}</h3>
+                <h4>英文话术</h4>
+                <p>{template.english}</p>
+                <h4>中文对照</h4>
+                <p>{template.chinese}</p>
+                <div className="inline-actions"><button type="button" className="secondary" onClick={() => void copyText(template.english, '英文话术已复制。')}>复制英文话术</button><button type="button" className="secondary" disabled={selectedIds.length === 0}>应用到当前达人</button><button type="button" onClick={() => setToast({ tone: 'success', text: '已标记为已发送。' })}>标记为已发送</button></div>
               </article>
             ))}
           </div>
@@ -660,8 +756,8 @@ function App() {
   function renderSamples() {
     return (
       <>
-        {renderPageHeader('Sample Tracking', '围绕物流状态跟踪样品，自动提示卡点动作。')}
-        <section className="panel table-panel"><div className="table-wrap"><table className="ops-table"><thead><tr><th>Creator</th><th>Product</th><th>Sample Status</th><th>Carrier</th><th>Tracking Number</th><th>Shipped Date</th><th>Delivered Date</th><th>Days Since Delivered</th><th>Next Follow-up Action</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product || '—'}</td><td><span className={statusTone(inferStatus(row, requiredVideos))}>{inferStatus(row, requiredVideos)}</span></td><td>{parseNumberFromNotes(row.notes, ['carrier'])}</td><td>{parseNumberFromNotes(row.notes, ['tracking', 'tracking number'])}</td><td>{parseNumberFromNotes(row.notes, ['shipped date'])}</td><td>{row.sampleDeliveredDate || '—'}</td><td>{daysDelivered(row) ?? '—'}</td><td>{sampleHint(row, requiredVideos)}</td></tr>)}</tbody></table></div></section>
+        {renderPageHeader('样品追踪', '围绕物流状态跟踪样品，自动提示卡点动作。')}
+        <section className="panel table-panel"><div className="table-wrap"><table className="ops-table"><thead><tr><th>达人名称</th><th>产品名称</th><th>样品状态</th><th>物流商</th><th>物流单号</th><th>寄出日期</th><th>签收日期</th><th>签收后天数</th><th>下一步跟进动作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product || '—'}</td><td><span className={statusTone(inferStatus(row, requiredVideos))}>{displayStatus(inferStatus(row, requiredVideos))}</span></td><td>{parseNumberFromNotes(row.notes, ['carrier'])}</td><td>{parseNumberFromNotes(row.notes, ['tracking', 'tracking number'])}</td><td>{parseNumberFromNotes(row.notes, ['shipped date'])}</td><td>{row.sampleDeliveredDate || '—'}</td><td>{daysDelivered(row) ?? '—'}</td><td>{sampleHint(row, requiredVideos)}</td></tr>)}</tbody></table></div></section>
       </>
     );
   }
@@ -669,14 +765,14 @@ function App() {
   function renderFollowup() {
     return (
       <>
-        {renderPageHeader('Follow-up Center', '集中处理达人回复、逾期发布、样品签收后无反馈等动作。')}
+        {renderPageHeader('达人跟进中心', '按紧急程度和合作阶段筛选达人，生成下一步英文沟通话术。')}
         <section className="panel generator-panel">
           <div className="generator-controls">
-            <label>选择达人<select aria-label="选择达人" value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>{tasks.map((task) => <option key={task.id} value={task.id}>{displayName(task)} · {inferStatus(task, requiredVideos)} · {task.suggestedAction}</option>)}</select></label>
+            <label>选择达人<select aria-label="选择达人" value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>{tasks.map((task) => <option key={task.id} value={task.id}>{displayName(task)} · {displayStatus(inferStatus(task, requiredVideos))} · {task.suggestedAction}</option>)}</select></label>
             <label>渠道<select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>{CHANNELS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <button type="button" onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
           </div>
-          {message && <div className="message-output"><h3>英文话术</h3><pre>{message.english}</pre><h3>中文解释</h3><p>{message.chineseExplanation}</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
+          {message && <div className="message-output"><h3>场景 / 沟通动作</h3><p>{message.scenario} · {message.communicationAction}</p><h3>英文话术</h3><pre>{message.english}</pre><h3>中文对照 / 中文解释</h3><p>{message.chineseExplanation}</p><h3>发送后追踪</h3><p>发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制英文话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
         </section>
       </>
     );
@@ -686,18 +782,18 @@ function App() {
     const checklist = ['是否 40s+', '是否按要求发布 2 条视频', '是否挂 TikTok Shop 商品卡', '是否展示真实宠物使用场景', '是否有清晰开箱/使用过程', '是否有 CTA', '是否存在违规表述', '是否可作为投流素材'];
     return (
       <>
-        {renderPageHeader('Content Review', '逐条验收达人视频，输出可执行的验收状态。')}
-        <section className="panel review-grid">{rows.map((row) => <article className="review-card" key={row.id}><div><h3>{displayName(row)}</h3><span className={statusTone(inferStatus(row, requiredVideos))}>{inferStatus(row, requiredVideos)}</span></div>{checklist.map((item) => <label key={item} className="check-row"><input type="checkbox" />{item}</label>)}<select defaultValue="Approved"><option>Approved</option><option>Need Revision</option><option>Product Tag Missing</option><option>Not Usable for Ads</option><option>Ready for Ads</option></select></article>)}</section>
+        {renderPageHeader('内容审核', '逐条验收达人视频，输出可执行的验收状态。')}
+        <section className="panel review-grid">{rows.map((row) => <article className="review-card" key={row.id}><div><h3>{displayName(row)}</h3><span className={statusTone(inferStatus(row, requiredVideos))}>{displayStatus(inferStatus(row, requiredVideos))}</span></div>{checklist.map((item) => <label key={item} className="check-row"><input type="checkbox" />{item}</label>)}<select defaultValue="Approved"><option value="Approved">审核通过</option><option value="Need Revision">需要修改</option><option value="Product Tag Missing">未挂商品卡</option><option value="Not Usable for Ads">不可投流</option><option value="Ready for Ads">可投流</option></select></article>)}</section>
       </>
     );
   }
 
   function renderAds() {
-    const tags = ['Paw Cleaning', 'After Walk', 'Cat Playing', 'Dog Grooming', 'Product Demo', 'Before After', 'UGC Review', 'High CTR Potential'];
+    const tags = ['爪部清洁', '遛后护理', '猫咪互动', '狗狗梳毛', '产品演示', '前后对比', 'UGC 口碑', '高 CTR 潜力'];
     return (
       <>
-        {renderPageHeader('Ads Material Library', '沉淀可投流视频，管理 Spark Ads 和素材授权。')}
-        <section className="panel table-panel"><div className="tag-cloud">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div><div className="table-wrap"><table className="ops-table"><thead><tr><th>Creator</th><th>Product</th><th>Video URL</th><th>Hook Angle</th><th>Pet Type</th><th>Scene</th><th>Video Length</th><th>Organic Views</th><th>Engagement</th><th>Conversion Potential</th><th>Spark Ads Status</th><th>Usage Rights Status</th><th>Notes</th></tr></thead><tbody>{rows.filter((row) => ['Ready for Ads', 'Spark Ads Requested', 'Posted'].includes(inferStatus(row, requiredVideos))).map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product}</td><td>{parseNumberFromNotes(row.notes, ['video url', 'url'])}</td><td>{parseNumberFromNotes(row.notes, ['hook'])}</td><td>{parseNumberFromNotes(row.notes, ['pet type'])}</td><td>{parseNumberFromNotes(row.notes, ['scene'])}</td><td>{parseNumberFromNotes(row.notes, ['length'])}</td><td>{parseNumberFromNotes(row.notes, ['views'])}</td><td>{parseNumberFromNotes(row.notes, ['engagement'])}</td><td>{parseNumberFromNotes(row.notes, ['potential'])}</td><td>{inferStatus(row, requiredVideos) === 'Spark Ads Requested' ? 'Requested' : 'Not requested'}</td><td>{parseNumberFromNotes(row.notes, ['rights'])}</td><td>{row.notes || '—'}</td></tr>)}</tbody></table></div></section>
+        {renderPageHeader('投流素材库', '沉淀可投流 UGC 视频，管理 Spark Ads 和素材授权。')}
+        <section className="panel table-panel"><div className="tag-cloud">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div><div className="table-wrap"><table className="ops-table"><thead><tr><th>达人名称</th><th>产品名称</th><th>视频链接</th><th>Hook 角度</th><th>宠物类型</th><th>使用场景</th><th>视频时长</th><th>自然播放量</th><th>互动表现</th><th>转化潜力</th><th>Spark Ads 状态</th><th>素材授权状态</th><th>跟进记录</th></tr></thead><tbody>{rows.filter((row) => ['Ready for Ads', 'Spark Ads Requested', 'Posted'].includes(inferStatus(row, requiredVideos))).map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product}</td><td>{parseNumberFromNotes(row.notes, ['video url', 'url'])}</td><td>{parseNumberFromNotes(row.notes, ['hook'])}</td><td>{parseNumberFromNotes(row.notes, ['pet type'])}</td><td>{parseNumberFromNotes(row.notes, ['scene'])}</td><td>{parseNumberFromNotes(row.notes, ['length'])}</td><td>{parseNumberFromNotes(row.notes, ['views'])}</td><td>{parseNumberFromNotes(row.notes, ['engagement'])}</td><td>{parseNumberFromNotes(row.notes, ['potential'])}</td><td>{inferStatus(row, requiredVideos) === 'Spark Ads Requested' ? '已申请' : '未申请'}</td><td>{parseNumberFromNotes(row.notes, ['rights'])}</td><td>{row.notes || '—'}</td></tr>)}</tbody></table></div></section>
       </>
     );
   }
@@ -705,7 +801,7 @@ function App() {
   function renderSettings() {
     return (
       <>
-        {renderPageHeader('Settings', '管理 SOP 默认拍摄要求、说明折叠、数据清理。')}
+        {renderPageHeader('设置', '管理数据、SOP 默认拍摄要求和本地持久化配置。')}
         <section className="panel">
           <div className="section-heading"><div><h2>拍摄要求</h2><p className="muted">默认折叠说明，减少页面文字密度。</p></div><button type="button" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button></div>
           {isEditingFilmingRequirements ? <div className="settings-form"><label>产品名称<input value={filmingProductNameDraft} onChange={(event) => setFilmingProductNameDraft(event.target.value)} /></label><label>拍摄要求（每行一条）<textarea value={filmingRequirementsDraft} onChange={(event) => setFilmingRequirementsDraft(event.target.value)} rows={5} /></label><label>内容重点（每行一条）<textarea value={keyContentPointsDraft} onChange={(event) => setKeyContentPointsDraft(event.target.value)} rows={5} /></label><label>对标视频链接（可选，每行一个）<textarea value={referenceLinksDraft} onChange={(event) => setReferenceLinksDraft(event.target.value)} rows={3} /></label><div className="inline-actions"><button type="button" onClick={handleSaveFilmingRequirements}>保存拍摄要求</button><button type="button" className="secondary" onClick={handleRestoreDefaultFilmingRequirements}>恢复默认拍摄要求</button></div></div> : <details className="collapsed-copy"><summary>{filmingRequirements.productName}</summary><ul>{filmingRequirements.requirements.map((item) => <li key={item}>{item}</li>)}</ul><h3>重点拍摄内容</h3><ul>{filmingRequirements.keyContentPoints.map((item) => <li key={item}>{item}</li>)}</ul>{(filmingRequirements.referenceLinks?.length ?? 0) > 0 && <><h3>参考视频链接</h3><ul>{filmingRequirements.referenceLinks?.map((item) => <li key={item}>{item}</li>)}</ul></>}</details>}
@@ -730,8 +826,8 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span>TT</span><div><strong>Creator SOP</strong><small>Operations Workbench</small></div></div>
-        <nav aria-label="Main navigation">
+        <div className="brand"><span>TT</span><div><strong>Creator SOP</strong><small>运营工作台</small></div></div>
+        <nav aria-label="主导航">
           {navItems.map((item) => <button type="button" key={item.key} className={activeModule === item.key ? 'active' : ''} onClick={() => setActiveModule(item.key)}><span>{item.label}</span><small>{item.helper}</small></button>)}
         </nav>
       </aside>

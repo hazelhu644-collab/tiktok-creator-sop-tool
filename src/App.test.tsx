@@ -39,7 +39,7 @@ function seedCreators(rows: CreatorRow[]) {
 }
 
 async function goTo(user: ReturnType<typeof userEvent.setup>, moduleName: RegExp) {
-  const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+  const nav = screen.getByRole('navigation', { name: '主导航' });
   await user.click(within(nav).getByRole('button', { name: moduleName }));
 }
 
@@ -55,29 +55,29 @@ describe('operations workbench navigation and dashboard', () => {
     render(<App />);
 
     expect(screen.getByText('Creator SOP')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '数据看板' })).toBeInTheDocument();
 
-    await goTo(user, /Creator Database/);
-    expect(screen.getByRole('heading', { name: 'Creator Database' })).toBeInTheDocument();
-    expect(screen.getByText('Data Import / Export')).toBeInTheDocument();
+    await goTo(user, /达人数据库/);
+    expect(screen.getByRole('heading', { name: '达人数据库' })).toBeInTheDocument();
+    expect(screen.getByText('数据导入 / 导出')).toBeInTheDocument();
 
-    await goTo(user, /Outreach Templates/);
-    expect(screen.getByRole('heading', { name: 'Outreach Templates' })).toBeInTheDocument();
+    await goTo(user, /沟通话术模板/);
+    expect(screen.getByRole('heading', { name: '沟通话术模板' })).toBeInTheDocument();
 
-    await goTo(user, /Sample Tracking/);
-    expect(screen.getByRole('heading', { name: 'Sample Tracking' })).toBeInTheDocument();
+    await goTo(user, /样品追踪/);
+    expect(screen.getByRole('heading', { name: '样品追踪' })).toBeInTheDocument();
 
-    await goTo(user, /Follow-up Center/);
-    expect(screen.getByRole('heading', { name: 'Follow-up Center' })).toBeInTheDocument();
+    await goTo(user, /达人跟进中心/);
+    expect(screen.getByRole('heading', { name: '达人跟进中心' })).toBeInTheDocument();
 
-    await goTo(user, /Content Review/);
-    expect(screen.getByRole('heading', { name: 'Content Review' })).toBeInTheDocument();
+    await goTo(user, /内容审核/);
+    expect(screen.getByRole('heading', { name: '内容审核' })).toBeInTheDocument();
 
-    await goTo(user, /Ads Material Library/);
-    expect(screen.getByRole('heading', { name: 'Ads Material Library' })).toBeInTheDocument();
+    await goTo(user, /投流素材库/);
+    expect(screen.getByRole('heading', { name: '投流素材库' })).toBeInTheDocument();
 
-    await goTo(user, /Settings/);
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    await goTo(user, /设置/);
+    expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument();
   });
 
   it('shows the eight Dashboard metric cards and a priority todo list', () => {
@@ -121,8 +121,8 @@ describe('operations workbench navigation and dashboard', () => {
     render(<App />);
     await user.click(screen.getByRole('button', { name: /今日待邀约达人数量/ }));
 
-    expect(screen.getByRole('heading', { name: 'Creator Database' })).toBeInTheDocument();
-    expect(screen.getAllByLabelText('Status')[0]).toHaveValue('Not Contacted');
+    expect(screen.getByRole('heading', { name: '达人数据库' })).toBeInTheDocument();
+    expect(screen.getAllByLabelText('合作状态')[0]).toHaveValue('Not Contacted');
     expect(screen.getByDisplayValue('invite_creator')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('delivered_creator')).not.toBeInTheDocument();
   });
@@ -144,19 +144,19 @@ describe('creator database redesigned table', () => {
     ]);
 
     render(<App />);
-    await goTo(user, /Creator Database/);
+    await goTo(user, /达人数据库/);
 
-    await user.type(screen.getByLabelText('Search'), 'alpha');
+    await user.type(screen.getByLabelText('搜索'), 'alpha');
     expect(screen.getByDisplayValue('alpha_creator')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('beta_creator')).not.toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText('Search'));
-    await user.selectOptions(screen.getAllByLabelText('Status')[0], 'Ready for Ads');
+    await user.clear(screen.getByLabelText('搜索'));
+    await user.selectOptions(screen.getAllByLabelText('合作状态')[0], 'Ready for Ads');
     expect(screen.getByDisplayValue('beta_creator')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('alpha_creator')).not.toBeInTheDocument();
 
-    await user.clear(screen.getAllByLabelText('Product')[0]);
-    await user.type(screen.getAllByLabelText('Product')[0], 'Updated Brush');
+    await user.clear(screen.getAllByLabelText('产品名称')[0]);
+    await user.type(screen.getAllByLabelText('产品名称')[0], 'Updated Brush');
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
       expect(saved.find((row) => row.id === 'beta')?.product).toBe('Updated Brush');
@@ -173,24 +173,24 @@ describe('creator database redesigned table', () => {
     ]);
 
     render(<App />);
-    await goTo(user, /Creator Database/);
+    await goTo(user, /达人数据库/);
 
-    await user.click(screen.getByLabelText('Select alpha_creator'));
-    await user.click(screen.getByLabelText('Select beta_creator'));
-    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    await user.click(screen.getByLabelText('选择 alpha_creator'));
+    await user.click(screen.getByLabelText('选择 beta_creator'));
+    expect(screen.getByText('已选择 2 位达人')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '批量复制邀约话术' }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('@alpha_creator'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('@beta_creator'));
 
-    await user.selectOptions(within(screen.getByText('2 selected').closest('.sticky-action-bar') as HTMLElement).getByRole('combobox'), 'Sample Approved');
+    await user.selectOptions(within(screen.getByText('已选择 2 位达人').closest('.sticky-action-bar') as HTMLElement).getByRole('combobox'), 'Sample Approved');
     await user.click(screen.getByRole('button', { name: '批量更新状态' }));
 
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
       expect(saved.map((row) => row.currentStatus)).toEqual(['Sample Approved', 'Sample Approved']);
     });
-    expect(screen.getByRole('status')).toHaveTextContent('已更新 2 位达人状态为 Sample Approved。');
+    expect(screen.getByRole('status')).toHaveTextContent('已更新 2 位达人状态为 样品已通过。');
   });
 
   it('adds and deletes creators from the redesigned database page', async () => {
@@ -198,12 +198,12 @@ describe('creator database redesigned table', () => {
     seedCreators([creatorRow({ id: 'alpha', username: 'alpha_creator' })]);
 
     render(<App />);
-    await goTo(user, /Creator Database/);
-    await user.click(screen.getByRole('button', { name: 'Add Creator' }));
+    await goTo(user, /达人数据库/);
+    await user.click(screen.getByRole('button', { name: '新增达人' }));
 
-    expect(screen.getAllByLabelText('Creator Name')).toHaveLength(2);
+    expect(screen.getAllByLabelText('达人名称')).toHaveLength(2);
 
-    await user.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
+    await user.click(screen.getAllByRole('button', { name: '删除达人' })[0]);
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
       expect(saved).toHaveLength(1);
@@ -214,22 +214,25 @@ describe('creator database redesigned table', () => {
 describe('templates, follow-up, samples, review, and ads modules', () => {
   it('generates variable-based outreach templates and copies a scenario script', async () => {
     const user = userEvent.setup();
-    const writeText = vi.fn(async () => undefined);
+    const writeText = vi.fn(async (_text: string) => undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
 
     render(<App />);
-    await goTo(user, /Outreach Templates/);
+    await goTo(user, /沟通话术模板/);
 
-    await user.type(screen.getByLabelText('creator Name'), 'Bella Pets');
-    await user.clear(screen.getByLabelText('product Name'));
-    await user.type(screen.getByLabelText('product Name'), 'Paw Cleaner');
+    await user.type(screen.getByLabelText('达人名称'), 'Bella Pets');
+    await user.clear(screen.getByLabelText('产品名称'));
+    await user.type(screen.getByLabelText('产品名称'), 'Paw Cleaner');
 
     expect(screen.getByText('初次邀约')).toBeInTheDocument();
+    expect(screen.getAllByText('英文话术').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('中文对照').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Bella Pets/).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: '复制英文话术' }).length).toBeGreaterThan(0);
 
-    await user.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
+    await user.click(screen.getAllByRole('button', { name: '复制英文话术' })[0]);
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Bella Pets'));
+    expect(String(writeText.mock.calls[0]?.[0] ?? '')).not.toMatch(/[\u3400-\u9fff]/);
   });
 
   it('tracks sample logistics and shows automatic next-action hints', async () => {
@@ -240,7 +243,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     ]);
 
     render(<App />);
-    await goTo(user, /Sample Tracking/);
+    await goTo(user, /样品追踪/);
 
     expect(screen.getByText('shipped_creator')).toBeInTheDocument();
     expect(screen.getByText('UPS')).toBeInTheDocument();
@@ -256,13 +259,17 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     seedCreators([creatorRow({ id: 'follow', username: 'follow_creator', sampleDeliveredDate: '2026-05-20', lastFollowUpCount: 1 })]);
 
     render(<App />);
-    await goTo(user, /Follow-up Center/);
+    await goTo(user, /达人跟进中心/);
     await user.click(screen.getByRole('button', { name: '生成话术' }));
 
+    expect(screen.getByText('场景 / 沟通动作')).toBeInTheDocument();
     expect(screen.getByText('英文话术')).toBeInTheDocument();
-    expect(screen.getByText('中文解释')).toBeInTheDocument();
+    expect(screen.getByText('中文对照 / 中文解释')).toBeInTheDocument();
+    expect(screen.getByText('发送后追踪')).toBeInTheDocument();
+    expect(screen.getByText(/发送后请点击/)).toBeInTheDocument();
+    expect(screen.getByText('英文话术').nextElementSibling?.textContent ?? '').not.toMatch(/[\u3400-\u9fff]/);
 
-    await user.click(screen.getByRole('button', { name: '复制话术' }));
+    await user.click(screen.getByRole('button', { name: '复制英文话术' }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('follow_creator'));
 
     await user.click(screen.getByRole('button', { name: '标记为已发送' }));
@@ -281,7 +288,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     seedCreators([creatorRow({ id: 'reply', username: 'reply_creator' })]);
 
     render(<App />);
-    await goTo(user, /Follow-up Center/);
+    await goTo(user, /达人跟进中心/);
     await user.click(screen.getByRole('button', { name: '生成话术' }));
     await user.click(screen.getByRole('button', { name: '标记达人已回复' }));
 
@@ -298,14 +305,14 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     seedCreators([creatorRow({ id: 'ads', username: 'ads_creator', currentStatus: 'Ready for Ads', videoProgress: '2 of 2', notes: 'video url: https://tiktok.com/video/1\nhook: Before After' })]);
 
     render(<App />);
-    await goTo(user, /Content Review/);
+    await goTo(user, /内容审核/);
     expect(screen.getByText('是否 40s+')).toBeInTheDocument();
     expect(screen.getByText('是否可作为投流素材')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Approved')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('审核通过')).toBeInTheDocument();
 
-    await goTo(user, /Ads Material Library/);
-    expect(screen.getByText('Paw Cleaning')).toBeInTheDocument();
-    expect(screen.getByText('High CTR Potential')).toBeInTheDocument();
+    await goTo(user, /投流素材库/);
+    expect(screen.getByText('爪部清洁')).toBeInTheDocument();
+    expect(screen.getByText('高 CTR 潜力')).toBeInTheDocument();
     expect(screen.getByText('https://tiktok.com/video/1')).toBeInTheDocument();
     expect(screen.getAllByText('Before After').length).toBeGreaterThan(0);
   });
@@ -315,7 +322,7 @@ describe('settings and prompt helper', () => {
   it('saves, displays, and restores optional reference links in Settings', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App />);
-    await goTo(user, /Settings/);
+    await goTo(user, /设置/);
 
     expect(screen.queryByText('参考视频链接')).not.toBeInTheDocument();
 
@@ -332,7 +339,7 @@ describe('settings and prompt helper', () => {
 
     unmount();
     render(<App />);
-    await goTo(user, /Settings/);
+    await goTo(user, /设置/);
     expect(screen.getByText('https://tiktok.com/reference-one')).toBeInTheDocument();
   });
 
@@ -346,7 +353,7 @@ describe('settings and prompt helper', () => {
     }));
 
     render(<App />);
-    await goTo(user, /Settings/);
+    await goTo(user, /设置/);
     await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
 
     expect(screen.getByLabelText('对标视频链接（可选，每行一个）')).toHaveValue('https://tiktok.com/prefill-reference');
@@ -360,7 +367,7 @@ describe('settings and prompt helper', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
 
     render(<App />);
-    await goTo(user, /Settings/);
+    await goTo(user, /设置/);
     await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
     await user.type(screen.getByLabelText('产品卖点'), '静音循环水');
     await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
@@ -379,7 +386,7 @@ describe('settings and prompt helper', () => {
     seedCreators([creatorRow({ id: 'alpha', username: 'alpha_creator' })]);
 
     render(<App />);
-    await goTo(user, /Settings/);
+    await goTo(user, /设置/);
     await user.click(screen.getByRole('button', { name: '清空当前数据' }));
 
     await waitFor(() => expect(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY)).toBeNull());
