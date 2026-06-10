@@ -84,7 +84,7 @@ describe('editable creator data helpers', () => {
     ]);
 
     expect(csv.startsWith('\ufeff')).toBe(true);
-    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复/下一步备注,跟进记录,备注');
+    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复/下一步备注,跟进记录,产品项目备注,当前拍摄要求,备注');
     expect(csv).toContain('2 条记录');
     expect(csv).not.toContain('{"date"');
     expect(csv).toContain('"creator, one"');

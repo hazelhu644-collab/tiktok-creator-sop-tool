@@ -90,3 +90,20 @@ export type GeneratedMessage = {
   urgencyLevel: UrgencyLevel;
   communicationAction: CommunicationAction;
 };
+
+
+export type Campaign = {
+  id: string;
+  productName: string;
+  sellingPoints: string;
+  requirements: string[];
+  keyContentPoints: string[];
+  avoidShots: string;
+  videoCount: string;
+  videoLength: string;
+  tagRequirement: string;
+  productLink: string;
+  referenceLinks: string[];
+  defaultMessageSetting: string;
+  notes: string;
+};
