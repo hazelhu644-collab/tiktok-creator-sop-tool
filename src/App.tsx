@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
 import {
   clearSavedCreatorRows,
   createBlankCreatorRow,
@@ -10,1560 +10,733 @@ import {
   type EditableCreatorField,
 } from './creatorData';
 import { parseCreatorFile } from './fileParser';
-import { analyzeCreators, buildSummary, buildVideoProgressHint, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
-import { CHANNELS, classifyCreatorFollowUp, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements, type CreatorReplyPersonalization, type ReplyTone } from './messageGenerator';
-import type { Channel, CreatorRow, FollowUpHistoryEntry, GeneratedMessage, Priority, Task, UrgencyLevel } from './types';
+import { analyzeCreators, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
+import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
+import type { Channel, CreatorRow, GeneratedMessage, Task } from './types';
 import './styles.css';
-
-const priorityClass: Record<string, string> = {
-  Highest: 'priority highest',
-  High: 'priority high',
-  Medium: 'priority medium',
-  Low: 'priority low',
-  None: 'priority none',
-};
-
-const priorityLabel: Record<Priority, string> = {
-  Highest: '最高',
-  High: '高',
-  Medium: '中',
-  Low: '低',
-  None: '无',
-};
-
-
-const urgencyBadgeClass: Record<UrgencyLevel, string> = {
-  极高: 'badge urgency-highest',
-  高: 'badge urgency-high',
-  中: 'badge urgency-medium',
-  低: 'badge urgency-low',
-  归档: 'badge urgency-archived',
-};
-
-const trackingStatusDisplay: Record<string, string> = {
-  '': '未发送',
-  'Followed Up': '已发送待回复',
-  Replied: '达人已回复',
-  'Reply Pending': '达人回复待处理',
-  Completed: '已完成',
-  Failed: '已失败',
-  未发送: '未发送',
-  已发送待回复: '已发送待回复',
-  达人已回复: '达人已回复',
-  达人回复待处理: '达人回复待处理',
-  需再次跟进: '需再次跟进',
-  已完成: '已完成',
-  已失败: '已失败',
-};
-
-function normalizeStatusToken(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function cooperationStatusDisplay(value: string): string {
-  const status = normalizeStatusToken(value);
-  if (!status) return '未填写';
-  if (status.includes('completed') || status.includes('已完成')) return '已完成';
-  if (status.includes('failed') || status.includes('失败') || status.includes('已失败')) return '已失败';
-  if (status.includes('to contact') || status.includes('待建联')) return '待建联';
-  if (status.includes('sample shipped') || status.includes('样品已发')) return '样品已发';
-  if (status.includes('in transit') || status.includes('运输中')) return '运输中';
-  if (status.includes('delivered') || status.includes('waiting for video') || status.includes('样品已到')) return '样品已到待拍';
-  if (status.includes('posted') || status.includes('partial') || status.includes('部分视频')) return '已发部分视频';
-  return value.trim();
-}
-
-function cooperationStatusClass(value: string): string {
-  const display = cooperationStatusDisplay(value);
-  const classByDisplay: Record<string, string> = {
-    未填写: 'badge status-empty',
-    待建联: 'badge status-to-contact',
-    样品已发: 'badge status-sample-shipped',
-    运输中: 'badge status-in-transit',
-    样品已到待拍: 'badge status-delivered',
-    已发部分视频: 'badge status-posted-partial',
-    已完成: 'badge status-completed',
-    已失败: 'badge status-failed',
-  };
-  return classByDisplay[display] ?? 'badge status-default';
-}
-
-function trackingStatusLabel(value: string | undefined): string {
-  return trackingStatusDisplay[value ?? ''] ?? value?.trim() ?? '未发送';
-}
-
-function trackingStatusClass(value: string | undefined): string {
-  const display = trackingStatusLabel(value);
-  const classByDisplay: Record<string, string> = {
-    未发送: 'badge tracking-not-sent',
-    已发送待回复: 'badge tracking-sent',
-    达人已回复: 'badge tracking-replied',
-    达人回复待处理: 'badge tracking-replied',
-    需再次跟进: 'badge tracking-needs-follow-up',
-    已完成: 'badge tracking-completed',
-    已失败: 'badge tracking-failed',
-  };
-  return classByDisplay[display] ?? 'badge tracking-default';
-}
-
-function followUpHistoryLabel(row: CreatorRow): string {
-  const count = row.followUpHistory?.length ?? 0;
-  return count === 0 ? '暂无记录' : `${count} 条记录`;
-}
-
-function followUpActionLabel(action: FollowUpHistoryEntry['action']): string {
-  const actionLabels: Record<FollowUpHistoryEntry['action'], string> = {
-    'Message Sent': '已发送',
-    'Creator Replied': '达人已回复',
-    Completed: '合作完成',
-    Failed: '合作失败',
-  };
-  return actionLabels[action] ?? action;
-}
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = 'tiktokCreatorSop.filmingRequirements';
 
-type ChatGptPromptHelperForm = {
-  sellingPoints: string;
-  videoCount: string;
-  durationRequirement: string;
-  targetPetOrScene: string;
-  mustShowShots: string;
-  avoidShots: string;
-  referenceLinks: string;
+const creatorStatuses = [
+  'Not Contacted',
+  'Invited',
+  'Replied',
+  'Sample Requested',
+  'Sample Approved',
+  'Sample Shipped',
+  'Delivered',
+  'Waiting Video',
+  'Posted',
+  'Need Revision',
+  'Product Tag Missing',
+  'Ready for Ads',
+  'Spark Ads Requested',
+  'Completed',
+  'Lost',
+] as const;
+
+type CreatorStatus = typeof creatorStatuses[number];
+type ModuleKey = 'dashboard' | 'creators' | 'templates' | 'samples' | 'followup' | 'review' | 'ads' | 'settings';
+type Toast = { tone: 'success' | 'warning'; text: string } | null;
+
+type TemplateForm = {
+  creatorName: string;
+  productName: string;
+  sellingPoint: string;
+  requirement: string;
+  length: string;
+  videos: string;
+  tagRequirement: string;
+  trackingNumber: string;
+  deadline: string;
 };
 
-const emptyChatGptPromptHelperForm: ChatGptPromptHelperForm = {
-  sellingPoints: '',
-  videoCount: '',
-  durationRequirement: '',
-  targetPetOrScene: '',
-  mustShowShots: '',
-  avoidShots: '',
-  referenceLinks: '',
+const emptyTemplateForm: TemplateForm = {
+  creatorName: '',
+  productName: defaultCreatorFilmingRequirements.productName,
+  sellingPoint: '',
+  requirement: 'Show a real pet using the product, clear unboxing/use process, CTA, and TikTok Shop product card.',
+  length: '40s+',
+  videos: '2',
+  tagRequirement: 'Attach the TikTok Shop product card before publishing.',
+  trackingNumber: '',
+  deadline: '',
 };
 
-const scenarioLabel: Record<string, string> = {
-  'First Outreach': '首次建联',
-  'No Reply Follow-up': '建联后未回复跟进',
-  'Sample Request Reminder': '提醒达人申请样品',
-  'Sample Request Confirmation': '样品申请后确认',
-  'Sample In Transit Reminder': '样品运输中提醒',
-  'Sample Delivered Follow-up': '样品到货后催拍',
-  'Partial Video Completion Follow-up': '已发布部分视频，跟进剩余视频',
-  'Needs Revision Reminder': '视频修改提醒',
-  'Completed Thank You': '合作完成感谢 / 后续合作',
-  'Failed Archive Confirmation': '合作失败归档',
-  'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进',
-  'Second Video Reminder': '第二条视频提醒',
-  'Second Follow-up': '第二次跟进',
-  'Creator Reply Follow-up': '回复达人消息',
-  'Light Follow-up': '轻量跟进',
-};
-
-function normalizeReferenceLinksText(value: string): string[] {
-  return value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeListText(value: string): string[] {
-  return value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function toRequirementsText(items: string[]): string {
-  return items.join('\n');
-}
+const navItems: Array<{ key: ModuleKey; label: string; helper: string }> = [
+  { key: 'dashboard', label: 'Dashboard', helper: 'Daily command center' },
+  { key: 'creators', label: 'Creator Database', helper: 'Search, filter, bulk update' },
+  { key: 'templates', label: 'Outreach Templates', helper: 'Variable message generator' },
+  { key: 'samples', label: 'Sample Tracking', helper: 'Shipment bottlenecks' },
+  { key: 'followup', label: 'Follow-up Center', helper: 'Priority action queue' },
+  { key: 'review', label: 'Content Review', helper: 'Acceptance checklist' },
+  { key: 'ads', label: 'Ads Material Library', helper: 'Spark-ready UGC' },
+  { key: 'settings', label: 'Settings', helper: 'Data and SOP defaults' },
+];
 
 function loadFilmingRequirements(): CreatorFilmingRequirements {
   if (typeof window === 'undefined') return defaultCreatorFilmingRequirements;
 
-  try {
-    const savedRequirements = window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY);
-    if (!savedRequirements) return defaultCreatorFilmingRequirements;
+  const savedRequirements = window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY);
+  if (!savedRequirements) return defaultCreatorFilmingRequirements;
 
+  try {
     const parsedRequirements = JSON.parse(savedRequirements) as Partial<CreatorFilmingRequirements>;
     return {
-      productName: typeof parsedRequirements.productName === 'string'
+      productName: typeof parsedRequirements.productName === 'string' && parsedRequirements.productName.trim()
         ? parsedRequirements.productName
         : defaultCreatorFilmingRequirements.productName,
-      requirements: Array.isArray(parsedRequirements.requirements)
-        ? parsedRequirements.requirements.filter((item): item is string => typeof item === 'string')
-        : defaultCreatorFilmingRequirements.requirements,
-      keyContentPoints: Array.isArray(parsedRequirements.keyContentPoints)
-        ? parsedRequirements.keyContentPoints.filter((item): item is string => typeof item === 'string')
-        : defaultCreatorFilmingRequirements.keyContentPoints,
-      referenceLinks: Array.isArray(parsedRequirements.referenceLinks)
-        ? parsedRequirements.referenceLinks.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
-        : defaultCreatorFilmingRequirements.referenceLinks,
+      requirements: Array.isArray(parsedRequirements.requirements) ? parsedRequirements.requirements.filter(Boolean) : defaultCreatorFilmingRequirements.requirements,
+      keyContentPoints: Array.isArray(parsedRequirements.keyContentPoints) ? parsedRequirements.keyContentPoints.filter(Boolean) : defaultCreatorFilmingRequirements.keyContentPoints,
+      referenceLinks: Array.isArray(parsedRequirements.referenceLinks) ? parsedRequirements.referenceLinks.filter(Boolean) : [],
     };
   } catch {
     return defaultCreatorFilmingRequirements;
   }
 }
 
-function saveFilmingRequirements(filmingRequirements: CreatorFilmingRequirements) {
-  window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify(filmingRequirements));
+function saveFilmingRequirements(requirements: CreatorFilmingRequirements) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify(requirements));
 }
 
-function displayCreatorName(username: string): string {
-  return username.trim() || '未命名达人';
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-const creatorQuickFilters = [
-  { key: 'all', label: '全部' },
-  { key: '极高', label: '极高' },
-  { key: '高', label: '高' },
-  { key: '中', label: '中' },
-  { key: '低', label: '低' },
-  { key: '归档', label: '归档' },
-] as const;
-
-type CreatorQuickFilterKey = typeof creatorQuickFilters[number]['key'];
-type OverviewFilterKey =
-  | 'today'
-  | 'todayContacted'
-  | 'todayNotContacted'
-  | 'todaySentWaiting'
-  | 'todayRepliedPending'
-  | '极高'
-  | '高'
-  | '中'
-  | '低'
-  | '物流待确认'
-  | '样品运输中'
-  | '样品到货待拍'
-  | '剩余视频待履约'
-  | '视频修改'
-  | '合作失败风险'
-  | '已发送待回复'
-  | '达人已回复'
-  | '已完成'
-  | '已失败'
-  | '归档';
-
-type OverviewCardConfig = {
-  key: OverviewFilterKey;
-  label: string;
-  value: number;
-  tone: string;
-};
-
-const urgencySortRank: Record<UrgencyLevel, number> = {
-  极高: 1,
-  高: 2,
-  中: 3,
-  低: 4,
-  归档: 5,
-};
-
-function statusText(task: Task): string {
-  return task.currentStatus.trim() || '未填写状态';
-}
-
-function normalizedTaskSearchText(task: Task, requiredVideos: number): string {
-  const classification = classifyCreatorFollowUp(task, requiredVideos);
-  return [
-    task.username,
-    task.product,
-    task.currentStatus,
-    task.trackingStatus,
-    task.contactMethod,
-    priorityLabel[task.priority],
-    task.priority,
-    task.sampleShippingStatus,
-    classification.urgencyLevel,
-    classification.communicationAction,
-  ].join(' ').toLowerCase();
-}
-
-function compareDateAscending(aDate: string, bDate: string): number {
-  const a = aDate.trim();
-  const b = bDate.trim();
-  if (a && b && a !== b) return a.localeCompare(b);
-  if (a && !b) return -1;
-  if (!a && b) return 1;
-  return 0;
-}
-
-function compareCreatorQueueOrder(a: Task, b: Task, requiredVideos: number): number {
-  const aClassification = classifyCreatorFollowUp(a, requiredVideos);
-  const bClassification = classifyCreatorFollowUp(b, requiredVideos);
-  const urgencyDifference = urgencySortRank[aClassification.urgencyLevel] - urgencySortRank[bClassification.urgencyLevel];
-  if (urgencyDifference !== 0) return urgencyDifference;
-
-  const lastContactDifference = compareDateAscending(a.lastContactDate, b.lastContactDate);
-  if (lastContactDifference !== 0) return lastContactDifference;
-
-  const sampleDeliveredDifference = compareDateAscending(a.sampleDeliveredDate, b.sampleDeliveredDate);
-  if (sampleDeliveredDifference !== 0) return sampleDeliveredDifference;
-
-  return a.username.localeCompare(b.username);
-}
-
-function matchesQuickFilter(task: Task, quickFilter: CreatorQuickFilterKey, requiredVideos: number): boolean {
-  if (quickFilter === 'all') return true;
-  return classifyCreatorFollowUp(task, requiredVideos).urgencyLevel === quickFilter;
-}
-
-function normalizedTrackingLabel(task: Task | CreatorRow): string {
-  return trackingStatusLabel(task.trackingStatus).trim();
-}
-
-function isCompletedCreator(task: Task | CreatorRow): boolean {
-  const currentStatus = normalizeStatusToken(task.currentStatus);
-  return currentStatus.includes('completed')
-    || currentStatus.includes('已完成')
-    || normalizedTrackingLabel(task) === '已完成';
-}
-
-function isFailedCreator(task: Task | CreatorRow): boolean {
-  const currentStatus = normalizeStatusToken(task.currentStatus);
-  return currentStatus.includes('failed')
-    || currentStatus.includes('失败')
-    || normalizedTrackingLabel(task) === '已失败';
-}
-
-function isArchivedCreator(task: Task, requiredVideos: number): boolean {
-  return isCompletedCreator(task)
-    || isFailedCreator(task)
-    || classifyCreatorFollowUp(task, requiredVideos).urgencyLevel === '归档';
-}
-
-function isTodayDate(value: string, today = formatDate(new Date())): boolean {
-  return value.trim() === today;
-}
-
-function wasContactedToday(task: Task | CreatorRow, today = formatDate(new Date())): boolean {
-  return isTodayDate(task.lastContactDate, today);
-}
-
-function isActiveCreator(task: Task | CreatorRow): boolean {
-  return !isCompletedCreator(task) && !isFailedCreator(task);
-}
-
-function isSentWaitingToday(task: Task | CreatorRow, today = formatDate(new Date())): boolean {
-  return wasContactedToday(task, today) && normalizedTrackingLabel(task) === '已发送待回复';
-}
-
-function isRepliedPending(task: Task | CreatorRow): boolean {
-  const label = normalizedTrackingLabel(task);
-  return label === '达人已回复' || label === '达人回复待处理';
-}
-
-function isTodayNotContacted(task: Task, requiredVideos: number, today = formatDate(new Date())): boolean {
-  return task.needsFollowUp && isActiveCreator(task) && !wasContactedToday(task, today) && !isArchivedCreator(task, requiredVideos);
-}
-
-function matchesOverviewFilter(task: Task, overviewFilter: OverviewFilterKey | '', requiredVideos: number): boolean {
-  if (!overviewFilter) return true;
-
-  const classification = classifyCreatorFollowUp(task, requiredVideos);
-  const progress = normalizeVideoProgress(task.videoProgress, requiredVideos);
-  const currentStatus = normalizeStatusToken(task.currentStatus);
-  const sampleShippingStatus = normalizeStatusToken(task.sampleShippingStatus);
-  const trackingLabel = normalizedTrackingLabel(task);
-
-  switch (overviewFilter) {
-    case 'today':
-      return task.needsFollowUp && !isCompletedCreator(task) && !isFailedCreator(task);
-    case 'todayContacted':
-      return wasContactedToday(task);
-    case 'todayNotContacted':
-      return isTodayNotContacted(task, requiredVideos);
-    case 'todaySentWaiting':
-      return isSentWaitingToday(task);
-    case 'todayRepliedPending':
-      return isRepliedPending(task);
-    case '极高':
-    case '高':
-    case '中':
-    case '低':
-      return classification.urgencyLevel === overviewFilter;
-    case '物流待确认':
-      return classification.communicationAction === '物流异常确认'
-        || classification.communicationAction === '样品运输中建联';
-    case '样品运输中':
-      return sampleShippingStatus === 'shipped'
-        || sampleShippingStatus === 'in transit'
-        || currentStatus.includes('sample shipped');
-    case '样品到货待拍':
-      return classification.communicationAction === '样品到货催拍'
-        && typeof progress.postedCount === 'number'
-        && progress.postedCount === 0;
-    case '剩余视频待履约':
-      return classification.communicationAction === '剩余视频履约';
-    case '视频修改':
-      return classification.communicationAction === '视频修改'
-        || currentStatus.includes('needs revision');
-    case '合作失败风险':
-      return classification.communicationAction === '最后确认'
-        || classification.highRisk
-        || task.failedWarnings.length > 0;
-    case '已发送待回复':
-      return trackingLabel === '已发送待回复';
-    case '达人已回复':
-      return trackingLabel === '达人已回复' || trackingLabel === '达人回复待处理';
-    case '已完成':
-      return isCompletedCreator(task);
-    case '已失败':
-      return isFailedCreator(task);
-    case '归档':
-      return isArchivedCreator(task, requiredVideos);
-    default:
-      return true;
-  }
-}
-
-function countOverviewMatches(tasks: Task[], overviewFilter: OverviewFilterKey, requiredVideos: number): number {
-  return tasks.filter((task) => matchesOverviewFilter(task, overviewFilter, requiredVideos)).length;
-}
-
-function creatorGeneratorEmptyState(activeFilter: OverviewFilterKey | ''): string {
-  if (activeFilter === 'todayContacted') return '今天还没有联系过的达人。';
-  return activeFilter ? '当前没有匹配的达人。' : '没有匹配的达人，请调整搜索词或切换筛选。';
-}
-
-function creatorOptionLabel(task: Task, requiredVideos: number): string {
-  const classification = classifyCreatorFollowUp(task, requiredVideos);
-  const trackingContext = wasContactedToday(task)
-    ? `今日已联系 · ${normalizedTrackingLabel(task)}`
-    : `今日未联系 · ${classification.urgencyLevel}`;
-  return `${trackingContext} · ${displayCreatorName(task.username)} · ${classification.communicationAction}`;
-}
-
-function formatDate(date: Date): string {
+function addDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
-function addDays(date: Date, days: number): string {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return formatDate(nextDate);
+function normalizeListText(value: string): string[] {
+  return value.split('\n').map((item) => item.trim()).filter(Boolean);
 }
 
-function followUpDelayDays(scenario: string): number {
-  if (scenario === 'Final Follow-up Before Failed Candidate' || scenario === 'Second Follow-up') return 1;
-  return 2;
+function listToText(value: string[] | undefined): string {
+  return (value ?? []).join('\n');
 }
 
-function suggestedNextAction(scenario: string): string {
-  if (scenario === 'Final Follow-up Before Failed Candidate') return '如果达人仍未回复，可再次确认是否继续合作，并准备标记合作失败。';
-  if (scenario === 'Partial Video Completion Follow-up') return '如果达人仍未更新剩余视频，可再次确认发布时间或剩余内容计划。';
-  if (scenario === 'Second Follow-up') return '如果达人仍未回复，可再次确认是否继续合作。';
-  return '如果达人仍未回复，可再次确认是否继续合作。';
+function displayName(row: Pick<CreatorRow, 'username'>): string {
+  return row.username.trim() || 'Unnamed creator';
 }
 
-function messagePreview(messageText: string): string {
-  const normalized = messageText.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= 90) return normalized;
-  return `${normalized.slice(0, 90)}…`;
+function safeLower(value: string | undefined) {
+  return (value ?? '').trim().toLowerCase();
 }
 
-function completedVideoProgress(currentProgress: string, requiredVideos: number): string {
-  const progress = normalizeVideoProgress(currentProgress, requiredVideos);
-  if (typeof progress.postedCount === 'number' && progress.postedCount >= requiredVideos) return progress.normalized;
-  return `${requiredVideos} of ${requiredVideos}`;
+function hasAny(value: string, terms: string[]) {
+  const normalized = safeLower(value);
+  return terms.some((term) => normalized.includes(term));
 }
 
-function appendUniqueNote(existingNotes: string, note: string): string {
-  const trimmedNote = note.trim();
-  if (!trimmedNote) return existingNotes;
-  if (existingNotes.includes(trimmedNote)) return existingNotes;
-  return [existingNotes.trim(), trimmedNote].filter(Boolean).join('\n');
+function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
+  const status = safeLower(row.currentStatus);
+  const shipping = safeLower(row.sampleShippingStatus);
+  const progress = normalizeVideoProgress(row.videoProgress, requiredVideos);
+  const notes = safeLower(row.notes);
+  const tracking = safeLower(row.trackingStatus);
+
+  if (hasAny(status, ['lost', 'failed', 'cancel', '失败']) || tracking === 'failed') return 'Lost';
+  if (hasAny(status, ['completed', 'complete', '已完成']) || tracking === 'completed') return 'Completed';
+  if (hasAny(status, ['spark'])) return 'Spark Ads Requested';
+  if (hasAny(status, ['ready for ads']) || hasAny(notes, ['ready for ads', 'high ctr', '投流'])) return 'Ready for Ads';
+  if (hasAny(status, ['tag missing']) || hasAny(notes, ['product tag missing', 'missing product card', '未挂'])) return 'Product Tag Missing';
+  if (hasAny(status, ['revision', 'revise', '修改'])) return 'Need Revision';
+  if ((progress.postedCount ?? 0) > 0 || hasAny(status, ['posted'])) return 'Posted';
+  if (hasAny(status, ['waiting video', 'waiting for video'])) return 'Waiting Video';
+  if (shipping === 'delivered' || Boolean(row.sampleDeliveredDate.trim()) || hasAny(status, ['delivered'])) return 'Delivered';
+  if (hasAny(shipping, ['shipped', 'in transit']) || hasAny(status, ['sample shipped', 'in transit'])) return 'Sample Shipped';
+  if (hasAny(status, ['approved'])) return 'Sample Approved';
+  if (hasAny(status, ['sample requested', 'requested'])) return 'Sample Requested';
+  if (hasAny(status, ['replied']) || tracking === 'replied' || tracking === 'reply pending') return 'Replied';
+  if (hasAny(status, ['invited', 'contacted', 'followed up']) || tracking === 'followed up') return 'Invited';
+  return 'Not Contacted';
 }
 
-function trackingRowClass(row: CreatorRow, task: Task | undefined, requiredVideos: number): string {
-  const classes: string[] = [];
-  const trackingLabel = trackingStatusLabel(row.trackingStatus);
-  if (trackingLabel === '已完成') classes.push('tracking-row-completed');
-  if (trackingLabel === '已失败') classes.push('tracking-row-failed');
+function statusTone(status: CreatorStatus) {
+  return `status-pill status-${status.toLowerCase().replace(/\s+/g, '-')}`;
+}
 
-  const urgencyLevel = task ? classifyCreatorFollowUp(task, requiredVideos).urgencyLevel : undefined;
-  if (urgencyLevel === '极高') classes.push('urgency-row-highest');
-  if (urgencyLevel === '高') classes.push('urgency-row-high');
+function parseNumberFromNotes(notes: string, keys: string[]): string {
+  for (const key of keys) {
+    const expression = new RegExp(`${key}\\s*[:：]\\s*([^,;\\n]+)`, 'i');
+    const match = notes.match(expression);
+    if (match?.[1]) return match[1].trim();
+  }
+  return '—';
+}
 
-  return classes.join(' ');
+function creatorType(row: CreatorRow) {
+  return parseNumberFromNotes(row.notes, ['niche', 'creator type', 'type']) === '—' ? 'Pet / UGC' : parseNumberFromNotes(row.notes, ['niche', 'creator type', 'type']);
+}
+
+function followerCount(row: CreatorRow) {
+  return parseNumberFromNotes(row.notes, ['followers', 'follower count', '粉丝']);
+}
+
+function avgViews(row: CreatorRow) {
+  return parseNumberFromNotes(row.notes, ['avg views', 'average views', '播放']);
+}
+
+function gmvRange(row: CreatorRow) {
+  return parseNumberFromNotes(row.notes, ['gmv', 'gmv range']);
+}
+
+function daysDelivered(row: CreatorRow) {
+  return row.sampleDeliveredDate ? daysSince(row.sampleDeliveredDate) : null;
+}
+
+function sampleHint(row: CreatorRow, requiredVideos: number) {
+  const status = inferStatus(row, requiredVideos);
+  const deliveredDays = daysDelivered(row);
+  const progress = normalizeVideoProgress(row.videoProgress, requiredVideos);
+
+  if (status === 'Sample Shipped') return '已寄出但未签收：确认物流是否卡住。';
+  if (status === 'Delivered' && deliveredDays !== null && deliveredDays >= 5 && (progress.postedCount ?? 0) === 0) return '已签收 5 天未发布：催发视频并确认拍摄计划。';
+  if (status === 'Delivered' && deliveredDays !== null && deliveredDays >= 3) return '已签收 3 天未回复：发送签收后跟进。';
+  if (status === 'Lost') return '达人取消合作：确认是否需退样。';
+  return '按下一次跟进日期复查。';
+}
+
+function buildTemplateMessages(form: TemplateForm) {
+  const creator = form.creatorName.trim() || '[Creator Name]';
+  const product = form.productName.trim() || '[Product Name]';
+  const sellingPoint = form.sellingPoint.trim() || '[Product Selling Point]';
+  const requirement = form.requirement.trim() || '[Video Requirement]';
+  const length = form.length.trim() || '[Video Length]';
+  const videos = form.videos.trim() || '[Number of Videos]';
+  const tag = form.tagRequirement.trim() || '[Product Tag Requirement]';
+  const tracking = form.trackingNumber.trim() || '[Tracking Number]';
+  const deadline = form.deadline.trim() || '[Deadline]';
+
+  return [
+    ['初次邀约', `Hi ${creator}, we love your pet content and would like to invite you to collaborate on ${product}. Key selling point: ${sellingPoint}. The requirement is ${videos} video(s), ${length}, with ${tag}. Are you open to receiving a sample?`],
+    ['达人同意合作', `Amazing, ${creator}! For ${product}, please cover: ${requirement}. Please keep each video ${length}, publish ${videos} video(s), and ${tag}. Deadline target: ${deadline}.`],
+    ['样品已寄出', `Your ${product} sample has been shipped. Tracking number: ${tracking}. Once it arrives, please test it with a real pet scene and share your posting plan.`],
+    ['样品已签收跟进', `Hi ${creator}, tracking shows the ${product} sample was delivered. Could you confirm you received it and let us know your filming schedule?`],
+    ['催发视频', `Hi ${creator}, just checking in on the ${product} video(s). The target is ${videos} video(s) by ${deadline}. Please let us know if you need anything before posting.`],
+    ['提醒挂商品卡', `Thanks for posting! One important fix: please attach the TikTok Shop product card for ${product}. ${tag}`],
+    ['要求修改视频', `Thanks for the draft/post. Could you revise it to include: ${requirement}. Please also keep it ${length} and avoid unsupported claims.`],
+    ['索要 Spark Ads 授权', `This video looks strong for paid boosting. Could you grant Spark Ads authorization / ad code for the ${product} post?`],
+    ['合作取消', `Understood. We will cancel this collaboration for ${product}. Please confirm no further posts will be made under this campaign.`],
+    ['要求退回样品', `Since the collaboration is cancelled, please return the ${product} sample. We can share the return details and next steps.`],
+  ];
 }
 
 function App() {
   const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
+  const [activeModule, setActiveModule] = useState<ModuleKey>('dashboard');
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
-  const [selectedCreatorId, setSelectedCreatorId] = useState('');
-  const [creatorSearchTerm, setCreatorSearchTerm] = useState('');
-  const [creatorQuickFilter, setCreatorQuickFilter] = useState<CreatorQuickFilterKey>('all');
-  const [activeOverviewFilter, setActiveOverviewFilter] = useState<OverviewFilterKey | ''>('');
+  const [toast, setToast] = useState<Toast>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CreatorStatus | 'All'>('All');
+  const [creatorTypeFilter, setCreatorTypeFilter] = useState('All');
+  const [followerFilter, setFollowerFilter] = useState('All');
+  const [avgViewsFilter, setAvgViewsFilter] = useState('All');
+  const [gmvFilter, setGmvFilter] = useState('All');
+  const [bulkStatus, setBulkStatus] = useState<CreatorStatus>('Invited');
   const [channel, setChannel] = useState<Channel>('TikTok DM');
+  const [selectedCreatorId, setSelectedCreatorId] = useState('');
   const [message, setMessage] = useState<GeneratedMessage | null>(null);
+  const [trackingStatus, setTrackingStatus] = useState('');
+  const [templateForm, setTemplateForm] = useState<TemplateForm>(() => emptyTemplateForm);
   const [filmingRequirements, setFilmingRequirements] = useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
   const [isEditingFilmingRequirements, setIsEditingFilmingRequirements] = useState(false);
   const [filmingProductNameDraft, setFilmingProductNameDraft] = useState(() => defaultCreatorFilmingRequirements.productName);
-  const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.requirements));
-  const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
-  const [referenceLinksDraft, setReferenceLinksDraft] = useState(() => toRequirementsText(defaultCreatorFilmingRequirements.referenceLinks ?? []));
+  const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() => listToText(defaultCreatorFilmingRequirements.requirements));
+  const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() => listToText(defaultCreatorFilmingRequirements.keyContentPoints));
+  const [referenceLinksDraft, setReferenceLinksDraft] = useState(() => listToText(defaultCreatorFilmingRequirements.referenceLinks));
   const [isPromptHelperOpen, setIsPromptHelperOpen] = useState(false);
-  const [promptHelperForm, setPromptHelperForm] = useState<ChatGptPromptHelperForm>(() => emptyChatGptPromptHelperForm);
+  const [promptHelperForm, setPromptHelperForm] = useState({ sellingPoints: '', videoCount: '', durationRequirement: '', targetPetOrScene: '', mustShowShots: '', avoidShots: '', referenceLinks: '' });
   const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState('');
   const [promptCopyStatus, setPromptCopyStatus] = useState('');
-  const [trackingStatus, setTrackingStatus] = useState('');
-  const [generatedMessageCreatorId, setGeneratedMessageCreatorId] = useState('');
-  const [nextFollowUpRecommendation, setNextFollowUpRecommendation] = useState<{ date: string; action: string } | null>(null);
-  const [isCreatorTableCollapsed, setIsCreatorTableCollapsed] = useState(false);
-  const [isCompactTableMode, setIsCompactTableMode] = useState(false);
-  const [isUrgencySortEnabled, setIsUrgencySortEnabled] = useState(true);
-  const [replyFocus, setReplyFocus] = useState('');
-  const [creatorRelationshipNote, setCreatorRelationshipNote] = useState('');
-  const [replyTone, setReplyTone] = useState<ReplyTone>('中立专业');
-  const [replyGoal, setReplyGoal] = useState('');
-  const [acceptableConcession, setAcceptableConcession] = useState('');
-  const generatorSectionRef = useRef<HTMLElement | null>(null);
 
   const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
-  const videoProgressHint = useMemo(() => buildVideoProgressHint(requiredVideos), [requiredVideos]);
   const tasks = useMemo(() => analyzeCreators(rows, undefined, requiredVideos), [rows, requiredVideos]);
-  const followUpTasks = tasks.filter((task) => task.needsFollowUp);
-  const generatorTasks = useMemo(() => {
-    const normalizedSearch = creatorSearchTerm.trim().toLowerCase();
-    return [...tasks]
-      .sort((a, b) => compareCreatorQueueOrder(a, b, requiredVideos))
-      .filter((task) => matchesQuickFilter(task, creatorQuickFilter, requiredVideos))
-      .filter((task) => matchesOverviewFilter(task, activeOverviewFilter, requiredVideos))
-      .filter((task) => !normalizedSearch || normalizedTaskSearchText(task, requiredVideos).includes(normalizedSearch));
-  }, [tasks, creatorSearchTerm, creatorQuickFilter, activeOverviewFilter, requiredVideos]);
-  const summary = useMemo(() => buildSummary(tasks), [tasks]);
-  const highestTasks = tasks.filter((task) => task.priority === 'Highest');
-  const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
-  const todayActionCards = useMemo<OverviewCardConfig[]>(() => ([
-    { key: 'today', label: '今日需跟进', value: countOverviewMatches(tasks, 'today', requiredVideos), tone: 'blue' },
-    { key: 'todayContacted', label: '今日已联系', value: countOverviewMatches(tasks, 'todayContacted', requiredVideos), tone: 'green' },
-    { key: 'todayNotContacted', label: '今日未联系', value: countOverviewMatches(tasks, 'todayNotContacted', requiredVideos), tone: 'gold' },
-    { key: 'todaySentWaiting', label: '今日已发送待回复', value: countOverviewMatches(tasks, 'todaySentWaiting', requiredVideos), tone: 'blue' },
-    { key: 'todayRepliedPending', label: '今日达人已回复待处理', value: countOverviewMatches(tasks, 'todayRepliedPending', requiredVideos), tone: 'purple' },
-    { key: '极高', label: '极高', value: countOverviewMatches(tasks, '极高', requiredVideos), tone: 'red' },
-    { key: '高', label: '高', value: countOverviewMatches(tasks, '高', requiredVideos), tone: 'orange' },
-    { key: '物流待确认', label: '物流待确认', value: countOverviewMatches(tasks, '物流待确认', requiredVideos), tone: 'cyan' },
-    { key: '样品到货待拍', label: '样品到货待拍', value: countOverviewMatches(tasks, '样品到货待拍', requiredVideos), tone: 'gold' },
-    { key: '剩余视频待履约', label: '剩余视频待履约', value: countOverviewMatches(tasks, '剩余视频待履约', requiredVideos), tone: 'orange' },
-    { key: '视频修改', label: '视频修改', value: countOverviewMatches(tasks, '视频修改', requiredVideos), tone: 'purple' },
-    { key: '合作失败风险', label: '合作失败风险', value: countOverviewMatches(tasks, '合作失败风险', requiredVideos), tone: 'red-gray' },
-  ]), [tasks, requiredVideos]);
-  const resultCards = useMemo<OverviewCardConfig[]>(() => ([
-    { key: '已发送待回复', label: '已发送待回复', value: countOverviewMatches(tasks, '已发送待回复', requiredVideos), tone: 'blue' },
-    { key: '达人已回复', label: '达人已回复', value: countOverviewMatches(tasks, '达人已回复', requiredVideos), tone: 'purple' },
-    { key: '已完成', label: '已完成', value: countOverviewMatches(tasks, '已完成', requiredVideos), tone: 'green' },
-    { key: '已失败', label: '已失败', value: countOverviewMatches(tasks, '已失败', requiredVideos), tone: 'red' },
-    { key: '归档', label: '归档', value: countOverviewMatches(tasks, '归档', requiredVideos), tone: 'gray' },
-  ]), [tasks, requiredVideos]);
-  const overviewFilterLabels: Partial<Record<OverviewFilterKey, string>> = {
-    today: '今日需跟进',
-    todayContacted: '今日已联系',
-    todayNotContacted: '今日未联系',
-    todaySentWaiting: '今日已发送待回复',
-    todayRepliedPending: '今日达人已回复待处理',
-  };
-  const activeOverviewFilterLabel = activeOverviewFilter ? overviewFilterLabels[activeOverviewFilter] ?? activeOverviewFilter : '';
-  const selectedTask = generatorTasks.find((task) => task.id === selectedCreatorId) ?? generatorTasks[0];
-  const selectedTaskClassification = selectedTask ? classifyCreatorFollowUp(selectedTask, requiredVideos) : null;
-  const isCreatorReplyScenario = selectedTaskClassification?.communicationAction === '回复达人消息';
-  const selectedCreatorReplyEntry = selectedTask?.followUpHistory?.slice().reverse().find((entry) => entry.action === 'Creator Replied' && entry.note?.trim());
-  const selectedCreatorReplyText = selectedCreatorReplyEntry?.note?.trim() || selectedTask?.lastCreatorResponse?.trim() || '';
-  const selectedCreatorReplyDate = selectedCreatorReplyEntry?.date;
-  const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
-  const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
-  const displayedRows = useMemo(() => {
-    if (!isUrgencySortEnabled) return rows;
-    const originalIndexById = new Map(rows.map((row, index) => [row.id, index]));
-    return [...rows].sort((a, b) => {
-      const aTask = tasksById.get(a.id);
-      const bTask = tasksById.get(b.id);
-      if (aTask && bTask) return compareCreatorQueueOrder(aTask, bTask, requiredVideos);
-      if (aTask && !bTask) return -1;
-      if (!aTask && bTask) return 1;
-      return (originalIndexById.get(a.id) ?? 0) - (originalIndexById.get(b.id) ?? 0);
-    });
-  }, [rows, tasksById, requiredVideos, isUrgencySortEnabled]);
+  const selectedTask = tasks.find((task) => task.id === selectedCreatorId) ?? tasks[0];
+  const templateMessages = useMemo(() => buildTemplateMessages(templateForm), [templateForm]);
+
+  useEffect(() => saveCreatorRows(rows), [rows]);
 
   useEffect(() => {
-    saveCreatorRows(rows);
-  }, [rows]);
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 2600);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const enrichedRows = useMemo(() => rows.map((row) => ({
+    row,
+    task: tasksById.get(row.id),
+    status: inferStatus(row, requiredVideos),
+    creatorType: creatorType(row),
+    followers: followerCount(row),
+    avgViews: avgViews(row),
+    gmv: gmvRange(row),
+  })), [rows, tasksById, requiredVideos]);
+
+  const filteredRows = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    return enrichedRows.filter((entry) => {
+      const haystack = [entry.row.username, entry.row.profileLink, entry.row.product, entry.row.currentStatus, entry.row.sampleShippingStatus, entry.row.notes, entry.status].join(' ').toLowerCase();
+      return (!normalized || haystack.includes(normalized))
+        && (statusFilter === 'All' || entry.status === statusFilter)
+        && (creatorTypeFilter === 'All' || entry.creatorType.toLowerCase().includes(creatorTypeFilter.toLowerCase()))
+        && (followerFilter === 'All' || entry.followers.includes(followerFilter))
+        && (avgViewsFilter === 'All' || entry.avgViews.includes(avgViewsFilter))
+        && (gmvFilter === 'All' || entry.gmv.toLowerCase().includes(gmvFilter.toLowerCase()));
+    });
+  }, [enrichedRows, search, statusFilter, creatorTypeFilter, followerFilter, avgViewsFilter, gmvFilter]);
+
+  const todayTodo = useMemo(() => tasks
+    .filter((task) => task.needsFollowUp || task.failedWarnings.length > 0 || inferStatus(task, requiredVideos) === 'Product Tag Missing' || inferStatus(task, requiredVideos) === 'Ready for Ads')
+    .sort((a, b) => a.priorityRank - b.priorityRank)
+    .slice(0, 12), [tasks, requiredVideos]);
+
+  const dashboardCards: Array<{ label: string; value: number; status?: CreatorStatus; filter?: (row: CreatorRow) => boolean }> = [
+    { label: '今日待邀约达人数量', value: enrichedRows.filter((entry) => entry.status === 'Not Contacted').length, status: 'Not Contacted' },
+    { label: '今日待跟进达人数量', value: tasks.filter((task) => task.needsFollowUp).length, filter: (row) => Boolean(tasksById.get(row.id)?.needsFollowUp) },
+    { label: '待寄样达人数量', value: enrichedRows.filter((entry) => ['Sample Requested', 'Sample Approved'].includes(entry.status)).length, status: 'Sample Requested' },
+    { label: '已寄样待签收数量', value: enrichedRows.filter((entry) => entry.status === 'Sample Shipped').length, status: 'Sample Shipped' },
+    { label: '已签收待发视频数量', value: enrichedRows.filter((entry) => ['Delivered', 'Waiting Video'].includes(entry.status)).length, status: 'Delivered' },
+    { label: '本周已发布视频数量', value: enrichedRows.filter((entry) => entry.status === 'Posted').length, status: 'Posted' },
+    { label: '待验收视频数量', value: enrichedRows.filter((entry) => ['Posted', 'Need Revision', 'Product Tag Missing'].includes(entry.status)).length, status: 'Posted' },
+    { label: '可投流素材数量', value: enrichedRows.filter((entry) => ['Ready for Ads', 'Spark Ads Requested'].includes(entry.status)).length, status: 'Ready for Ads' },
+  ];
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
     try {
       setError('');
-      setMessage(null);
-      setGeneratedMessageCreatorId('');
-      setNextFollowUpRecommendation(null);
-      setTrackingStatus('');
       const parsedRows = await parseCreatorFile(file, requiredVideos);
       setRows(parsedRows);
       setFileName(file.name);
-      setSelectedCreatorId('');
-      if (parsedRows.length === 0) {
-        setError('没有找到达人数据。请检查表头和表格内容。');
-      }
+      setSelectedIds([]);
+      setToast({ tone: 'success', text: '导入成功，已刷新工作台数据。' });
+      if (parsedRows.length === 0) setError('没有找到达人数据。请检查表头和表格内容。');
     } catch (err) {
       setError(err instanceof Error ? err.message : '无法解析该文件。');
-      setFileName('');
     }
   }
 
-  function handleGenerateMessage() {
-    if (!selectedTask) return;
-    const replyPersonalization: CreatorReplyPersonalization = {
-      relationshipNote: creatorRelationshipNote,
-      replyTone,
-      replyGoal,
-      acceptableConcession,
-    };
-    setMessage(generateMessage(selectedTask, channel, filmingRequirements, replyFocus, replyPersonalization));
-    setGeneratedMessageCreatorId(selectedTask.id);
-    setNextFollowUpRecommendation(null);
-    setTrackingStatus('');
-  }
-
-  async function handleCopyGeneratedMessage() {
-    if (!message) return;
-
-    try {
-      await navigator.clipboard.writeText(message.english);
-      setTrackingStatus('已复制英文话术。');
-    } catch {
-      setTrackingStatus('复制失败，请手动选中英文话术复制。');
-    }
-  }
-
-  function updateGeneratedCreator(updater: (row: CreatorRow, today: string) => CreatorRow, confirmation: string) {
-    if (!generatedMessageCreatorId) return;
-    const today = formatDate(new Date());
-
-    setRows((currentRows) => {
-      const updatedRows = currentRows.map((row) => (
-        row.id === generatedMessageCreatorId ? updater(row, today) : row
-      ));
-      saveCreatorRows(updatedRows);
-      return updatedRows;
-    });
-    setTrackingStatus(confirmation);
-  }
-
-  function handleMarkMessageSent() {
-    if (!message) return;
-    const scenario = message.scenario;
-    const nextDate = addDays(new Date(), followUpDelayDays(scenario));
-    const nextAction = suggestedNextAction(scenario);
-
-    updateGeneratedCreator((row, today) => {
-      const entry: FollowUpHistoryEntry = {
-        date: today,
-        channel,
-        scenario: scenarioLabel[scenario] ?? scenario,
-        message: message.english,
-        action: 'Message Sent',
-      };
-
-      return {
-        ...row,
-        lastContactDate: today,
-        lastFollowUpCount: row.lastFollowUpCount + 1,
-        trackingStatus: 'Followed Up',
-        lastMessageScenario: scenarioLabel[scenario] ?? scenario,
-        lastMessageChannel: channel,
-        lastMessageSentAt: today,
-        nextFollowUpDate: nextDate,
-        followUpHistory: [...(row.followUpHistory ?? []), entry],
-      };
-    }, '已标记为发送，并同步更新数据表格。');
-    setNextFollowUpRecommendation({ date: nextDate, action: nextAction });
-  }
-
-  function handleMarkCreatorReplied() {
-    const note = window.prompt('记录达人回复内容或下一步重点：');
-    if (note === null) return;
-    const trimmedNote = note.trim();
-
-    updateGeneratedCreator((row, today) => ({
-      ...row,
-      lastContactDate: today,
-      lastCreatorResponse: trimmedNote,
-      trackingStatus: 'Replied',
-      followUpHistory: [
-        ...(row.followUpHistory ?? []),
-        { date: today, action: 'Creator Replied', note: trimmedNote },
-      ],
-    }), '已记录达人回复，并同步更新数据表格。');
-  }
-
-  function handleMarkCompleted() {
-    const confirmed = window.confirm('确定要标记这个达人合作完成吗？');
-    if (!confirmed) return;
-
-    updateGeneratedCreator((row, today) => ({
-      ...row,
-      currentStatus: 'Completed',
-      trackingStatus: 'Completed',
-      videoProgress: completedVideoProgress(row.videoProgress, requiredVideos),
-      videoProgressWarning: undefined,
-      lastContactDate: today,
-      followUpHistory: [
-        ...(row.followUpHistory ?? []),
-        { date: today, action: 'Completed' },
-      ],
-    }), '已标记合作完成，并同步更新数据表格。');
-  }
-
-  function handleMarkFailed() {
-    const confirmed = window.confirm('确定要标记这个达人合作失败吗？');
-    if (!confirmed) return;
-    const note = window.prompt('记录失败原因或备注（可选）：');
-    if (note === null) return;
-    const trimmedNote = note.trim();
-
-    updateGeneratedCreator((row, today) => ({
-      ...row,
-      currentStatus: 'Failed',
-      trackingStatus: 'Failed',
-      lastContactDate: today,
-      lastCreatorResponse: trimmedNote || row.lastCreatorResponse,
-      notes: appendUniqueNote(row.notes, trimmedNote),
-      followUpHistory: [
-        ...(row.followUpHistory ?? []),
-        { date: today, action: 'Failed', note: trimmedNote },
-      ],
-    }), '已标记合作失败，并同步更新数据表格。');
-  }
-
-  function handleEditFilmingRequirements() {
-    setFilmingProductNameDraft(filmingRequirements.productName);
-    setFilmingRequirementsDraft(toRequirementsText(filmingRequirements.requirements));
-    setKeyContentPointsDraft(toRequirementsText(filmingRequirements.keyContentPoints));
-    setReferenceLinksDraft(toRequirementsText(filmingRequirements.referenceLinks ?? []));
-    setIsEditingFilmingRequirements(true);
-  }
-
-  function handleSaveFilmingRequirements() {
-    const nextFilmingRequirements = {
-      productName: filmingProductNameDraft.trim() || defaultCreatorFilmingRequirements.productName,
-      requirements: normalizeListText(filmingRequirementsDraft),
-      keyContentPoints: normalizeListText(keyContentPointsDraft),
-      referenceLinks: normalizeReferenceLinksText(referenceLinksDraft),
-    };
-
-    setFilmingRequirements(nextFilmingRequirements);
-    saveFilmingRequirements(nextFilmingRequirements);
-    setIsEditingFilmingRequirements(false);
+  function updateRow(rowId: string, field: EditableCreatorField, value: string) {
+    setRows((currentRows) => currentRows.map((row) => (row.id === rowId ? updateCreatorField(row, field, value, requiredVideos) : row)));
     setMessage(null);
   }
 
-  function handleRestoreDefaultFilmingRequirements() {
-    setFilmingProductNameDraft(defaultCreatorFilmingRequirements.productName);
-    setFilmingRequirementsDraft(toRequirementsText(defaultCreatorFilmingRequirements.requirements));
-    setKeyContentPointsDraft(toRequirementsText(defaultCreatorFilmingRequirements.keyContentPoints));
-    setReferenceLinksDraft(toRequirementsText(defaultCreatorFilmingRequirements.referenceLinks ?? []));
-    setFilmingRequirements(defaultCreatorFilmingRequirements);
-    saveFilmingRequirements(defaultCreatorFilmingRequirements);
-    setIsEditingFilmingRequirements(false);
-    setMessage(null);
-  }
-
-  function handleOpenPromptHelper() {
-    setPromptHelperForm({
-      ...emptyChatGptPromptHelperForm,
-      videoCount: String(requiredVideos),
-      referenceLinks: toRequirementsText(filmingRequirements.referenceLinks ?? []),
-    });
-    setGeneratedChatGptPrompt('');
-    setPromptCopyStatus('');
-    setIsPromptHelperOpen(true);
-  }
-
-  function handleClosePromptHelper() {
-    setIsPromptHelperOpen(false);
-    setGeneratedChatGptPrompt('');
-    setPromptCopyStatus('');
-  }
-
-  function updatePromptHelperField(field: keyof ChatGptPromptHelperForm, value: string) {
-    setPromptHelperForm((currentForm) => ({ ...currentForm, [field]: value }));
-  }
-
-  function getCurrentProductNameForPromptHelper() {
-    return isEditingFilmingRequirements
-      ? filmingProductNameDraft.trim() || filmingRequirements.productName
-      : filmingRequirements.productName;
-  }
-
-  function buildChatGptPrompt(form: ChatGptPromptHelperForm): string {
-    const fieldValue = (value: string) => value.trim() || '请根据常见 TikTok Shop 达人合作需求补充';
-
-    return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。
-
-【产品信息】
-- 产品名称：${fieldValue(getCurrentProductNameForPromptHelper())}
-- 产品卖点：${fieldValue(form.sellingPoints)}
-- 目标视频数量：${fieldValue(form.videoCount)}
-- 单条视频时长要求：${fieldValue(form.durationRequirement)}
-- 目标宠物 / 使用场景：${fieldValue(form.targetPetOrScene)}
-- 必须展示的画面：${fieldValue(form.mustShowShots)}
-- 不希望达人这样拍：${fieldValue(form.avoidShots)}
-- 对标视频链接（可选）：${form.referenceLinks.trim() || '无'}
-
-请按以下结构输出，全部使用简体中文：
-1. 产品名称
-2. 达人拍摄要求（5-8 条，简洁明确，包含目标视频数量、单条视频时长、tag 品牌账号、挂 TikTok Shop 产品链接等要求）
-3. 重点拍摄内容（5-8 条，围绕卖点、使用场景、必须展示画面和避免事项）
-
-口吻要求：
-- 适合 TikTok Shop 达人的简洁口吻
-- 不要太像合同，不要太正式
-- 适合美国 TikTok 达人沟通
-- 清楚说明需要拍什么、怎么展示、哪些不要拍
-- 输出内容方便我复制回工具里的「达人拍摄要求」和「内容重点」编辑框。`;
-  }
-
-  function handleGenerateChatGptPrompt() {
-    setGeneratedChatGptPrompt(buildChatGptPrompt(promptHelperForm));
-    setPromptCopyStatus('');
-  }
-
-  async function handleCopyChatGptPrompt() {
-    if (!generatedChatGptPrompt) return;
-
-    try {
-      await navigator.clipboard.writeText(generatedChatGptPrompt);
-      setPromptCopyStatus('已复制提示词。');
-    } catch {
-      setPromptCopyStatus('复制失败，请手动选中文字复制。');
+  function handleDashboardCardClick(card: typeof dashboardCards[number]) {
+    setActiveModule('creators');
+    setSearch('');
+    setStatusFilter(card.status ?? 'All');
+    if (!card.status && card.filter) {
+      const matchingIds = rows.filter(card.filter).map((row) => row.id);
+      setSelectedIds(matchingIds);
     }
   }
 
   function handleAddCreator() {
     const newRow = createBlankCreatorRow(filmingRequirements.productName, requiredVideos);
-
     setRows((currentRows) => [newRow, ...currentRows]);
     setSelectedCreatorId(newRow.id);
-    setMessage(null);
-    setError('');
+    setActiveModule('creators');
+    setToast({ tone: 'success', text: '已新增达人，可直接编辑表格字段。' });
   }
 
-  function handleEditCreator(rowId: string, field: EditableCreatorField, value: string) {
-    setRows((currentRows) => currentRows.map((row) => (
-      row.id === rowId ? updateCreatorField(row, field, value, requiredVideos) : row
-    )));
-    setMessage(null);
-    setGeneratedMessageCreatorId('');
-    setNextFollowUpRecommendation(null);
-    setTrackingStatus('');
-    setReplyFocus('');
+  function toggleSelected(rowId: string) {
+    setSelectedIds((ids) => (ids.includes(rowId) ? ids.filter((id) => id !== rowId) : [...ids, rowId]));
   }
 
-  function handleDeleteCreator(rowId: string) {
-    const confirmed = window.confirm('确定要删除这个达人吗？');
-    if (!confirmed) return;
-
-    setRows((currentRows) => deleteCreatorRow(currentRows, rowId));
-    setSelectedCreatorId((currentCreatorId) => (currentCreatorId === rowId ? '' : currentCreatorId));
-    setMessage(null);
+  function toggleSelectAll(event: ChangeEvent<HTMLInputElement>) {
+    setSelectedIds(event.target.checked ? filteredRows.map((entry) => entry.row.id) : []);
   }
 
-  function handleClearData() {
-    const confirmed = window.confirm('确定要清空当前浏览器中保存的达人数据吗？');
-    if (!confirmed) return;
-
-    clearSavedCreatorRows();
-    setRows([]);
-    setFileName('');
-    setSelectedCreatorId('');
-    setMessage(null);
-    setError('');
+  function applyStatusToRows(ids: string[], status: CreatorStatus) {
+    setRows((currentRows) => currentRows.map((row) => (ids.includes(row.id) ? { ...row, currentStatus: status } : row)));
+    setToast({ tone: 'success', text: `已更新 ${ids.length} 位达人状态为 ${status}。` });
   }
 
-  function handleExportData() {
-    downloadCreatorRowsCsv(rows);
+  function handleBulkStatusUpdate() {
+    if (selectedIds.length === 0) return;
+    applyStatusToRows(selectedIds, bulkStatus);
   }
 
-  function scrollToGeneratorQueue() {
-    window.setTimeout(() => {
-      generatorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 0);
+  async function copyText(text: string, successText = '复制成功。') {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast({ tone: 'success', text: successText });
+    } catch {
+      setToast({ tone: 'warning', text: '复制失败，请手动复制。' });
+    }
   }
 
-  function handleOverviewCardClick(filterKey: OverviewFilterKey) {
-    const matchingTasks = [...tasks]
-      .sort((a, b) => compareCreatorQueueOrder(a, b, requiredVideos))
-      .filter((task) => matchesOverviewFilter(task, filterKey, requiredVideos));
-
-    setActiveOverviewFilter(filterKey);
-    setCreatorSearchTerm('');
-    setCreatorQuickFilter(['极高', '高', '中', '低'].includes(filterKey) ? filterKey as CreatorQuickFilterKey : 'all');
-    setSelectedCreatorId(matchingTasks[0]?.id ?? '');
-    setMessage(null);
-    setGeneratedMessageCreatorId('');
-    setNextFollowUpRecommendation(null);
-    setTrackingStatus('');
-    setReplyFocus('');
-    scrollToGeneratorQueue();
+  function buildOutreachForRow(row: CreatorRow) {
+    return `Hi @${displayName(row)}, we love your TikTok pet content and would like to invite you to collaborate on ${row.product || filmingRequirements.productName}. Are you open to receiving a sample and creating ${requiredVideos} TikTok Shop video(s)?`;
   }
 
-  function handleClearOverviewFilter() {
-    setActiveOverviewFilter('');
-    setCreatorQuickFilter('all');
-    setSelectedCreatorId('');
-    setMessage(null);
-    setReplyFocus('');
+  function handleBulkCopyOutreach() {
+    const selectedRows = rows.filter((row) => selectedIds.includes(row.id));
+    if (selectedRows.length === 0) return;
+    void copyText(selectedRows.map(buildOutreachForRow).join('\n\n---\n\n'), `已复制 ${selectedRows.length} 条邀约话术。`);
   }
 
-  return (
-    <main className="shell">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">TikTok Creator SOP Tool MVP</p>
-          <h1>今天应该跟进谁，为什么？</h1>
-          <p className="hero-copy">
-            上传达人合作表格，系统会根据 SOP 规则分析每个达人的合作状态，自动生成今日跟进清单、优先级、失败风险提醒，并支持按渠道生成达人沟通话术。
-          </p>
-        </div>
-        <div className="brief-card">
-          <div className="filming-requirements-heading">
-            <h2>达人拍摄要求</h2>
-            <div className="filming-requirements-heading-actions">
-              {!isEditingFilmingRequirements && (
-                <button type="button" className="secondary compact" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button>
-              )}
-            </div>
-          </div>
-          {isEditingFilmingRequirements ? (
-            <div className="filming-requirements-editor">
-              <label>
-                产品名称
-                <input value={filmingProductNameDraft} onChange={(event) => setFilmingProductNameDraft(event.target.value)} />
-              </label>
-              <label>
-                拍摄要求（每行一条）
-                <textarea value={filmingRequirementsDraft} onChange={(event) => setFilmingRequirementsDraft(event.target.value)} rows={5} />
-              </label>
-              <label>
-                内容重点（每行一条）
-                <textarea value={keyContentPointsDraft} onChange={(event) => setKeyContentPointsDraft(event.target.value)} rows={6} />
-              </label>
-              <label>
-                对标视频链接（可选，每行一个）
-                <textarea
-                  value={referenceLinksDraft}
-                  onChange={(event) => setReferenceLinksDraft(event.target.value)}
-                  rows={4}
-                  placeholder="粘贴 TikTok / Shop / 参考视频链接，每行一个。可用于给达人参考拍摄模板或优化方向。"
-                />
-              </label>
-              <div className="filming-requirements-actions">
-                <button type="button" onClick={handleSaveFilmingRequirements}>保存拍摄要求</button>
-                <button type="button" className="secondary" onClick={handleRestoreDefaultFilmingRequirements}>恢复默认拍摄要求</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <strong>{filmingRequirements.productName}</strong>
-              <h3>Requirements</h3>
-              <ul>
-                {filmingRequirements.requirements.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-              <h3>Key content points</h3>
-              <ul>
-                {filmingRequirements.keyContentPoints.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-              {(filmingRequirements.referenceLinks ?? []).length > 0 && (
-                <section className="reference-links-section">
-                  <h3>参考视频链接</h3>
-                  <ul>
-                    {(filmingRequirements.referenceLinks ?? []).map((link) => (
-                      <li key={link}>{link}</li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-            </>
-          )}
+  function handleGenerateMessage() {
+    if (!selectedTask) return;
+    const generated = generateMessage(selectedTask, channel, filmingRequirements);
+    setMessage(generated);
+    setSelectedCreatorId(selectedTask.id);
+  }
 
-          <section className="prompt-helper-section" aria-labelledby="prompt-helper-title">
-            <div className="prompt-helper-heading">
-              <div>
-                <h3 id="prompt-helper-title">用 ChatGPT 辅助生成拍摄要求（可选）</h3>
-                <p className="muted">这个功能只会生成可复制的提示词，不会自动修改或保存拍摄要求。复制到 ChatGPT 生成结果后，再粘贴到上方「达人拍摄要求」里保存。</p>
-              </div>
-              {isPromptHelperOpen ? (
-                <button type="button" className="secondary compact" onClick={handleClosePromptHelper}>收起辅助生成</button>
-              ) : (
-                <button type="button" className="secondary compact" onClick={handleOpenPromptHelper}>展开辅助生成</button>
-              )}
-            </div>
+  async function handleCopyGeneratedMessage() {
+    if (!message) return;
+    await copyText(message.english, '已复制英文话术。');
+    setTrackingStatus('已复制英文话术。');
+  }
 
-            {isPromptHelperOpen && (
-              <div className="ai-generator-panel">
-                <p className="ai-cost-note">当前版本不调用 API，不产生额外费用。提示词会使用上方「产品名称」作为产品名称。</p>
-                <div className="ai-generator-grid">
-                  <label className="wide">
-                    产品卖点
-                    <textarea value={promptHelperForm.sellingPoints} onChange={(event) => updatePromptHelperField('sellingPoints', event.target.value)} rows={3} />
-                  </label>
-                  <label>
-                    目标视频数量
-                    <input value={promptHelperForm.videoCount} onChange={(event) => updatePromptHelperField('videoCount', event.target.value)} />
-                  </label>
-                  <label>
-                    单条视频时长要求
-                    <input value={promptHelperForm.durationRequirement} onChange={(event) => updatePromptHelperField('durationRequirement', event.target.value)} placeholder="例如：60 秒以上" />
-                  </label>
-                  <label className="wide">
-                    目标宠物 / 使用场景
-                    <input value={promptHelperForm.targetPetOrScene} onChange={(event) => updatePromptHelperField('targetPetOrScene', event.target.value)} />
-                  </label>
-                  <label className="wide">
-                    必须展示的画面
-                    <textarea value={promptHelperForm.mustShowShots} onChange={(event) => updatePromptHelperField('mustShowShots', event.target.value)} rows={3} />
-                  </label>
-                  <label className="wide">
-                    不希望达人这样拍
-                    <textarea value={promptHelperForm.avoidShots} onChange={(event) => updatePromptHelperField('avoidShots', event.target.value)} rows={3} />
-                  </label>
-                  <label className="wide">
-                    对标视频链接（可选，每行一个）
-                    <textarea value={promptHelperForm.referenceLinks} onChange={(event) => updatePromptHelperField('referenceLinks', event.target.value)} rows={2} />
-                  </label>
-                </div>
-                <div className="filming-requirements-actions">
-                  <button type="button" onClick={handleGenerateChatGptPrompt}>生成可复制提示词</button>
-                </div>
-                {generatedChatGptPrompt && (
-                  <div className="chatgpt-prompt-output">
-                    <p className="ai-status">提示词已生成。请复制到 ChatGPT 使用。</p>
-                    <p className="prompt-next-step">下一步：复制提示词到 ChatGPT，生成结果后，把适合的内容粘贴到上方「拍摄要求」和「内容重点」里，再点击保存。</p>
-                    <label>
-                      ChatGPT 提示词
-                      <textarea value={generatedChatGptPrompt} readOnly rows={14} />
-                    </label>
-                    <div className="filming-requirements-actions">
-                      <button type="button" onClick={handleCopyChatGptPrompt}>复制提示词</button>
-                    </div>
-                    {promptCopyStatus && <p className="ai-status">{promptCopyStatus}</p>}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-      </header>
+  function handleMarkMessageSent() {
+    if (!selectedTask || !message) return;
+    const today = todayString();
+    setRows((currentRows) => currentRows.map((row) => (row.id === selectedTask.id ? {
+      ...row,
+      currentStatus: inferStatus(row, requiredVideos) === 'Not Contacted' ? 'Invited' : row.currentStatus,
+      lastContactDate: today,
+      lastFollowUpCount: row.lastFollowUpCount + 1,
+      trackingStatus: 'Followed Up',
+      lastMessageScenario: message.scenario,
+      lastMessageChannel: channel,
+      lastMessageSentAt: today,
+      nextFollowUpDate: addDays(2),
+      followUpHistory: [...(row.followUpHistory ?? []), { date: today, action: 'Message Sent', channel, scenario: message.scenario, message: message.english }],
+    } : row)));
+    setTrackingStatus('已标记为发送，并同步更新数据表格。');
+    setToast({ tone: 'success', text: '状态已更新，下一次跟进已排程。' });
+  }
 
-      <section className="panel upload-panel">
-        <div>
-          <h2>1. 上传达人表格</h2>
-          <p>支持格式：.csv、.xls、.xlsx。数据已保存在当前浏览器。本版本不支持跨设备同步。</p>
-          <p className="muted">不需要登录，不保存数据库；刷新或重新打开本浏览器页面时会自动恢复已保存数据。</p>
-        </div>
-        <div className="upload-actions">
-          <label className="upload-box">
-            <input type="file" accept=".csv,.xls,.xlsx" onChange={(event) => handleFile(event.target.files?.[0])} />
-            <span>选择 CSV 或 Excel 文件</span>
-            {fileName && <small>已加载：{fileName}</small>}
-            {!fileName && rows.length > 0 && <small>已恢复当前浏览器保存的数据</small>}
-          </label>
-          <div className="data-actions">
-            <button type="button" onClick={handleExportData} disabled={rows.length === 0}>导出当前表格</button>
-            <button type="button" className="secondary danger" onClick={handleClearData} disabled={rows.length === 0}>清空当前数据</button>
-          </div>
-        </div>
-        {error && <p className="error">{error}</p>}
-      </section>
+  function handleMarkCreatorReplied() {
+    if (!selectedTask) return;
+    const note = window.prompt('记录达人回复内容或下一步重点：') ?? '';
+    const today = todayString();
+    setRows((currentRows) => currentRows.map((row) => (row.id === selectedTask.id ? {
+      ...row,
+      currentStatus: 'Replied',
+      trackingStatus: 'Replied',
+      lastContactDate: today,
+      lastCreatorResponse: note,
+      followUpHistory: [...(row.followUpHistory ?? []), { date: today, action: 'Creator Replied', note }],
+    } : row)));
+    setTrackingStatus('已记录达人回复，并同步更新数据表格。');
+    setToast({ tone: 'success', text: '已记录达人回复。' });
+  }
 
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <h2>2. 可编辑数据表</h2>
-            <p className="muted">可直接新增、删除或修改表格字段，优先级、今日概览、失败风险和话术候选会即时重新计算并自动保存。</p>
-          </div>
-          <div className="table-heading-actions">
-            <button type="button" onClick={handleAddCreator}>新增达人</button>
-            {rows.length > 0 && (
-              <div className="table-view-controls" aria-label="数据表显示控制">
-                <button type="button" className="secondary compact" onClick={() => setIsCreatorTableCollapsed((collapsed) => !collapsed)}>
-                  {isCreatorTableCollapsed ? '展开表格' : '收起表格'}
-                </button>
-                <label className="compact-mode-toggle">
-                  <input type="checkbox" checked={isUrgencySortEnabled} onChange={(event) => setIsUrgencySortEnabled(event.target.checked)} />
-                  按紧急程度排序
-                </label>
-                <label className="compact-mode-toggle">
-                  <input type="checkbox" checked={isCompactTableMode} onChange={(event) => setIsCompactTableMode(event.target.checked)} />
-                  紧凑模式
-                </label>
-              </div>
-            )}
-            <p className="hint">{videoProgressHint}</p>
-          </div>
-        </div>
-        {rows.length === 0 ? (
-          <p className="empty creator-empty-state">当前还没有达人数据。你可以上传表格，或点击「新增达人」手动添加。</p>
-        ) : (
-          <>
-            {isCreatorTableCollapsed ? (
-              <p className="table-collapsed-summary">当前共 {rows.length} 位达人，点击展开查看或编辑数据表。</p>
-            ) : (
-            <div className={isCompactTableMode ? 'table-wrap editable-table-wrap compact-table-mode' : 'table-wrap editable-table-wrap'} style={{ maxHeight: 620, overflow: 'auto' }} data-testid="editable-table-scroll-container">
-              <table className="editable-table">
-                <thead className="sticky-table-header">
-                  <tr>
-                    <th>紧急度</th>
-                    <th className="sticky-creator-column">达人账号</th>
-                    <th>主页链接</th>
-                    <th>联系渠道</th>
-                    <th>产品</th>
-                    <th>合作状态</th>
-                    <th>物流状态</th>
-                    <th>样品到货日期</th>
-                    <th>视频进度</th>
-                    <th>首条视频发布日期</th>
-                    <th>最近联系日期</th>
-                    <th>跟进次数</th>
-                    <th>跟进状态</th>
-                    <th>最近沟通动作</th>
-                    <th>最近沟通渠道</th>
-                    <th>下次跟进日期</th>
-                    <th>达人回复/下一步备注</th>
-                    <th>跟进记录</th>
-                    <th>备注</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayedRows.map((row) => {
-                    const rowTask = tasksById.get(row.id);
-                    const urgencyLevel = rowTask ? classifyCreatorFollowUp(rowTask, requiredVideos).urgencyLevel : '低';
+  function handleSaveFilmingRequirements() {
+    const next = {
+      productName: filmingProductNameDraft.trim() || defaultCreatorFilmingRequirements.productName,
+      requirements: normalizeListText(filmingRequirementsDraft),
+      keyContentPoints: normalizeListText(keyContentPointsDraft),
+      referenceLinks: normalizeListText(referenceLinksDraft),
+    };
+    setFilmingRequirements(next);
+    setTemplateForm((form) => ({ ...form, productName: next.productName, videos: String(parseRequiredVideos(next)) }));
+    saveFilmingRequirements(next);
+    setIsEditingFilmingRequirements(false);
+    setToast({ tone: 'success', text: '拍摄要求已保存。' });
+  }
 
-                    return (
-                    <tr key={row.id} className={trackingRowClass(row, rowTask, requiredVideos)}>
-                      <td><span className={urgencyBadgeClass[urgencyLevel]}>紧急度：{urgencyLevel}</span></td>
-                      <EditableCell className="sticky-creator-column" label="达人账号" value={row.username} onChange={(value) => handleEditCreator(row.id, 'username', value)} autoFocus={selectedCreatorId === row.id && row.username === ''} />
-                      <EditableCell label="主页链接" value={row.profileLink} onChange={(value) => handleEditCreator(row.id, 'profileLink', value)} />
-                      <EditableCell label="联系渠道" value={row.contactMethod} onChange={(value) => handleEditCreator(row.id, 'contactMethod', value)} />
-                      <EditableCell label="产品" value={row.product} onChange={(value) => handleEditCreator(row.id, 'product', value)} />
-                      <EditableCell label="合作状态" value={row.currentStatus} onChange={(value) => handleEditCreator(row.id, 'currentStatus', value)} badge={<span className={cooperationStatusClass(row.currentStatus)}>{cooperationStatusDisplay(row.currentStatus)}</span>} />
-                      <EditableCell label="物流状态" value={row.sampleShippingStatus} onChange={(value) => handleEditCreator(row.id, 'sampleShippingStatus', value)} />
-                      <EditableCell label="样品到货日期" value={row.sampleDeliveredDate} onChange={(value) => handleEditCreator(row.id, 'sampleDeliveredDate', value)} />
-                      <EditableCell
-                        label="视频进度"
-                        value={row.videoProgress}
-                        warning={normalizeVideoProgress(row.videoProgress, requiredVideos).warning}
-                        onChange={(value) => handleEditCreator(row.id, 'videoProgress', value)}
-                      />
-                      <EditableCell label="首条视频发布日期" value={row.firstVideoPostedDate} onChange={(value) => handleEditCreator(row.id, 'firstVideoPostedDate', value)} />
-                      <EditableCell label="最近联系日期" value={row.lastContactDate} onChange={(value) => handleEditCreator(row.id, 'lastContactDate', value)} />
-                      <EditableCell label="跟进次数" type="number" value={String(row.lastFollowUpCount)} onChange={(value) => handleEditCreator(row.id, 'lastFollowUpCount', value)} />
-                      <EditableCell label="跟进状态" value={row.trackingStatus ?? ''} onChange={(value) => handleEditCreator(row.id, 'trackingStatus', value)} badge={<span className={trackingStatusClass(row.trackingStatus)}>{trackingStatusLabel(row.trackingStatus)}</span>} />
-                      <EditableCell label="最近沟通动作" value={row.lastMessageScenario ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageScenario', value)} />
-                      <EditableCell label="最近沟通渠道" value={row.lastMessageChannel ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastMessageChannel', value)} />
-                      <EditableCell label="下次跟进日期" value={row.nextFollowUpDate ?? ''} onChange={(value) => handleEditCreator(row.id, 'nextFollowUpDate', value)} />
-                      <EditableCell label="达人回复/下一步备注" multiline value={row.lastCreatorResponse ?? ''} onChange={(value) => handleEditCreator(row.id, 'lastCreatorResponse', value)} />
-                      <td className="history-cell">
-                        <details>
-                          <summary>{followUpHistoryLabel(row)}</summary>
-                          {(row.followUpHistory?.length ?? 0) === 0 ? (
-                            <p className="empty compact-empty">暂无记录</p>
-                          ) : (
-                            <ul className="compact-history-list">
-                              {(row.followUpHistory ?? []).slice(-5).reverse().map((entry, index) => (
-                                <li key={`${entry.date}-${entry.action}-${index}`}>
-                                  <strong>{entry.date}</strong> · {followUpActionLabel(entry.action)}
-                                  {entry.channel && <> · {entry.channel}</>}
-                                  {entry.scenario && <> · {entry.scenario}</>}
-                                  {entry.note && <p>{entry.note}</p>}
-                                  {entry.message && <p>{messagePreview(entry.message)}</p>}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </details>
-                      </td>
-                      <EditableCell label="备注" multiline value={row.notes} onChange={(value) => handleEditCreator(row.id, 'notes', value)} />
-                      <td>
-                        <button type="button" className="secondary danger row-action" onClick={() => handleDeleteCreator(row.id)}>删除</button>
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            )}
-            <p className="muted">当前共 {rows.length} 行。导出使用中文表头，并保留旧英文表头导入兼容。</p>
-          </>
-        )}
-      </section>
+  function handleEditFilmingRequirements() {
+    setFilmingProductNameDraft(filmingRequirements.productName);
+    setFilmingRequirementsDraft(listToText(filmingRequirements.requirements));
+    setKeyContentPointsDraft(listToText(filmingRequirements.keyContentPoints));
+    setReferenceLinksDraft(listToText(filmingRequirements.referenceLinks));
+    setIsEditingFilmingRequirements(true);
+  }
 
-      {rows.length > 0 && (
-        <>
+  function handleRestoreDefaultFilmingRequirements() {
+    setFilmingProductNameDraft(defaultCreatorFilmingRequirements.productName);
+    setFilmingRequirementsDraft(listToText(defaultCreatorFilmingRequirements.requirements));
+    setKeyContentPointsDraft(listToText(defaultCreatorFilmingRequirements.keyContentPoints));
+    setReferenceLinksDraft(listToText(defaultCreatorFilmingRequirements.referenceLinks));
+    setFilmingRequirements(defaultCreatorFilmingRequirements);
+    saveFilmingRequirements(defaultCreatorFilmingRequirements);
+    setIsEditingFilmingRequirements(false);
+    setToast({ tone: 'success', text: '已恢复默认拍摄要求。' });
+  }
 
-          <section className="panel">
-            <h2>3. 今日跟进概览</h2>
-            <p className="muted">点击卡片可筛选并跳转到「达人跟进队列」。</p>
-            <div className="overview-group">
-              <div className="overview-group-heading">
-                <h3>今日行动</h3>
-                <span><span>达人总数</span>：{summary.totalCreators}</span>
-              </div>
-              <div className="summary-grid action-summary-grid">
-                {todayActionCards.map((card) => (
-                  <SummaryCard
-                    key={card.key}
-                    label={card.label}
-                    splitLabel={card.label === '已发送待回复' || card.label === '达人已回复'}
-                    value={card.value}
-                    tone={card.tone}
-                    active={activeOverviewFilter === card.key}
-                    onClick={() => handleOverviewCardClick(card.key)}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="overview-group">
-              <div className="overview-group-heading">
-                <h3>跟进结果</h3>
-                <span>发送、回复、完成、失败会实时更新</span>
-              </div>
-              <div className="summary-grid result-summary-grid">
-                {resultCards.map((card) => (
-                  <SummaryCard
-                    key={card.key}
-                    label={card.label}
-                    splitLabel={card.label === '已发送待回复' || card.label === '达人已回复'}
-                    value={card.value}
-                    tone={card.tone}
-                    active={activeOverviewFilter === card.key}
-                    onClick={() => handleOverviewCardClick(card.key)}
-                  />
-                ))}
-              </div>
-            </div>
-          </section>
+  function handleOpenPromptHelper() {
+    setPromptHelperForm({ sellingPoints: '', videoCount: String(requiredVideos), durationRequirement: '', targetPetOrScene: '', mustShowShots: '', avoidShots: '', referenceLinks: listToText(filmingRequirements.referenceLinks) });
+    setGeneratedChatGptPrompt('');
+    setPromptCopyStatus('');
+    setIsPromptHelperOpen(true);
+  }
 
-          <section className="panel">
-            <h2>4. 按优先级排序的今日待办</h2>
-            <div className="table-wrap">
-              <table>
-                <thead className="sticky-table-header">
-                  <tr>
-                    <th>优先级</th>
-                    <th>达人</th>
-                    <th>产品</th>
-                    <th>合作状态</th>
-                    <th>触发原因</th>
-                    <th>建议动作</th>
-                    <th>联系渠道</th>
-                    <th>视频进度</th>
-                    <th>失败风险</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {followUpTasks.map((task) => (
-                    <tr key={task.id}>
-                      <td><span className="sr-only">{priorityLabel[task.priority]}</span><span className={urgencyBadgeClass[classifyCreatorFollowUp(task, requiredVideos).urgencyLevel]}>{classifyCreatorFollowUp(task, requiredVideos).urgencyLevel}</span></td>
-                      <td>{displayCreatorName(task.username)}</td>
-                      <td>{task.product}</td>
-                      <td><span className={cooperationStatusClass(task.currentStatus)}>{cooperationStatusDisplay(task.currentStatus)}</span></td>
-                      <td>{task.triggerReason}</td>
-                      <td>{task.suggestedAction}</td>
-                      <td>{task.contactMethod || '—'}</td>
-                      <td>{task.videoProgress}</td>
-                      <td>{task.failedWarnings.length ? '失败风险' : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {followUpTasks.length === 0 && <p className="empty">根据当前 MVP 规则，今天没有需要跟进的任务。</p>}
-          </section>
+  function buildChatGptPrompt() {
+    return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。\n\n【产品信息】\n- 产品名称：${filmingRequirements.productName}\n- 产品卖点：${promptHelperForm.sellingPoints || '请补充'}\n- 目标视频数量：${promptHelperForm.videoCount || requiredVideos}\n- 单条视频时长要求：${promptHelperForm.durationRequirement || '40s+'}\n- 目标宠物 / 使用场景：${promptHelperForm.targetPetOrScene || '真实宠物使用场景'}\n- 必须展示的画面：${promptHelperForm.mustShowShots || '开箱、使用过程、CTA'}\n- 不希望达人这样拍：${promptHelperForm.avoidShots || '避免违规表述'}\n- 对标视频链接（可选）：${promptHelperForm.referenceLinks || '无'}\n\n请按以下结构输出，全部使用简体中文：\n1. 产品名称\n2. 达人拍摄要求\n3. 重点拍摄内容`;
+  }
 
-          <section className="split">
-            <div className="panel">
-              <h2>5. 最高优先级达人说明</h2>
-              {highestTasks.length === 0 && <p className="empty">今天没有最高优先级达人。</p>}
-              {highestTasks.map((task) => (
-                <article className="explanation" key={task.id}>
-                  <h3>{displayCreatorName(task.username)}</h3>
-                  <p>
-                    样品已到货 {daysSince(task.sampleDeliveredDate) ?? '未知'} 天，当前视频进度为 {task.videoProgress}。
-                    这类任务紧急，因为样品已经到达，但达人还没有发布视频。
-                  </p>
-                  <p><strong>下一步动作：</strong>{task.suggestedAction}</p>
-                </article>
-              ))}
-            </div>
-
-            <div className="panel warning-panel">
-              <h2>6. 合作失败风险提醒</h2>
-              {failedCandidates.length === 0 && <p className="empty">当前没有合作失败风险提醒。</p>}
-              {failedCandidates.map((task) => (
-                <article className="warning" key={task.id}>
-                  <h3>{displayCreatorName(task.username)}</h3>
-                  <ul>
-                    {task.failedWarnings.map((warning) => <li key={warning}>{warning}</li>)}
-                  </ul>
-                  <p>最终处理建议：继续跟进、标记为失败，或稍后复查。系统只提示风险，最终决定由你确认。</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel generator" ref={generatorSectionRef} id="creator-follow-up-queue">
-            <h2>7. 达人跟进队列</h2>
-            <p>按紧急程度排序达人，系统会根据当前合作阶段生成对应话术。</p>
-            <div className="generator-controls">
-              <div className="creator-selector-panel">
-                <label>
-                  搜索达人
-                  <input
-                    aria-label="搜索达人账号 / 产品 / 状态 / 沟通动作"
-                    placeholder="搜索达人账号 / 产品 / 状态 / 沟通动作"
-                    value={creatorSearchTerm}
-                    onChange={(event) => setCreatorSearchTerm(event.target.value)}
-                  />
-                </label>
-                <div className="quick-filters" aria-label="紧急程度筛选">
-                  {creatorQuickFilters.map((filter) => (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      className={creatorQuickFilter === filter.key ? 'filter-chip active' : 'filter-chip'}
-                      onClick={() => { setCreatorQuickFilter(filter.key); setActiveOverviewFilter(''); }}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-                {activeOverviewFilter && (
-                  <div className="active-filter-banner" role="status">
-                    <span>当前筛选：{activeOverviewFilterLabel}</span>
-                    <button type="button" className="secondary compact" onClick={handleClearOverviewFilter}>清除筛选</button>
-                  </div>
-                )}
-                <label>
-                  选择达人
-                  <select value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>
-                    {generatorTasks.map((task) => (
-                      <option key={task.id} value={task.id}>{creatorOptionLabel(task, requiredVideos)}</option>
-                    ))}
-                  </select>
-                </label>
-                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState(activeOverviewFilter)}</p>}
-              </div>
-              <label>
-                选择联系渠道
-                <select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>
-                  {CHANNELS.map((item) => <option key={item}>{item}</option>)}
-                </select>
-              </label>
-              {isCreatorReplyScenario && selectedCreatorReplyText && (
-                <section className="creator-reply-panel" aria-labelledby="creator-reply-content-title">
-                  <h3 id="creator-reply-content-title">达人回复内容</h3>
-                  <p>{selectedCreatorReplyText}</p>
-                  {selectedCreatorReplyDate && <p className="muted">最近回复日期：{selectedCreatorReplyDate}</p>}
-                  <label>
-                    我想回复的重点（可选）
-                    <textarea
-                      value={replyFocus}
-                      onChange={(event) => setReplyFocus(event.target.value)}
-                      placeholder="例如：解释 60 秒要求、同意她周五发布、提醒挂车、确认是否可以改成 2 条短视频…"
-                      rows={3}
-                    />
-                  </label>
-                  <section className="personalized-reply-panel" aria-labelledby="personalized-reply-settings-title">
-                    <h3 id="personalized-reply-settings-title">个性化回复设置</h3>
-                    <label>
-                      达人关系备注（可选）
-                      <textarea
-                        value={creatorRelationshipNote}
-                        onChange={(event) => setCreatorRelationshipNote(event.target.value)}
-                        placeholder="例如：她之前视频质量不错 / 回复比较慢 / 语气很友好 / 已经拖了很久 / 第一次合作，需要保持专业但不要太冷"
-                        rows={3}
-                      />
-                    </label>
-                    <label>
-                      回复语气（可选）
-                      <select value={replyTone} onChange={(event) => setReplyTone(event.target.value as ReplyTone)}>
-                        <option>中立专业</option>
-                        <option>友好一点</option>
-                        <option>坚定推进</option>
-                        <option>最后确认</option>
-                      </select>
-                    </label>
-                    <label>
-                      这次回复目标（可选）
-                      <textarea
-                        value={replyGoal}
-                        onChange={(event) => setReplyGoal(event.target.value)}
-                        placeholder="例如：确认发布时间 / 解释 60 秒要求 / 轻微让步 / 提醒挂车 / 安抚情绪 / 推进剩余视频 / 确认是否继续合作"
-                        rows={3}
-                      />
-                    </label>
-                    <label>
-                      可接受让步（可选）
-                      <textarea
-                        value={acceptableConcession}
-                        onChange={(event) => setAcceptableConcession(event.target.value)}
-                        placeholder="例如：可以短一点但不能低于 35 秒 / 可以周五发布 / 可以先发 1 条再补 1 条 / 不接受不挂车 / 可以参考对标视频重新拍"
-                        rows={3}
-                      />
-                    </label>
-                  </section>
-                </section>
-              )}
-              <button onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
-            </div>
-
-            {message && (
-              <div className="message-output">
-                <div className="queue-message-meta">
-                  <p><span className="sr-only">紧急程度：{message.urgencyLevel}</span>紧急程度：<span className={urgencyBadgeClass[message.urgencyLevel]}>{message.urgencyLevel}</span></p>
-                  <p>沟通动作：{message.communicationAction}</p>
-                  <p>原因：{message.scenarioReason}</p>
-                </div>
-                <span className="scenario">场景：{scenarioLabel[message.scenario] ?? message.scenario}</span>
-                <h3>英文话术</h3>
-                <pre>{message.english}</pre>
-                <h3>中文解释</h3>
-                <p>{message.chineseExplanation}</p>
-
-                <div className="tracking-actions" aria-label="发送后追踪">
-                  <h3>发送后追踪</h3>
-                  <div className="tracking-button-row">
-                    <button type="button" onClick={handleCopyGeneratedMessage}>复制话术</button>
-                    <button type="button" onClick={handleMarkMessageSent} disabled={!generatedMessageCreator}>标记为已发送</button>
-                    <button type="button" className="secondary" onClick={handleMarkCreatorReplied} disabled={!generatedMessageCreator}>标记达人已回复</button>
-                    <button type="button" className="secondary" onClick={handleMarkCompleted} disabled={!generatedMessageCreator}>标记合作完成</button>
-                    <button type="button" className="secondary danger" onClick={handleMarkFailed} disabled={!generatedMessageCreator}>标记合作失败</button>
-                  </div>
-                  {trackingStatus && <p className="tracking-status" role="status">{trackingStatus}</p>}
-                </div>
-
-                {nextFollowUpRecommendation && (
-                  <section className="next-follow-up">
-                    <h3>下一步跟进建议</h3>
-                    <p>建议下次跟进时间：{nextFollowUpRecommendation.date}</p>
-                    <p>建议动作：{nextFollowUpRecommendation.action}</p>
-                  </section>
-                )}
-
-                <details className="follow-up-history" open>
-                  <summary>跟进记录</summary>
-                  {selectedHistory.length === 0 ? (
-                    <p className="empty">暂无跟进记录。</p>
-                  ) : (
-                    <ul>
-                      {selectedHistory.slice(-5).reverse().map((entry, index) => (
-                        <li key={`${entry.date}-${entry.action}-${index}`}>
-                          <strong>{entry.date}</strong> · {entry.action}
-                          {entry.channel && <> · {entry.channel}</>}
-                          {entry.scenario && <> · {entry.scenario}</>}
-                          {entry.note && <p>{entry.note}</p>}
-                          {entry.message && <p>{messagePreview(entry.message)}</p>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </details>
-              </div>
-            )}
-          </section>
-        </>
-      )}
-    </main>
-  );
-}
-
-function EditableCell({
-  className,
-  label,
-  value,
-  onChange,
-  type = 'text',
-  warning,
-  multiline = false,
-  autoFocus = false,
-  badge,
-}: {
-  className?: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: 'text' | 'number';
-  warning?: string;
-  multiline?: boolean;
-  autoFocus?: boolean;
-  badge?: ReactNode;
-}) {
-  return (
-    <td className={className}>
-      {badge && <div className="cell-badge">{badge}</div>}
-      {multiline ? (
-        <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} rows={2} />
-      ) : (
-        <input aria-label={label} type={type} min={type === 'number' ? 0 : undefined} value={value} onChange={(event) => onChange(event.target.value)} autoFocus={autoFocus} />
-      )}
-      {warning && <p className="cell-warning">{warning}</p>}
-    </td>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  warning = false,
-  tone,
-  active = false,
-  onClick,
-  splitLabel = false,
-}: {
-  label: string;
-  value: number;
-  warning?: boolean;
-  tone?: string;
-  active?: boolean;
-  onClick?: () => void;
-  splitLabel?: boolean;
-}) {
-  const className = [
-    'summary-card',
-    warning ? 'warning-count' : '',
-    tone ? `summary-card-${tone}` : '',
-    active ? 'active' : '',
-    onClick ? 'clickable' : '',
-  ].filter(Boolean).join(' ');
-
-  const labelContent = splitLabel
-    ? <span aria-label={label}><span aria-hidden="true">{label.slice(0, 1)}</span><span aria-hidden="true">{label.slice(1)}</span></span>
-    : <span>{label}</span>;
-
-  if (onClick) {
+  function renderPageHeader(title: string, description: string, action?: ReactNode) {
     return (
-      <button type="button" className={className} onClick={onClick} aria-label={`筛选${label}`}>
-        {labelContent}
-        <strong>{value}</strong>
-      </button>
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">TikTok Shop Creator SOP</p>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+        {action}
+      </div>
     );
   }
 
+  function renderImportCard() {
+    return (
+      <section className="panel compact-panel">
+        <div className="section-heading">
+          <div>
+            <h2>Data Import / Export</h2>
+            <p className="muted">支持 Excel / CSV 导入导出，数据保存在当前浏览器。</p>
+          </div>
+          <div className="inline-actions">
+            <label className="file-button">
+              Import Excel / CSV
+              <input type="file" accept=".csv,.xls,.xlsx" onChange={(event) => void handleFile(event.target.files?.[0])} />
+            </label>
+            <button type="button" className="secondary" onClick={() => downloadCreatorRowsCsv(rows)} disabled={rows.length === 0}>Export CSV</button>
+            <button type="button" onClick={handleAddCreator}>Add Creator</button>
+          </div>
+        </div>
+        {fileName && <p className="muted">已加载：{fileName}</p>}
+        {error && <p className="error">{error}</p>}
+      </section>
+    );
+  }
+
+  function renderDashboard() {
+    return (
+      <>
+        {renderPageHeader('Dashboard', '每日运营数据概览、优先待办和下一步动作集中在这里。', <button type="button" onClick={() => setActiveModule('creators')}>Open Creator Database</button>)}
+        <section className="dashboard-grid">
+          {dashboardCards.map((card) => (
+            <button type="button" key={card.label} className="metric-card" onClick={() => handleDashboardCardClick(card)}>
+              <span>{card.label}</span>
+              <strong>{card.value}</strong>
+              <small>点击查看 / 筛选</small>
+            </button>
+          ))}
+        </section>
+        <section className="panel">
+          <div className="section-heading">
+            <div>
+              <h2>今日待办</h2>
+              <p className="muted">按优先级展示需要处理的达人，优先解决卡样、卡视频、卡授权。</p>
+            </div>
+            <button type="button" className="secondary" onClick={() => setActiveModule('followup')}>查看全部跟进</button>
+          </div>
+          {todayTodo.length === 0 ? (
+            <div className="empty-state"><strong>今天暂无高优先级待办。</strong><span>下一步：导入达人表或新增达人，系统会自动生成跟进队列。</span></div>
+          ) : (
+            <div className="todo-list">
+              {todayTodo.map((task) => {
+                const status = inferStatus(task, requiredVideos);
+                return (
+                  <article className="todo-card" key={task.id}>
+                    <div>
+                      <strong>{displayName(task)}</strong>
+                      <span className={statusTone(status)}>{status}</span>
+                    </div>
+                    <p><b>触发原因：</b>{task.triggerReason || sampleHint(task, requiredVideos)}</p>
+                    <p><b>建议动作：</b>{task.suggestedAction}</p>
+                    <div className="inline-actions">
+                      <button type="button" className="secondary" onClick={() => void copyText(buildOutreachForRow(task), '已复制待办话术。')}>复制话术</button>
+                      <button type="button" className="secondary" onClick={() => applyStatusToRows([task.id], status === 'Not Contacted' ? 'Invited' : 'Waiting Video')}>更新状态</button>
+                      <button type="button" onClick={() => { setSelectedCreatorId(task.id); setActiveModule('creators'); }}>查看详情</button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </>
+    );
+  }
+
+  function renderCreatorDatabase() {
+    const allSelected = filteredRows.length > 0 && filteredRows.every((entry) => selectedIds.includes(entry.row.id));
+    return (
+      <>
+        {renderPageHeader('Creator Database', '紧凑表格 + 固定筛选 + 批量操作，替代原来的长页面堆叠。')}
+        {renderImportCard()}
+        <section className="panel table-panel">
+          <div className="filters-bar">
+            <label>Search<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索达人昵称 / 产品 / 状态" /></label>
+            <label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CreatorStatus | 'All')}><option>All</option>{creatorStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+            <label>Creator Type<select value={creatorTypeFilter} onChange={(event) => setCreatorTypeFilter(event.target.value)}><option>All</option><option>Pet</option><option>UGC</option><option>Grooming</option></select></label>
+            <label>Follower Count<select value={followerFilter} onChange={(event) => setFollowerFilter(event.target.value)}><option>All</option><option>K</option><option>M</option><option>—</option></select></label>
+            <label>Avg Views<select value={avgViewsFilter} onChange={(event) => setAvgViewsFilter(event.target.value)}><option>All</option><option>K</option><option>M</option><option>—</option></select></label>
+            <label>GMV Range<select value={gmvFilter} onChange={(event) => setGmvFilter(event.target.value)}><option>All</option><option>$</option><option>low</option><option>mid</option><option>high</option><option>—</option></select></label>
+          </div>
+          <div className="sticky-action-bar">
+            <span>{selectedIds.length} selected</span>
+            <button type="button" className="secondary" onClick={handleBulkCopyOutreach} disabled={selectedIds.length === 0}>批量复制邀约话术</button>
+            <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as CreatorStatus)}>{creatorStatuses.map((status) => <option key={status}>{status}</option>)}</select>
+            <button type="button" onClick={handleBulkStatusUpdate} disabled={selectedIds.length === 0}>批量更新状态</button>
+          </div>
+          {filteredRows.length === 0 ? (
+            <div className="empty-state"><strong>没有匹配的达人。</strong><span>下一步：清空筛选、导入 CSV / Excel，或点击 Add Creator。</span></div>
+          ) : (
+            <div className="table-wrap">
+              <table className="ops-table">
+                <thead>
+                  <tr>
+                    <th><input aria-label="Select all creators" type="checkbox" checked={allSelected} onChange={toggleSelectAll} /></th>
+                    <th>Creator Name</th>
+                    <th>TikTok Handle</th>
+                    <th>Follower Count</th>
+                    <th>Avg Views</th>
+                    <th>GMV Range</th>
+                    <th>Niche</th>
+                    <th>Status</th>
+                    <th>Product</th>
+                    <th>Sample Tracking</th>
+                    <th>Last Contact Date</th>
+                    <th>Next Follow-up Date</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((entry) => (
+                    <tr key={entry.row.id}>
+                      <td><input aria-label={`Select ${displayName(entry.row)}`} type="checkbox" checked={selectedIds.includes(entry.row.id)} onChange={() => toggleSelected(entry.row.id)} /></td>
+                      <td><input aria-label="Creator Name" value={entry.row.username} onChange={(event) => updateRow(entry.row.id, 'username', event.target.value)} /></td>
+                      <td><input aria-label="TikTok Handle" value={entry.row.profileLink} onChange={(event) => updateRow(entry.row.id, 'profileLink', event.target.value)} placeholder="@handle or URL" /></td>
+                      <td>{entry.followers}</td>
+                      <td>{entry.avgViews}</td>
+                      <td>{entry.gmv}</td>
+                      <td>{entry.creatorType}</td>
+                      <td><select aria-label="Status" value={entry.status} onChange={(event) => applyStatusToRows([entry.row.id], event.target.value as CreatorStatus)}>{creatorStatuses.map((status) => <option key={status}>{status}</option>)}</select></td>
+                      <td><input aria-label="Product" value={entry.row.product} onChange={(event) => updateRow(entry.row.id, 'product', event.target.value)} /></td>
+                      <td><input aria-label="Sample Tracking" value={entry.row.sampleShippingStatus} onChange={(event) => updateRow(entry.row.id, 'sampleShippingStatus', event.target.value)} /></td>
+                      <td><input aria-label="Last Contact Date" type="date" value={entry.row.lastContactDate} onChange={(event) => updateRow(entry.row.id, 'lastContactDate', event.target.value)} /></td>
+                      <td><input aria-label="Next Follow-up Date" type="date" value={entry.row.nextFollowUpDate ?? ''} onChange={(event) => updateRow(entry.row.id, 'nextFollowUpDate', event.target.value)} /></td>
+                      <td><textarea aria-label="Notes" value={entry.row.notes} onChange={(event) => updateRow(entry.row.id, 'notes', event.target.value)} rows={2} /></td>
+                      <td className="row-actions"><button type="button" className="secondary" onClick={() => void copyText(buildOutreachForRow(entry.row), '已复制邀约话术。')}>Copy</button><button type="button" className="danger secondary" onClick={() => setRows((currentRows) => deleteCreatorRow(currentRows, entry.row.id))}>Delete</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </>
+    );
+  }
+
+  function renderTemplates() {
+    return (
+      <>
+        {renderPageHeader('Outreach Templates', '变量化模板生成器：输入一次变量，生成全流程话术。')}
+        <section className="panel template-layout">
+          <div className="template-form">
+            {(Object.keys(templateForm) as Array<keyof TemplateForm>).map((key) => (
+              <label key={key}>{key.replace(/([A-Z])/g, ' $1')}<input value={templateForm[key]} onChange={(event) => setTemplateForm((form) => ({ ...form, [key]: event.target.value }))} /></label>
+            ))}
+          </div>
+          <div className="template-results">
+            {templateMessages.map(([label, text]) => (
+              <article className="template-card" key={label}>
+                <h3>{label}</h3>
+                <p>{text}</p>
+                <div className="inline-actions"><button type="button" className="secondary" onClick={() => void copyText(text, '话术已复制。')}>Copy</button><button type="button" className="secondary" disabled={selectedIds.length === 0}>Apply to selected creator</button><button type="button" onClick={() => setToast({ tone: 'success', text: '已标记为 sent。' })}>Mark as sent</button></div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </>
+    );
+  }
+
+  function renderSamples() {
+    return (
+      <>
+        {renderPageHeader('Sample Tracking', '围绕物流状态跟踪样品，自动提示卡点动作。')}
+        <section className="panel table-panel"><div className="table-wrap"><table className="ops-table"><thead><tr><th>Creator</th><th>Product</th><th>Sample Status</th><th>Carrier</th><th>Tracking Number</th><th>Shipped Date</th><th>Delivered Date</th><th>Days Since Delivered</th><th>Next Follow-up Action</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product || '—'}</td><td><span className={statusTone(inferStatus(row, requiredVideos))}>{inferStatus(row, requiredVideos)}</span></td><td>{parseNumberFromNotes(row.notes, ['carrier'])}</td><td>{parseNumberFromNotes(row.notes, ['tracking', 'tracking number'])}</td><td>{parseNumberFromNotes(row.notes, ['shipped date'])}</td><td>{row.sampleDeliveredDate || '—'}</td><td>{daysDelivered(row) ?? '—'}</td><td>{sampleHint(row, requiredVideos)}</td></tr>)}</tbody></table></div></section>
+      </>
+    );
+  }
+
+  function renderFollowup() {
+    return (
+      <>
+        {renderPageHeader('Follow-up Center', '集中处理达人回复、逾期发布、样品签收后无反馈等动作。')}
+        <section className="panel generator-panel">
+          <div className="generator-controls">
+            <label>选择达人<select aria-label="选择达人" value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>{tasks.map((task) => <option key={task.id} value={task.id}>{displayName(task)} · {inferStatus(task, requiredVideos)} · {task.suggestedAction}</option>)}</select></label>
+            <label>渠道<select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>{CHANNELS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <button type="button" onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
+          </div>
+          {message && <div className="message-output"><h3>英文话术</h3><pre>{message.english}</pre><h3>中文解释</h3><p>{message.chineseExplanation}</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
+        </section>
+      </>
+    );
+  }
+
+  function renderReview() {
+    const checklist = ['是否 40s+', '是否按要求发布 2 条视频', '是否挂 TikTok Shop 商品卡', '是否展示真实宠物使用场景', '是否有清晰开箱/使用过程', '是否有 CTA', '是否存在违规表述', '是否可作为投流素材'];
+    return (
+      <>
+        {renderPageHeader('Content Review', '逐条验收达人视频，输出可执行的验收状态。')}
+        <section className="panel review-grid">{rows.map((row) => <article className="review-card" key={row.id}><div><h3>{displayName(row)}</h3><span className={statusTone(inferStatus(row, requiredVideos))}>{inferStatus(row, requiredVideos)}</span></div>{checklist.map((item) => <label key={item} className="check-row"><input type="checkbox" />{item}</label>)}<select defaultValue="Approved"><option>Approved</option><option>Need Revision</option><option>Product Tag Missing</option><option>Not Usable for Ads</option><option>Ready for Ads</option></select></article>)}</section>
+      </>
+    );
+  }
+
+  function renderAds() {
+    const tags = ['Paw Cleaning', 'After Walk', 'Cat Playing', 'Dog Grooming', 'Product Demo', 'Before After', 'UGC Review', 'High CTR Potential'];
+    return (
+      <>
+        {renderPageHeader('Ads Material Library', '沉淀可投流视频，管理 Spark Ads 和素材授权。')}
+        <section className="panel table-panel"><div className="tag-cloud">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div><div className="table-wrap"><table className="ops-table"><thead><tr><th>Creator</th><th>Product</th><th>Video URL</th><th>Hook Angle</th><th>Pet Type</th><th>Scene</th><th>Video Length</th><th>Organic Views</th><th>Engagement</th><th>Conversion Potential</th><th>Spark Ads Status</th><th>Usage Rights Status</th><th>Notes</th></tr></thead><tbody>{rows.filter((row) => ['Ready for Ads', 'Spark Ads Requested', 'Posted'].includes(inferStatus(row, requiredVideos))).map((row) => <tr key={row.id}><td>{displayName(row)}</td><td>{row.product}</td><td>{parseNumberFromNotes(row.notes, ['video url', 'url'])}</td><td>{parseNumberFromNotes(row.notes, ['hook'])}</td><td>{parseNumberFromNotes(row.notes, ['pet type'])}</td><td>{parseNumberFromNotes(row.notes, ['scene'])}</td><td>{parseNumberFromNotes(row.notes, ['length'])}</td><td>{parseNumberFromNotes(row.notes, ['views'])}</td><td>{parseNumberFromNotes(row.notes, ['engagement'])}</td><td>{parseNumberFromNotes(row.notes, ['potential'])}</td><td>{inferStatus(row, requiredVideos) === 'Spark Ads Requested' ? 'Requested' : 'Not requested'}</td><td>{parseNumberFromNotes(row.notes, ['rights'])}</td><td>{row.notes || '—'}</td></tr>)}</tbody></table></div></section>
+      </>
+    );
+  }
+
+  function renderSettings() {
+    return (
+      <>
+        {renderPageHeader('Settings', '管理 SOP 默认拍摄要求、说明折叠、数据清理。')}
+        <section className="panel">
+          <div className="section-heading"><div><h2>拍摄要求</h2><p className="muted">默认折叠说明，减少页面文字密度。</p></div><button type="button" onClick={handleEditFilmingRequirements}>编辑拍摄要求</button></div>
+          {isEditingFilmingRequirements ? <div className="settings-form"><label>产品名称<input value={filmingProductNameDraft} onChange={(event) => setFilmingProductNameDraft(event.target.value)} /></label><label>拍摄要求（每行一条）<textarea value={filmingRequirementsDraft} onChange={(event) => setFilmingRequirementsDraft(event.target.value)} rows={5} /></label><label>内容重点（每行一条）<textarea value={keyContentPointsDraft} onChange={(event) => setKeyContentPointsDraft(event.target.value)} rows={5} /></label><label>对标视频链接（可选，每行一个）<textarea value={referenceLinksDraft} onChange={(event) => setReferenceLinksDraft(event.target.value)} rows={3} /></label><div className="inline-actions"><button type="button" onClick={handleSaveFilmingRequirements}>保存拍摄要求</button><button type="button" className="secondary" onClick={handleRestoreDefaultFilmingRequirements}>恢复默认拍摄要求</button></div></div> : <details className="collapsed-copy"><summary>{filmingRequirements.productName}</summary><ul>{filmingRequirements.requirements.map((item) => <li key={item}>{item}</li>)}</ul><h3>重点拍摄内容</h3><ul>{filmingRequirements.keyContentPoints.map((item) => <li key={item}>{item}</li>)}</ul>{(filmingRequirements.referenceLinks?.length ?? 0) > 0 && <><h3>参考视频链接</h3><ul>{filmingRequirements.referenceLinks?.map((item) => <li key={item}>{item}</li>)}</ul></>}</details>}
+        </section>
+        <section className="panel"><div className="section-heading"><div><h2>用 ChatGPT 辅助生成拍摄要求（可选）</h2><p className="muted">这个功能只会生成可复制的提示词，不会自动修改或保存拍摄要求。复制到 ChatGPT 生成结果后，再粘贴到上方「达人拍摄要求」里保存。</p></div><button type="button" className="secondary" onClick={() => isPromptHelperOpen ? setIsPromptHelperOpen(false) : handleOpenPromptHelper()}>{isPromptHelperOpen ? '收起辅助生成' : '展开辅助生成'}</button></div>{isPromptHelperOpen && <div className="settings-form"><label>产品卖点<input value={promptHelperForm.sellingPoints} onChange={(event) => setPromptHelperForm((form) => ({ ...form, sellingPoints: event.target.value }))} /></label><label>单条视频时长要求<input value={promptHelperForm.durationRequirement} onChange={(event) => setPromptHelperForm((form) => ({ ...form, durationRequirement: event.target.value }))} /></label><label>对标视频链接（可选，每行一个）<textarea value={promptHelperForm.referenceLinks} onChange={(event) => setPromptHelperForm((form) => ({ ...form, referenceLinks: event.target.value }))} /></label><button type="button" onClick={() => { setGeneratedChatGptPrompt(buildChatGptPrompt()); setPromptCopyStatus(''); }}>生成可复制提示词</button>{generatedChatGptPrompt && <><p className="ai-status">提示词已生成。请复制到 ChatGPT 使用。</p><p className="prompt-next-step">下一步：复制提示词到 ChatGPT，生成结果后，把适合的内容粘贴到上方「拍摄要求」和「内容重点」里，再点击保存。</p><label>ChatGPT 提示词<textarea value={generatedChatGptPrompt} readOnly rows={8} /></label><button type="button" onClick={() => void copyText(generatedChatGptPrompt, '已复制提示词。').then(() => setPromptCopyStatus('已复制提示词。'))}>复制提示词</button>{promptCopyStatus && <p className="ai-status">{promptCopyStatus}</p>}</>}</div>}</section>
+        <section className="panel"><div className="inline-actions"><button type="button" className="secondary danger" onClick={() => { clearSavedCreatorRows(); setRows([]); setToast({ tone: 'success', text: '已清空本地达人数据。' }); }}>清空当前数据</button></div></section>
+      </>
+    );
+  }
+
+  function renderActiveModule() {
+    if (activeModule === 'dashboard') return renderDashboard();
+    if (activeModule === 'creators') return renderCreatorDatabase();
+    if (activeModule === 'templates') return renderTemplates();
+    if (activeModule === 'samples') return renderSamples();
+    if (activeModule === 'followup') return renderFollowup();
+    if (activeModule === 'review') return renderReview();
+    if (activeModule === 'ads') return renderAds();
+    return renderSettings();
+  }
+
   return (
-    <div className={className}>
-      {labelContent}
-      <strong>{value}</strong>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand"><span>TT</span><div><strong>Creator SOP</strong><small>Operations Workbench</small></div></div>
+        <nav aria-label="Main navigation">
+          {navItems.map((item) => <button type="button" key={item.key} className={activeModule === item.key ? 'active' : ''} onClick={() => setActiveModule(item.key)}><span>{item.label}</span><small>{item.helper}</small></button>)}
+        </nav>
+      </aside>
+      <main className="workspace">{renderActiveModule()}</main>
+      {toast && <div className={`toast ${toast.tone}`} role="status">{toast.text}</div>}
     </div>
   );
 }

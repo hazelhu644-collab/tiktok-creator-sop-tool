@@ -12,10 +12,10 @@ function creatorRow(overrides: Partial<CreatorRow> = {}): CreatorRow {
   return {
     id: 'creator-1',
     username: 'fluffy_creator',
-    profileLink: '',
+    profileLink: '@fluffy_creator',
     contactMethod: 'TikTok DM',
     product: '智能宠物饮水机',
-    currentStatus: 'Sample Delivered',
+    currentStatus: 'Delivered',
     sampleShippingStatus: 'Delivered',
     sampleDeliveredDate: '2026-06-02',
     videoProgress: '0 of 2',
@@ -23,8 +23,24 @@ function creatorRow(overrides: Partial<CreatorRow> = {}): CreatorRow {
     lastContactDate: '2026-06-01',
     lastFollowUpCount: 0,
     notes: '',
+    trackingStatus: '',
+    lastMessageScenario: '',
+    lastMessageChannel: '',
+    lastMessageSentAt: '',
+    nextFollowUpDate: '',
+    lastCreatorResponse: '',
+    followUpHistory: [],
     ...overrides,
   };
+}
+
+function seedCreators(rows: CreatorRow[]) {
+  window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
+}
+
+async function goTo(user: ReturnType<typeof userEvent.setup>, moduleName: RegExp) {
+  const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+  await user.click(within(nav).getByRole('button', { name: moduleName }));
 }
 
 afterEach(() => {
@@ -33,20 +49,278 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('operations workbench navigation and dashboard', () => {
+  it('renders the fixed module navigation and opens each redesigned page', async () => {
+    const user = userEvent.setup();
+    render(<App />);
 
+    expect(screen.getByText('Creator SOP')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
 
-describe('filming requirements reference links UI', () => {
-  it('saves, displays, and restores optional reference links with filming requirements', async () => {
+    await goTo(user, /Creator Database/);
+    expect(screen.getByRole('heading', { name: 'Creator Database' })).toBeInTheDocument();
+    expect(screen.getByText('Data Import / Export')).toBeInTheDocument();
+
+    await goTo(user, /Outreach Templates/);
+    expect(screen.getByRole('heading', { name: 'Outreach Templates' })).toBeInTheDocument();
+
+    await goTo(user, /Sample Tracking/);
+    expect(screen.getByRole('heading', { name: 'Sample Tracking' })).toBeInTheDocument();
+
+    await goTo(user, /Follow-up Center/);
+    expect(screen.getByRole('heading', { name: 'Follow-up Center' })).toBeInTheDocument();
+
+    await goTo(user, /Content Review/);
+    expect(screen.getByRole('heading', { name: 'Content Review' })).toBeInTheDocument();
+
+    await goTo(user, /Ads Material Library/);
+    expect(screen.getByRole('heading', { name: 'Ads Material Library' })).toBeInTheDocument();
+
+    await goTo(user, /Settings/);
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+  });
+
+  it('shows the eight Dashboard metric cards and a priority todo list', () => {
+    seedCreators([
+      creatorRow({ id: 'invite', username: 'invite_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'follow', username: 'follow_creator', currentStatus: 'Delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-20', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'request', username: 'request_creator', currentStatus: 'Sample Requested', sampleShippingStatus: 'Not Shipped', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'approved', username: 'approved_creator', currentStatus: 'Sample Approved', sampleShippingStatus: 'Not Shipped', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'shipped', username: 'shipped_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'posted', username: 'posted_creator', currentStatus: 'Posted', sampleShippingStatus: 'Delivered', videoProgress: '1 of 2', firstVideoPostedDate: '2026-06-01' }),
+      creatorRow({ id: 'revision', username: 'revision_creator', currentStatus: 'Need Revision', sampleShippingStatus: 'Delivered', videoProgress: '1 of 2' }),
+      creatorRow({ id: 'ads', username: 'ads_creator', currentStatus: 'Ready for Ads', sampleShippingStatus: 'Delivered', videoProgress: '2 of 2' }),
+    ]);
+
+    render(<App />);
+
+    [
+      '今日待邀约达人数量',
+      '今日待跟进达人数量',
+      '待寄样达人数量',
+      '已寄样待签收数量',
+      '已签收待发视频数量',
+      '本周已发布视频数量',
+      '待验收视频数量',
+      '可投流素材数量',
+    ].forEach((label) => expect(screen.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument());
+
+    expect(screen.getByRole('heading', { name: '今日待办' })).toBeInTheDocument();
+    expect(screen.getByText('follow_creator')).toBeInTheDocument();
+    expect(screen.getAllByText(/触发原因：/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/建议动作：/).length).toBeGreaterThan(0);
+  });
+
+  it('clicks a Dashboard card to open Creator Database with the matching status filter', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'invite', username: 'invite_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'delivered', username: 'delivered_creator', currentStatus: 'Delivered', sampleShippingStatus: 'Delivered' }),
+    ]);
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: /今日待邀约达人数量/ }));
+
+    expect(screen.getByRole('heading', { name: 'Creator Database' })).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Status')[0]).toHaveValue('Not Contacted');
+    expect(screen.getByDisplayValue('invite_creator')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('delivered_creator')).not.toBeInTheDocument();
+  });
+
+  it('shows an actionable empty state when there are no todo items', () => {
+    render(<App />);
+
+    expect(screen.getByText('今天暂无高优先级待办。')).toBeInTheDocument();
+    expect(screen.getByText('下一步：导入达人表或新增达人，系统会自动生成跟进队列。')).toBeInTheDocument();
+  });
+});
+
+describe('creator database redesigned table', () => {
+  it('supports search, status filtering, and editable table fields', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'alpha', username: 'alpha_creator', product: 'Water Fountain', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'beta', username: 'beta_creator', product: 'Pet Comb', currentStatus: 'Ready for Ads', sampleShippingStatus: 'Delivered', videoProgress: '2 of 2' }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /Creator Database/);
+
+    await user.type(screen.getByLabelText('Search'), 'alpha');
+    expect(screen.getByDisplayValue('alpha_creator')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('beta_creator')).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Search'));
+    await user.selectOptions(screen.getAllByLabelText('Status')[0], 'Ready for Ads');
+    expect(screen.getByDisplayValue('beta_creator')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('alpha_creator')).not.toBeInTheDocument();
+
+    await user.clear(screen.getAllByLabelText('Product')[0]);
+    await user.type(screen.getAllByLabelText('Product')[0], 'Updated Brush');
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
+      expect(saved.find((row) => row.id === 'beta')?.product).toBe('Updated Brush');
+    });
+  });
+
+  it('bulk-selects creators, copies outreach scripts, and bulk-updates status', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    seedCreators([
+      creatorRow({ id: 'alpha', username: 'alpha_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'beta', username: 'beta_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '' }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /Creator Database/);
+
+    await user.click(screen.getByLabelText('Select alpha_creator'));
+    await user.click(screen.getByLabelText('Select beta_creator'));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '批量复制邀约话术' }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('@alpha_creator'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('@beta_creator'));
+
+    await user.selectOptions(within(screen.getByText('2 selected').closest('.sticky-action-bar') as HTMLElement).getByRole('combobox'), 'Sample Approved');
+    await user.click(screen.getByRole('button', { name: '批量更新状态' }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
+      expect(saved.map((row) => row.currentStatus)).toEqual(['Sample Approved', 'Sample Approved']);
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('已更新 2 位达人状态为 Sample Approved。');
+  });
+
+  it('adds and deletes creators from the redesigned database page', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: 'alpha', username: 'alpha_creator' })]);
+
+    render(<App />);
+    await goTo(user, /Creator Database/);
+    await user.click(screen.getByRole('button', { name: 'Add Creator' }));
+
+    expect(screen.getAllByLabelText('Creator Name')).toHaveLength(2);
+
+    await user.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
+      expect(saved).toHaveLength(1);
+    });
+  });
+});
+
+describe('templates, follow-up, samples, review, and ads modules', () => {
+  it('generates variable-based outreach templates and copies a scenario script', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+
+    render(<App />);
+    await goTo(user, /Outreach Templates/);
+
+    await user.type(screen.getByLabelText('creator Name'), 'Bella Pets');
+    await user.clear(screen.getByLabelText('product Name'));
+    await user.type(screen.getByLabelText('product Name'), 'Paw Cleaner');
+
+    expect(screen.getByText('初次邀约')).toBeInTheDocument();
+    expect(screen.getAllByText(/Bella Pets/).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(0);
+
+    await user.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Bella Pets'));
+  });
+
+  it('tracks sample logistics and shows automatic next-action hints', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'shipped', username: 'shipped_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', notes: 'carrier: UPS\ntracking: 1Z999' }),
+      creatorRow({ id: 'delivered', username: 'delivered_creator', currentStatus: 'Delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-20', videoProgress: '0 of 2' }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /Sample Tracking/);
+
+    expect(screen.getByText('shipped_creator')).toBeInTheDocument();
+    expect(screen.getByText('UPS')).toBeInTheDocument();
+    expect(screen.getByText('1Z999')).toBeInTheDocument();
+    expect(screen.getByText('已寄出但未签收：确认物流是否卡住。')).toBeInTheDocument();
+    expect(screen.getByText('已签收 5 天未发布：催发视频并确认拍摄计划。')).toBeInTheDocument();
+  });
+
+  it('generates follow-up copy and marks a message as sent', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    seedCreators([creatorRow({ id: 'follow', username: 'follow_creator', sampleDeliveredDate: '2026-05-20', lastFollowUpCount: 1 })]);
+
+    render(<App />);
+    await goTo(user, /Follow-up Center/);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    expect(screen.getByText('英文话术')).toBeInTheDocument();
+    expect(screen.getByText('中文解释')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '复制话术' }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('follow_creator'));
+
+    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
+      expect(saved.trackingStatus).toBe('Followed Up');
+      expect(saved.lastFollowUpCount).toBe(2);
+      expect(saved.followUpHistory?.[0]).toMatchObject({ action: 'Message Sent' });
+    });
+    expect(screen.getByText('已标记为发送，并同步更新数据表格。')).toBeInTheDocument();
+  });
+
+  it('records a creator reply from Follow-up Center', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'prompt').mockReturnValue('Creator can post Friday');
+    seedCreators([creatorRow({ id: 'reply', username: 'reply_creator' })]);
+
+    render(<App />);
+    await goTo(user, /Follow-up Center/);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+    await user.click(screen.getByRole('button', { name: '标记达人已回复' }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
+      expect(saved.currentStatus).toBe('Replied');
+      expect(saved.lastCreatorResponse).toBe('Creator can post Friday');
+      expect(saved.followUpHistory?.[0]).toMatchObject({ action: 'Creator Replied', note: 'Creator can post Friday' });
+    });
+  });
+
+  it('renders content review checklists and ads material tags', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: 'ads', username: 'ads_creator', currentStatus: 'Ready for Ads', videoProgress: '2 of 2', notes: 'video url: https://tiktok.com/video/1\nhook: Before After' })]);
+
+    render(<App />);
+    await goTo(user, /Content Review/);
+    expect(screen.getByText('是否 40s+')).toBeInTheDocument();
+    expect(screen.getByText('是否可作为投流素材')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Approved')).toBeInTheDocument();
+
+    await goTo(user, /Ads Material Library/);
+    expect(screen.getByText('Paw Cleaning')).toBeInTheDocument();
+    expect(screen.getByText('High CTR Potential')).toBeInTheDocument();
+    expect(screen.getByText('https://tiktok.com/video/1')).toBeInTheDocument();
+    expect(screen.getAllByText('Before After').length).toBeGreaterThan(0);
+  });
+});
+
+describe('settings and prompt helper', () => {
+  it('saves, displays, and restores optional reference links in Settings', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App />);
+    await goTo(user, /Settings/);
 
     expect(screen.queryByText('参考视频链接')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
-    await user.type(
-      screen.getByLabelText('对标视频链接（可选，每行一个）'),
-      ' https://tiktok.com/reference-one \n\nhttps://shop.tiktok.com/reference-two ',
-    );
+    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), ' https://tiktok.com/reference-one \n\nhttps://shop.tiktok.com/reference-two ');
     await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
 
     expect(screen.getByText('参考视频链接')).toBeInTheDocument();
@@ -58,33 +332,8 @@ describe('filming requirements reference links UI', () => {
 
     unmount();
     render(<App />);
-
-    expect(screen.getByText('参考视频链接')).toBeInTheDocument();
+    await goTo(user, /Settings/);
     expect(screen.getByText('https://tiktok.com/reference-one')).toBeInTheDocument();
-    expect(screen.getByText('https://shop.tiktok.com/reference-two')).toBeInTheDocument();
-  });
-
-  it('allows empty reference links and restores default by clearing them', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
-    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), '   \n  ');
-    await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
-
-    expect(screen.queryByText('参考视频链接')).not.toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY) ?? '{}')).toMatchObject({
-      referenceLinks: [],
-    });
-
-    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
-    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), 'https://tiktok.com/reference-one');
-    await user.click(screen.getByRole('button', { name: '恢复默认拍摄要求' }));
-
-    expect(screen.queryByText('参考视频链接')).not.toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY) ?? '{}')).toMatchObject({
-      referenceLinks: [],
-    });
   });
 
   it('prefills saved reference links in the optional ChatGPT helper form', async () => {
@@ -97,884 +346,43 @@ describe('filming requirements reference links UI', () => {
     }));
 
     render(<App />);
-
+    await goTo(user, /Settings/);
     await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
 
     expect(screen.getByLabelText('对标视频链接（可选，每行一个）')).toHaveValue('https://tiktok.com/prefill-reference');
   });
-});
 
-
-describe('ChatGPT prompt generator UI', () => {
-  it('opens and closes the optional helper form', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    expect(screen.getByText('用 ChatGPT 辅助生成拍摄要求（可选）')).toBeInTheDocument();
-    expect(screen.getByText('这个功能只会生成可复制的提示词，不会自动修改或保存拍摄要求。复制到 ChatGPT 生成结果后，再粘贴到上方「达人拍摄要求」里保存。')).toBeInTheDocument();
-    expect(screen.queryByLabelText('产品卖点')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
-
-    expect(screen.getByLabelText('产品卖点')).toBeInTheDocument();
-    expect(screen.getByLabelText('对标视频链接（可选，每行一个）')).toBeInTheDocument();
-    expect(screen.queryByLabelText('产品名称')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '收起辅助生成' }));
-
-    expect(screen.queryByLabelText('产品卖点')).not.toBeInTheDocument();
-  });
-
-  it('generates a Chinese ChatGPT prompt locally without calling the API or auto-saving', async () => {
+  it('generates and copies a local ChatGPT prompt without calling an API', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
-    await user.type(screen.getByLabelText('产品卖点'), '静音循环水，容易清洗，鼓励猫咪喝水');
-    await user.type(screen.getByLabelText('单条视频时长要求'), '45 秒以上');
-    await user.type(screen.getByLabelText('目标宠物 / 使用场景'), '美国养猫家庭厨房或客厅');
-    await user.type(screen.getByLabelText('必须展示的画面'), '猫咪主动喝水\n拆洗水箱');
-    await user.type(screen.getByLabelText('不希望达人这样拍'), '不要像硬广念稿');
-    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), 'https://tiktok.com/helper-reference');
-    await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
-
-    const prompt = screen.getByLabelText('ChatGPT 提示词') as HTMLTextAreaElement;
-    expect(prompt.value).toContain('蒸汽梳毛器');
-    expect(prompt.value).toContain('静音循环水');
-    expect(prompt.value).toContain('https://tiktok.com/helper-reference');
-    expect(prompt.value).toContain('适合美国 TikTok 达人沟通');
-    expect(prompt.value).toContain('不要太像合同');
-    expect(prompt.value).toContain('全部使用简体中文');
-    expect(prompt.value).toContain('达人拍摄要求');
-    expect(prompt.value).toContain('重点拍摄内容');
-    expect(screen.getByText('下一步：复制提示词到 ChatGPT，生成结果后，把适合的内容粘贴到上方「拍摄要求」和「内容重点」里，再点击保存。')).toBeInTheDocument();
-    expect(screen.getByText('提示词已生成。请复制到 ChatGPT 使用。')).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY)).toBeNull();
-  });
-
-  it('copies the generated prompt', async () => {
-    const user = userEvent.setup();
     const writeText = vi.fn(async () => undefined);
-    Object.defineProperty(window.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
 
     render(<App />);
-
+    await goTo(user, /Settings/);
     await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
     await user.type(screen.getByLabelText('产品卖点'), '静音循环水');
     await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
+
+    const prompt = screen.getByLabelText('ChatGPT 提示词');
+    expect((prompt as HTMLTextAreaElement).value).toContain('静音循环水');
+    expect(fetchMock).not.toHaveBeenCalled();
+
     await user.click(screen.getByRole('button', { name: '复制提示词' }));
-
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('静音循环水'));
-    expect(screen.getByText('已复制提示词。')).toBeInTheDocument();
+    expect(screen.getAllByText('已复制提示词。').length).toBeGreaterThan(0);
   });
 
-  it('keeps manual editing and saving as the only source of truth after generating a prompt', async () => {
+  it('clears local creator data from Settings', async () => {
     const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
-    await user.type(screen.getByLabelText('产品卖点'), 'helper-only selling point');
-    await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
-    expect(screen.getByLabelText('ChatGPT 提示词')).toBeInTheDocument();
-    expect(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY)).toBeNull();
-
-    await user.click(screen.getByRole('button', { name: '编辑拍摄要求' }));
-    const requirementsDraft = screen.getByLabelText('拍摄要求（每行一条）');
-    await user.clear(requirementsDraft);
-    await user.type(requirementsDraft, '每位达人 4 条视频\n必须 tag 品牌账号\n必须挂 TikTok Shop 产品链接');
-    await user.click(screen.getByRole('button', { name: '保存拍摄要求' }));
-
-    expect(screen.getByText('每位达人 4 条视频')).toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY) ?? '{}')).toMatchObject({
-      requirements: ['每位达人 4 条视频', '必须 tag 品牌账号', '必须挂 TikTok Shop 产品链接'],
-    });
-  });
-
-  it('uses saved filming requirements and reference links, not unsaved helper content, in the existing message generator', async () => {
-    const user = userEvent.setup();
-    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify([creatorRow({ sampleDeliveredDate: '2020-01-01', lastContactDate: '2020-01-01' })]));
-    window.localStorage.setItem(FILMING_REQUIREMENTS_STORAGE_KEY, JSON.stringify({
-      productName: '智能宠物饮水机',
-      requirements: ['每位达人 2 条视频'],
-      keyContentPoints: ['saved quiet fountain shot', 'saved easy-clean tank shot'],
-      referenceLinks: ['https://tiktok.com/saved-reference'],
-    }));
+    seedCreators([creatorRow({ id: 'alpha', username: 'alpha_creator' })]);
 
     render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '展开辅助生成' }));
-    await user.type(screen.getByLabelText('产品卖点'), 'unsaved helper-only selling point');
-    await user.type(screen.getByLabelText('对标视频链接（可选，每行一个）'), '\nhttps://tiktok.com/unsaved-helper-reference');
-    await user.click(screen.getByRole('button', { name: '生成可复制提示词' }));
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-
-    const messageOutput = screen.getByText('英文话术').closest('.message-output');
-    expect(messageOutput).not.toBeNull();
-    const messageArea = within(messageOutput as HTMLElement);
-    expect(messageArea.getByText('英文话术')).toBeInTheDocument();
-    expect(messageArea.getByText('中文解释')).toBeInTheDocument();
-    expect(messageArea.getByText(/required video\(s\) are still incomplete/)).toBeInTheDocument();
-    expect(messageArea.getAllByText(/https:\/\/tiktok.com\/saved-reference/).length).toBeGreaterThan(0);
-    expect(messageArea.queryByText(/unsaved helper-only selling point/)).not.toBeInTheDocument();
-    expect(messageArea.queryByText(/https:\/\/tiktok.com\/unsaved-helper-reference/)).not.toBeInTheDocument();
-  });
-});
-
-
-describe('post-message tracking workflow', () => {
-  function seedCreator(overrides: Partial<CreatorRow> = {}) {
-    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify([creatorRow(overrides)]));
-  }
-
-  async function renderAndGenerateMessage(overrides: Partial<CreatorRow> = {}) {
-    seedCreator(overrides);
-    const user = userEvent.setup();
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-    return user;
-  }
-
-  function storedCreator(): CreatorRow {
-    return JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
-  }
-
-  it('copies only the English generated message', async () => {
-    const user = await renderAndGenerateMessage();
-    const englishMessage = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
-    const chineseExplanation = screen.getByText('中文解释').nextElementSibling?.textContent ?? '';
-
-    await user.click(screen.getByRole('button', { name: '复制话术' }));
-
-    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(englishMessage));
-    expect(await navigator.clipboard.readText()).not.toContain(chineseExplanation);
-    expect(screen.getByText('已复制英文话术。')).toBeInTheDocument();
-  });
-
-  it('marks a generated message as sent and records follow-up tracking details', async () => {
-    const user = userEvent.setup();
-    seedCreator({ lastFollowUpCount: 1, lastContactDate: '2026-06-01' });
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-
-    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
-    const today = new Date().toISOString().slice(0, 10);
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + 2);
-    const expectedNextDate = nextDate.toISOString().slice(0, 10);
-
-    await waitFor(() => {
-      const saved = storedCreator();
-      expect(saved.lastContactDate).toBe(today);
-      expect(saved.lastFollowUpCount).toBe(2);
-      expect(saved.trackingStatus).toBe('Followed Up');
-      expect(saved.lastMessageScenario).toBe('样品到货后催拍');
-      expect(saved.lastMessageChannel).toBe('TikTok DM');
-      expect(saved.lastMessageSentAt).toBe(today);
-      expect(saved.nextFollowUpDate).toBe(expectedNextDate);
-      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          date: today,
-          action: 'Message Sent',
-          channel: 'TikTok DM',
-          scenario: '样品到货后催拍',
-          message: expect.stringContaining('Hi @fluffy_creator'),
-        }),
-      ]));
-    });
-    expect(screen.getByText('已标记为发送，并同步更新数据表格。')).toBeInTheDocument();
-    expect(screen.getByText('下一步跟进建议')).toBeInTheDocument();
-    expect(screen.getByText(`建议下次跟进时间：${expectedNextDate}`)).toBeInTheDocument();
-    expect(screen.getAllByText('Message Sent', { exact: false }).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('样品到货后催拍', { exact: false }).length).toBeGreaterThan(0);
-  });
-
-  it('saves a creator reply note and updates the follow-up history', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'prompt').mockReturnValue('Creator will post tomorrow');
-    seedCreator();
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-
-    await user.click(screen.getByRole('button', { name: '标记达人已回复' }));
-    const today = new Date().toISOString().slice(0, 10);
-
-    await waitFor(() => {
-      const saved = storedCreator();
-      expect(saved.lastCreatorResponse).toBe('Creator will post tomorrow');
-      expect(saved.trackingStatus).toBe('Replied');
-      expect(saved.lastContactDate).toBe(today);
-      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
-        expect.objectContaining({ date: today, action: 'Creator Replied', note: 'Creator will post tomorrow' }),
-      ]));
-    });
-    expect(window.prompt).toHaveBeenCalledWith('记录达人回复内容或下一步重点：');
-    expect(screen.getByText('已记录达人回复，并同步更新数据表格。')).toBeInTheDocument();
-    expect(screen.getAllByText('Creator will post tomorrow').length).toBeGreaterThan(0);
-  });
-
-  it('marks cooperation completed and normalizes completion progress', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    seedCreator({ videoProgress: '1 of 2', firstVideoPostedDate: '2026-06-02' });
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-
-    await user.click(screen.getByRole('button', { name: '标记合作完成' }));
-    const today = new Date().toISOString().slice(0, 10);
-
-    await waitFor(() => {
-      const saved = storedCreator();
-      expect(saved.currentStatus).toBe('Completed');
-      expect(saved.trackingStatus).toBe('Completed');
-      expect(saved.lastContactDate).toBe(today);
-      expect(saved.videoProgress).toBe('2 of 2');
-      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
-        expect.objectContaining({ date: today, action: 'Completed' }),
-      ]));
-    });
-    expect(window.confirm).toHaveBeenCalledWith('确定要标记这个达人合作完成吗？');
-    expect(screen.getByText('已标记合作完成，并同步更新数据表格。')).toBeInTheDocument();
-  });
-
-  it('marks cooperation failed while preserving priority analysis stability', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.spyOn(window, 'prompt').mockReturnValue('Creator missed deadline');
-    seedCreator({ sampleDeliveredDate: '2026-06-04', lastFollowUpCount: 0 });
-    render(<App />);
-
-    expect(screen.getByText('最高')).toBeInTheDocument();
-    expect(screen.getAllByText(/样品已到货/).length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-    await user.click(screen.getByRole('button', { name: '标记合作失败' }));
-    const today = new Date().toISOString().slice(0, 10);
-
-    await waitFor(() => {
-      const saved = storedCreator();
-      expect(saved.currentStatus).toBe('Failed');
-      expect(saved.trackingStatus).toBe('Failed');
-      expect(saved.lastContactDate).toBe(today);
-      expect(saved.lastCreatorResponse).toBe('Creator missed deadline');
-      expect(saved.notes).toContain('Creator missed deadline');
-      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
-        expect.objectContaining({ date: today, action: 'Failed', note: 'Creator missed deadline' }),
-      ]));
-    });
-    expect(screen.getByText('达人总数')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /今日跟进概览/ })).toBeInTheDocument();
-    expect(window.confirm).toHaveBeenCalledWith('确定要标记这个达人合作失败吗？');
-    expect(window.prompt).toHaveBeenCalledWith('记录失败原因或备注（可选）：');
-    expect(screen.getByText('已标记合作失败，并同步更新数据表格。')).toBeInTheDocument();
-  });
-});
-
-
-describe('editable creator table v1.5 organization and visibility', () => {
-  function seedCreators(rows: CreatorRow[]) {
-    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
-  }
-
-  it('uses Chinese headers, removes duplicate last-message-sent column, and shows no-history text', () => {
-    seedCreators([creatorRow({ followUpHistory: [] })]);
-
-    render(<App />);
-
-    const editableTable = screen.getByRole('columnheader', { name: '跟进记录' }).closest('table');
-    expect(editableTable).not.toBeNull();
-    const editableTableQueries = within(editableTable as HTMLElement);
-
-    ['达人账号', '主页链接', '联系渠道', '产品', '合作状态', '物流状态', '样品到货日期', '视频进度', '首条视频发布日期', '最近联系日期', '跟进次数', '跟进状态', '最近沟通动作', '最近沟通渠道', '下次跟进日期', '达人回复/下一步备注', '跟进记录', '备注'].forEach((header) => {
-      expect(editableTableQueries.getByRole('columnheader', { name: header })).toBeInTheDocument();
-    });
-    expect(editableTableQueries.queryByRole('columnheader', { name: 'Last message sent at' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('暂无记录').length).toBeGreaterThan(0);
-  });
-
-  it('shows follow-up history counts and compact record details in the table', () => {
-    seedCreators([
-      creatorRow({
-        followUpHistory: [
-          { date: '2026-06-01', action: 'Message Sent', channel: 'TikTok DM', scenario: '样品到货后催拍', message: 'Hi @fluffy_creator, checking in.' },
-          { date: '2026-06-02', action: 'Creator Replied', note: 'Will post tomorrow' },
-        ],
-      }),
-    ]);
-
-    render(<App />);
-
-    expect(screen.getByText('2 条记录')).toBeInTheDocument();
-    expect(screen.getAllByText(/已发送/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/达人已回复/).length).toBeGreaterThan(0);
-    expect(screen.getByText('Will post tomorrow')).toBeInTheDocument();
-  });
-
-  it('renders urgency, cooperation status, and tracking status badges for active and archived rows', () => {
-    seedCreators([
-      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleDeliveredDate: '2026-06-07', trackingStatus: 'Followed Up' }),
-      creatorRow({ id: 'completed', username: 'done_creator', currentStatus: 'Completed', trackingStatus: 'Completed', sampleDeliveredDate: '', videoProgress: '2 of 2' }),
-      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', trackingStatus: 'Failed', sampleDeliveredDate: '' }),
-      creatorRow({ id: 'replied', username: 'reply_creator', currentStatus: 'To Contact', trackingStatus: 'Replied', sampleDeliveredDate: '' }),
-    ]);
-
-    render(<App />);
-
-    expect(screen.getAllByText(/紧急度：高|紧急度：极高/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('样品已到待拍').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('待建联').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('已发送待回复').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('达人已回复').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('已失败').length).toBeGreaterThan(0);
-  });
-});
-
-describe('creator follow-up queue selection', () => {
-  function seedCreators(rows: CreatorRow[]) {
-    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
-  }
-
-  function optionTexts(): string[] {
-    return Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
-  }
-
-  it('renames the generator section and shows only the unified urgency filters', () => {
-    seedCreators([creatorRow()]);
-
-    render(<App />);
-
-    expect(screen.getByRole('heading', { name: '7. 达人跟进队列' })).toBeInTheDocument();
-    expect(screen.getByText('按紧急程度排序达人，系统会根据当前合作阶段生成对应话术。')).toBeInTheDocument();
-    const filterGroup = screen.getByLabelText('紧急程度筛选');
-    expect(within(filterGroup).getAllByRole('button').map((button) => button.textContent)).toEqual(['全部', '极高', '高', '中', '低', '归档']);
-    ['最高优先级', '高优先级', '待建联', '需跟进', '样品运输中', '样品已到', '部分视频', '需修改', '已完成', '失败'].forEach((label) => {
-      expect(within(filterGroup).queryByRole('button', { name: label })).not.toBeInTheDocument();
-    });
-  });
-
-  it('makes all creators available and labels them with urgency plus communication action', () => {
-    seedCreators([
-      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleDeliveredDate: '2026-06-07', sampleShippingStatus: 'Delivered', videoProgress: '0 of 2', lastFollowUpCount: 0 }),
-      creatorRow({ id: 'normal', username: 'normal_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '0 of 2', lastContactDate: '' }),
-      creatorRow({ id: 'completed', username: 'done_creator', currentStatus: 'Completed', sampleDeliveredDate: '', sampleShippingStatus: 'Delivered', videoProgress: '2 of 2' }),
-      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '0 of 2' }),
-    ]);
-
-    render(<App />);
-
-    const options = optionTexts();
-    expect(options).toEqual(expect.arrayContaining([
-      expect.stringContaining('今日未联系 · 极高 · highest_creator · 样品到货催拍'),
-      expect.stringContaining('今日未联系 · 低 · normal_creator · 未合作邀约'),
-      expect.stringContaining('今日未联系 · 归档 · done_creator · 合作完成维护'),
-      expect.stringContaining('今日未联系 · 归档 · failed_creator · 合作失败归档'),
-    ]));
-  });
-
-  it('classifies To Contact with no sample shipped as 低 + 未合作邀约', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'true-to-contact', username: 'true_to_contact', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', lastContactDate: '' }),
-      creatorRow({ id: 'contacted', username: 'contacted_creator', currentStatus: 'Contacted / Waiting for Reply', sampleShippingStatus: '', sampleDeliveredDate: '' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '低' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('今日未联系 · 低 · true_to_contact · 未合作邀约')]);
-  });
-
-  it('classifies To Contact with In Transit as 中 or 高 + 样品运输中建联, not 未合作邀约', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'stale-to-contact', username: 'stale_in_transit', currentStatus: 'To Contact', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', lastContactDate: '' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '中' }));
-    const options = optionTexts();
-    expect(options).toEqual([expect.stringContaining('今日未联系 · 中 · stale_in_transit · 样品运输中建联')]);
-    expect(options.join('\n')).not.toContain('未合作邀约');
-  });
-
-  it('classifies Delivered + 0/N as 高 or 极高 + 样品到货催拍', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'delivered-status', username: 'delivered_status_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '', videoProgress: '0 of 2', lastFollowUpCount: 0 }),
-      creatorRow({ id: 'not-delivered', username: 'not_delivered_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '高' }));
-    const options = optionTexts().join('\n');
-    expect(options).toContain('今日未联系 · 高 · delivered_status_creator · 样品到货催拍');
-    expect(options).not.toContain('not_delivered_creator');
-  });
-
-  it('classifies postedCount > 0 and postedCount < requiredVideos as 高 or 极高 + 剩余视频履约', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'partial', username: 'partial_creator', currentStatus: 'Posted Video / Waiting for Next Video', sampleShippingStatus: 'Delivered', videoProgress: '1 of 2', lastFollowUpCount: 0 }),
-      creatorRow({ id: 'completed-progress', username: 'completed_progress_creator', currentStatus: 'Posted Video / Waiting for Next Video', sampleShippingStatus: 'Delivered', videoProgress: '2 of 2' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '高' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('今日未联系 · 高 · partial_creator · 剩余视频履约')]);
-  });
-
-  it('classifies Needs Revision, Completed, and Failed with their communication actions', () => {
-    seedCreators([
-      creatorRow({ id: 'revision', username: 'revision_creator', currentStatus: 'Needs Revision', sampleShippingStatus: 'Delivered', videoProgress: '1 of 2' }),
-      creatorRow({ id: 'completed', username: 'completed_creator', currentStatus: 'Completed', sampleShippingStatus: 'Delivered', videoProgress: '2 of 2' }),
-      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', sampleShippingStatus: '', videoProgress: '0 of 2' }),
-    ]);
-
-    render(<App />);
-
-    const options = optionTexts().join('\n');
-    expect(options).toContain('今日未联系 · 高 · revision_creator · 视频修改');
-    expect(options).toContain('今日未联系 · 归档 · completed_creator · 合作完成维护');
-    expect(options).toContain('今日未联系 · 归档 · failed_creator · 合作失败归档');
-  });
-
-  it('searches creators by username, product, status, urgency, and communication action', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'username-match', username: 'alpha_creator', product: 'Water Bottle', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '' }),
-      creatorRow({ id: 'product-match', username: 'beta_creator', product: 'Cat Tunnel', currentStatus: 'Invited / Waiting for Sample Request', sampleDeliveredDate: '', sampleShippingStatus: '' }),
-      creatorRow({ id: 'status-match', username: 'gamma_creator', product: 'Pet Comb', currentStatus: 'Needs Revision', sampleDeliveredDate: '', sampleShippingStatus: '' }),
-      creatorRow({ id: 'action-match', username: 'delta_creator', product: 'Pet Brush', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
-    ]);
-
-    render(<App />);
-
-    const searchInput = screen.getByLabelText('搜索达人账号 / 产品 / 状态 / 沟通动作');
-
-    await user.type(searchInput, 'alpha');
-    expect(optionTexts()).toEqual([expect.stringContaining('alpha_creator')]);
-
-    await user.clear(searchInput);
-    await user.type(searchInput, 'Cat Tunnel');
-    expect(optionTexts()).toEqual([expect.stringContaining('beta_creator')]);
-
-    await user.clear(searchInput);
-    await user.type(searchInput, 'Needs Revision');
-    expect(optionTexts()).toEqual([expect.stringContaining('gamma_creator')]);
-
-    await user.clear(searchInput);
-    await user.type(searchInput, '样品运输中建联');
-    expect(optionTexts()).toEqual([expect.stringContaining('delta_creator')]);
-
-    await user.clear(searchInput);
-    await user.type(searchInput, '低');
-    expect(optionTexts().join('\n')).toContain('alpha_creator');
-  });
-
-
-  it('filters the follow-up queue when overview cards are clicked and jumps to the queue', async () => {
-    const user = userEvent.setup();
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-    seedCreators([
-      creatorRow({ id: 'urgent', username: 'urgent_creator', currentStatus: 'Delivered / Waiting for Video', sampleDeliveredDate: '2026-06-02', sampleShippingStatus: 'Delivered', videoProgress: '0 of 2' }),
-      creatorRow({ id: 'high', username: 'high_partial_creator', currentStatus: 'Posted Video / Waiting for Next Video', sampleDeliveredDate: '2026-06-08', sampleShippingStatus: 'Delivered', videoProgress: '1 of 2' }),
-      creatorRow({ id: 'logistics', username: 'logistics_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '', videoProgress: '0 of 2' }),
-      creatorRow({ id: 'delivered', username: 'delivered_zero_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-08', videoProgress: '0 of 2' }),
-      creatorRow({ id: 'sent', username: 'sent_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', trackingStatus: 'Followed Up' }),
-      creatorRow({ id: 'replied', username: 'replied_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', trackingStatus: 'Replied' }),
-      creatorRow({ id: 'completed', username: 'completed_creator', currentStatus: 'Completed', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '2 of 2', trackingStatus: 'Completed' }),
-      creatorRow({ id: 'failed', username: 'failed_creator', currentStatus: 'Failed', sampleDeliveredDate: '', sampleShippingStatus: '', trackingStatus: 'Failed' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '筛选极高' }));
-    expect(screen.getByText('当前筛选：极高')).toBeInTheDocument();
-    expect(optionTexts().join('\n')).toContain('urgent_creator');
-
-    await user.click(screen.getByRole('button', { name: '筛选高' }));
-    expect(screen.getByText('当前筛选：高')).toBeInTheDocument();
-    expect(optionTexts().join('\n')).toContain('high_partial_creator');
-    expect(screen.getByRole('combobox', { name: '选择达人' }).querySelector('option:checked')?.textContent).toMatch(/高/);
-    expect(scrollIntoView).toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: '筛选物流待确认' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('logistics_creator')]);
-
-    await user.click(screen.getByRole('button', { name: '筛选样品到货待拍' }));
-    expect(optionTexts().join('\n')).toContain('delivered_zero_creator');
-
-    await user.click(screen.getByRole('button', { name: '筛选剩余视频待履约' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('high_partial_creator')]);
-
-    await user.click(screen.getByRole('button', { name: '筛选已发送待回复' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('sent_creator')]);
-
-    await user.click(screen.getByRole('button', { name: '筛选达人已回复' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('replied_creator')]);
-
-    await user.click(screen.getByRole('button', { name: '筛选已完成' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('completed_creator')]);
-
-    await user.click(screen.getByRole('button', { name: '筛选已失败' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('failed_creator')]);
-  });
-
-  it('shows the overview empty state and clears overview filters', async () => {
-    const user = userEvent.setup();
-    Element.prototype.scrollIntoView = vi.fn();
-    seedCreators([
-      creatorRow({ id: 'active', username: 'active_creator', currentStatus: 'To Contact', sampleDeliveredDate: '', sampleShippingStatus: '', videoProgress: '0 of 2' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '筛选已失败' }));
-    expect(screen.getByText('当前筛选：已失败')).toBeInTheDocument();
-    expect(screen.getByText('当前没有匹配的达人。')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '清除筛选' }));
-    expect(screen.queryByText('当前筛选：已失败')).not.toBeInTheDocument();
-    expect(optionTexts().join('\n')).toContain('active_creator');
-  });
-
-  it('updates overview result counts immediately after tracking actions', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'prompt').mockReturnValue('Creator replied');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    seedCreators([
-      creatorRow({ id: 'trackable', username: 'trackable_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-08', videoProgress: '0 of 2' }),
-    ]);
-
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-
-    expect(screen.getByRole('button', { name: '筛选已发送待回复' })).toHaveTextContent('0');
-    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: '筛选已发送待回复' })).toHaveTextContent('1'));
-
-    await user.click(screen.getByRole('button', { name: '标记达人已回复' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: '筛选达人已回复' })).toHaveTextContent('1'));
-
-    await user.click(screen.getByRole('button', { name: '标记合作完成' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: '筛选已完成' })).toHaveTextContent('1'));
-  });
-
-  it('updates the failed overview result count after marking a creator failed', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'prompt').mockReturnValue('Creator missed deadline');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    seedCreators([
-      creatorRow({ id: 'fail-trackable', username: 'fail_trackable_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-08', videoProgress: '0 of 2' }),
-    ]);
-
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-
-    expect(screen.getByRole('button', { name: '筛选已失败' })).toHaveTextContent('0');
-    await user.click(screen.getByRole('button', { name: '标记合作失败' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: '筛选已失败' })).toHaveTextContent('1'));
-  });
-
-  it('shows urgency, communication action, and reason above English-only generated messages', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'delivered', username: 'delivered_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-02', videoProgress: '0 of 2', lastFollowUpCount: 0 }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-    const messageOutput = screen.getByText('英文话术').closest('.message-output');
-    expect(messageOutput).not.toBeNull();
-    const messageArea = within(messageOutput as HTMLElement);
-    expect(messageArea.getByText(/紧急程度：极高/)).toBeInTheDocument();
-    expect(messageArea.getByText(/沟通动作：样品到货催拍/)).toBeInTheDocument();
-    expect(messageArea.getByText(/原因：/)).toBeInTheDocument();
-    const englishMessage = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
-    expect(englishMessage).not.toMatch(/[\u3400-\u9fff]/);
-    expect(screen.getByRole('button', { name: '复制话术' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '标记为已发送' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '标记达人已回复' })).toBeInTheDocument();
-    expect(screen.getAllByText('跟进记录').length).toBeGreaterThan(0);
-  });
-
-  it('shows a helpful generic empty state when filters or search have no matches', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'sample-shipped', username: 'sample_shipped_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '极高' }));
-    expect(screen.getByText('没有匹配的达人，请调整搜索词或切换筛选。')).toBeInTheDocument();
-  });
-});
-
-describe('second full-day table and creator reply optimizations', () => {
-  function seedCreators(rows: CreatorRow[]) {
-    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
-  }
-
-  function optionTexts(): string[] {
-    return Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
-  }
-
-  it('renders the editable table in an internal scroll container with sticky header and sticky creator column styles', () => {
-    seedCreators(Array.from({ length: 12 }, (_, index) => creatorRow({ id: `creator-${index}`, username: `creator_${index}` })));
-
-    render(<App />);
-
-    const scrollContainer = screen.getByTestId('editable-table-scroll-container');
-    expect(scrollContainer).toHaveClass('editable-table-wrap');
-    expect(scrollContainer).toHaveStyle({ maxHeight: '620px', overflow: 'auto' });
-    expect(screen.getByRole('columnheader', { name: '达人账号' })).toHaveClass('sticky-creator-column');
-    expect(screen.getByRole('columnheader', { name: '紧急度' }).closest('thead')).toHaveClass('sticky-table-header');
-  });
-
-  it('collapses and expands the editable table summary', async () => {
-    const user = userEvent.setup();
-    seedCreators([creatorRow(), creatorRow({ id: 'creator-2', username: 'second_creator' })]);
-
-    render(<App />);
-
-    expect(screen.getByTestId('editable-table-scroll-container')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '收起表格' }));
-    expect(screen.getByText('当前共 2 位达人，点击展开查看或编辑数据表。')).toBeInTheDocument();
-    expect(screen.queryByTestId('editable-table-scroll-container')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '展开表格' }));
-    expect(screen.getByTestId('editable-table-scroll-container')).toBeInTheDocument();
-  });
-
-  it('toggles compact mode on the editable table', async () => {
-    const user = userEvent.setup();
-    seedCreators([creatorRow()]);
-
-    render(<App />);
-
-    const compactToggle = screen.getByLabelText('紧凑模式');
-    expect(screen.getByTestId('editable-table-scroll-container')).not.toHaveClass('compact-table-mode');
-    await user.click(compactToggle);
-    expect(screen.getByTestId('editable-table-scroll-container')).toHaveClass('compact-table-mode');
-  });
-
-  it('keeps replied creators in the queue, shows saved reply details, and generates focused reply copy', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({
-        id: 'reply-pending',
-        username: 'reply_creator',
-        trackingStatus: 'Replied',
-        lastCreatorResponse: 'The package has not arrived yet.',
-        followUpHistory: [{ date: '2026-06-08', action: 'Creator Replied', note: 'The package has not arrived yet.' }],
-        currentStatus: 'Sample Shipped',
-        sampleShippingStatus: 'In Transit',
-        sampleDeliveredDate: '',
-      }),
-      creatorRow({ id: 'failed-replied', username: 'failed_replied', trackingStatus: 'Replied', lastCreatorResponse: 'I cannot continue.', currentStatus: 'Failed' }),
-    ]);
-
-    render(<App />);
-
-    expect(optionTexts().join('\n')).toContain('今日未联系 · 高 · reply_creator · 回复达人消息');
-    expect(optionTexts().join('\n')).toContain('今日未联系 · 归档 · failed_replied · 合作失败归档');
-    expect(screen.getByText('达人回复内容')).toBeInTheDocument();
-    expect(screen.getAllByText('The package has not arrived yet.').length).toBeGreaterThan(0);
-    expect(screen.getByText('最近回复日期：2026-06-08')).toBeInTheDocument();
-    expect(screen.getByLabelText('我想回复的重点（可选）')).toBeInTheDocument();
-    expect(screen.getByText('个性化回复设置')).toBeInTheDocument();
-    expect(screen.getByLabelText('达人关系备注（可选）')).toBeInTheDocument();
-    expect(screen.getByLabelText('回复语气（可选）')).toHaveValue('中立专业');
-    expect(screen.getByLabelText('这次回复目标（可选）')).toBeInTheDocument();
-    expect(screen.getByLabelText('可接受让步（可选）')).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText('我想回复的重点（可选）'), '提醒继续查看物流');
-    await user.type(screen.getByLabelText('达人关系备注（可选）'), '她回复比较慢');
-    await user.selectOptions(screen.getByLabelText('回复语气（可选）'), '坚定推进');
-    await user.type(screen.getByLabelText('这次回复目标（可选）'), '安抚情绪');
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-
-    const englishMessage = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
-    expect(screen.getByText(/沟通动作：回复达人消息/)).toBeInTheDocument();
-    expect(englishMessage).toContain('delivery');
-    expect(englishMessage).toContain('delivery updates');
-    expect(englishMessage).toContain('No need to start filming');
-    expect(englishMessage).toContain('keep the next step clear');
-    expect(englishMessage).not.toMatch(/[\u3400-\u9fff]/);
-  });
-
-  it('updates tracking status and history after sending a generated creator reply message while keeping the saved reply note', async () => {
-    const user = userEvent.setup();
-    seedCreators([creatorRow({
-      trackingStatus: 'Replied',
-      lastCreatorResponse: 'I can post this Friday.',
-      followUpHistory: [{ date: '2026-06-08', action: 'Creator Replied', note: 'I can post this Friday.' }],
-    })]);
-
-    render(<App />);
-    await user.type(screen.getByLabelText('我想回复的重点（可选）'), '同意她周五发布');
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
-
-    const today = new Date().toISOString().slice(0, 10);
-    await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
-      expect(saved.trackingStatus).toBe('Followed Up');
-      expect(saved.lastContactDate).toBe(today);
-      expect(saved.lastFollowUpCount).toBe(1);
-      expect(saved.lastCreatorResponse).toBe('I can post this Friday.');
-      expect(saved.followUpHistory).toEqual(expect.arrayContaining([
-        expect.objectContaining({ action: 'Creator Replied', note: 'I can post this Friday.' }),
-        expect.objectContaining({ action: 'Message Sent', scenario: '回复达人消息', date: today }),
-      ]));
-    });
-  });
-});
-
-describe('today contacted filters and urgency sorted editable table', () => {
-  function seedCreators(rows: CreatorRow[]) {
-    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
-  }
-
-  function optionTexts(): string[] {
-    return Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
-  }
-
-  function editableBodyRows(): HTMLTableRowElement[] {
-    return Array.from(screen.getByTestId('editable-table-scroll-container').querySelectorAll('tbody tr')) as HTMLTableRowElement[];
-  }
-
-  function creatorNamesInTable(): string[] {
-    return editableBodyRows().map((row) => (within(row).getByLabelText('达人账号') as HTMLInputElement).value);
-  }
-
-  it('marks a message as sent and shows that creator in 今日已联系 and 今日已发送待回复', async () => {
-    const user = userEvent.setup();
-    const today = new Date().toISOString().slice(0, 10);
-    seedCreators([creatorRow({ id: 'send-today', username: 'send_today_creator', lastContactDate: '2026-06-01' })]);
-
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '生成话术' }));
-    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
-
-    await waitFor(() => expect(screen.getByRole('button', { name: '筛选今日已联系' })).toHaveTextContent('1'));
-    expect(screen.getByRole('button', { name: '筛选今日已发送待回复' })).toHaveTextContent('1');
-    expect(JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0]).toMatchObject({
-      lastContactDate: today,
-      trackingStatus: 'Followed Up',
-    });
-
-    await user.click(screen.getByRole('button', { name: '筛选今日已联系' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('今日已联系 · 已发送待回复 · send_today_creator')]);
-  });
-
-  it('filters 今日已联系, 今日未联系, and 今日达人已回复待处理 correctly', async () => {
-    const user = userEvent.setup();
-    const today = new Date().toISOString().slice(0, 10);
-    seedCreators([
-      creatorRow({ id: 'contacted', username: 'contacted_today', lastContactDate: today, trackingStatus: 'Followed Up' }),
-      creatorRow({ id: 'not-contacted', username: 'not_contacted_today', lastContactDate: '2026-06-01' }),
-      creatorRow({ id: 'replied', username: 'replied_pending_today', lastContactDate: today, trackingStatus: 'Reply Pending', lastCreatorResponse: 'No problem!' }),
-      creatorRow({ id: 'done', username: 'done_today', currentStatus: 'Completed', trackingStatus: 'Completed', lastContactDate: '2026-06-01', videoProgress: '2 of 2' }),
-    ]);
-
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '筛选今日已联系' }));
-    expect(optionTexts().join('\n')).toContain('contacted_today');
-    expect(optionTexts().join('\n')).toContain('replied_pending_today');
-    expect(optionTexts().join('\n')).not.toContain('not_contacted_today');
-
-    await user.click(screen.getByRole('button', { name: '筛选今日未联系' }));
-    const notContactedOptions = optionTexts().join('\n');
-    expect(notContactedOptions).toContain('not_contacted_today');
-    expect(notContactedOptions).not.toContain('今日已联系');
-    expect(notContactedOptions).not.toContain('done_today');
-
-    await user.click(screen.getByRole('button', { name: '筛选今日达人已回复待处理' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('replied_pending_today')]);
-  });
-
-  it('shows the 今日已联系 empty state when no creators were contacted today', async () => {
-    const user = userEvent.setup();
-    seedCreators([creatorRow({ id: 'old', username: 'old_contact', lastContactDate: '2026-06-01' })]);
-
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '筛选今日已联系' }));
-
-    expect(screen.getByText('今天还没有联系过的达人。')).toBeInTheDocument();
-  });
-
-  it('sorts the editable table by urgency by default and can preserve upload order when disabled', async () => {
-    const user = userEvent.setup();
-    seedCreators([
-      creatorRow({ id: 'low', username: 'low_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', lastContactDate: '' }),
-      creatorRow({ id: 'archived', username: 'archived_creator', currentStatus: 'Completed', trackingStatus: 'Completed', videoProgress: '2 of 2', sampleDeliveredDate: '' }),
-      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-01', videoProgress: '0 of 2' }),
-      creatorRow({ id: 'medium', username: 'medium_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
-    ]);
-
-    render(<App />);
-
-    expect(creatorNamesInTable()).toEqual([
-      'highest_creator',
-      'medium_creator',
-      'low_creator',
-      'archived_creator',
-    ]);
-    expect(screen.getAllByText(/紧急度：/).length).toBeGreaterThanOrEqual(4);
-
-    await user.click(screen.getByLabelText('按紧急程度排序'));
-    expect(creatorNamesInTable()).toEqual([
-      'low_creator',
-      'archived_creator',
-      'highest_creator',
-      'medium_creator',
-    ]);
-  });
-
-  it('edits and deletes the correct creator while the table is sorted', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    seedCreators([
-      creatorRow({ id: 'low', username: 'low_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', lastContactDate: '' }),
-      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-01', videoProgress: '0 of 2' }),
-    ]);
-
-    render(<App />);
-
-    const highestRow = editableBodyRows().find((row) => (within(row).getByLabelText('达人账号') as HTMLInputElement).value === 'highest_creator') as HTMLTableRowElement;
-    await user.clear(within(highestRow).getByLabelText('达人账号'));
-    await user.type(within(highestRow).getByLabelText('达人账号'), 'renamed_highest');
-
-    await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
-      expect(saved.find((row) => row.id === 'highest')?.username).toBe('renamed_highest');
-      expect(saved.find((row) => row.id === 'low')?.username).toBe('low_creator');
-    });
-
-    const renamedRow = editableBodyRows().find((row) => (within(row).getByLabelText('达人账号') as HTMLInputElement).value === 'renamed_highest') as HTMLTableRowElement;
-    await user.click(within(renamedRow).getByRole('button', { name: '删除' }));
-
-    await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
-      expect(saved.map((row) => row.id)).toEqual(['low']);
-    });
+    await goTo(user, /Settings/);
+    await user.click(screen.getByRole('button', { name: '清空当前数据' }));
+
+    await waitFor(() => expect(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY)).toBeNull());
+    expect(screen.getByRole('status')).toHaveTextContent('已清空本地达人数据。');
   });
 });
