@@ -414,8 +414,8 @@ describe('editable creator table v1.5 organization and visibility', () => {
     render(<App />);
 
     expect(screen.getByText('2 条记录')).toBeInTheDocument();
-    expect(screen.getByText(/已发送/)).toBeInTheDocument();
-    expect(screen.getByText(/达人已回复/)).toBeInTheDocument();
+    expect(screen.getAllByText(/已发送/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/达人已回复/).length).toBeGreaterThan(0);
     expect(screen.getByText('Will post tomorrow')).toBeInTheDocument();
   });
 
@@ -474,10 +474,10 @@ describe('creator follow-up queue selection', () => {
 
     const options = optionTexts();
     expect(options).toEqual(expect.arrayContaining([
-      expect.stringContaining('高 · 样品到货催拍 · highest_creator'),
-      expect.stringContaining('低 · 未合作邀约 · normal_creator'),
-      expect.stringContaining('归档 · 合作完成维护 · done_creator'),
-      expect.stringContaining('归档 · 合作失败归档 · failed_creator'),
+      expect.stringContaining('今日未联系 · 极高 · highest_creator · 样品到货催拍'),
+      expect.stringContaining('今日未联系 · 低 · normal_creator · 未合作邀约'),
+      expect.stringContaining('今日未联系 · 归档 · done_creator · 合作完成维护'),
+      expect.stringContaining('今日未联系 · 归档 · failed_creator · 合作失败归档'),
     ]));
   });
 
@@ -491,7 +491,7 @@ describe('creator follow-up queue selection', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: '低' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('低 · 未合作邀约 · true_to_contact')]);
+    expect(optionTexts()).toEqual([expect.stringContaining('今日未联系 · 低 · true_to_contact · 未合作邀约')]);
   });
 
   it('classifies To Contact with In Transit as 中 or 高 + 样品运输中建联, not 未合作邀约', async () => {
@@ -504,7 +504,7 @@ describe('creator follow-up queue selection', () => {
 
     await user.click(screen.getByRole('button', { name: '中' }));
     const options = optionTexts();
-    expect(options).toEqual([expect.stringContaining('中 · 样品运输中建联 · stale_in_transit')]);
+    expect(options).toEqual([expect.stringContaining('今日未联系 · 中 · stale_in_transit · 样品运输中建联')]);
     expect(options.join('\n')).not.toContain('未合作邀约');
   });
 
@@ -519,7 +519,7 @@ describe('creator follow-up queue selection', () => {
 
     await user.click(screen.getByRole('button', { name: '高' }));
     const options = optionTexts().join('\n');
-    expect(options).toContain('高 · 样品到货催拍 · delivered_status_creator');
+    expect(options).toContain('今日未联系 · 高 · delivered_status_creator · 样品到货催拍');
     expect(options).not.toContain('not_delivered_creator');
   });
 
@@ -533,7 +533,7 @@ describe('creator follow-up queue selection', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: '高' }));
-    expect(optionTexts()).toEqual([expect.stringContaining('高 · 剩余视频履约 · partial_creator')]);
+    expect(optionTexts()).toEqual([expect.stringContaining('今日未联系 · 高 · partial_creator · 剩余视频履约')]);
   });
 
   it('classifies Needs Revision, Completed, and Failed with their communication actions', () => {
@@ -546,9 +546,9 @@ describe('creator follow-up queue selection', () => {
     render(<App />);
 
     const options = optionTexts().join('\n');
-    expect(options).toContain('高 · 视频修改 · revision_creator');
-    expect(options).toContain('归档 · 合作完成维护 · completed_creator');
-    expect(options).toContain('归档 · 合作失败归档 · failed_creator');
+    expect(options).toContain('今日未联系 · 高 · revision_creator · 视频修改');
+    expect(options).toContain('今日未联系 · 归档 · completed_creator · 合作完成维护');
+    expect(options).toContain('今日未联系 · 归档 · failed_creator · 合作失败归档');
   });
 
   it('searches creators by username, product, status, urgency, and communication action', async () => {
@@ -792,8 +792,8 @@ describe('second full-day table and creator reply optimizations', () => {
 
     render(<App />);
 
-    expect(optionTexts().join('\n')).toContain('高 · 回复达人消息 · reply_creator');
-    expect(optionTexts().join('\n')).toContain('归档 · 合作失败归档 · failed_replied');
+    expect(optionTexts().join('\n')).toContain('今日未联系 · 高 · reply_creator · 回复达人消息');
+    expect(optionTexts().join('\n')).toContain('今日未联系 · 归档 · failed_replied · 合作失败归档');
     expect(screen.getByText('达人回复内容')).toBeInTheDocument();
     expect(screen.getAllByText('The package has not arrived yet.').length).toBeGreaterThan(0);
     expect(screen.getByText('最近回复日期：2026-06-08')).toBeInTheDocument();
@@ -843,6 +843,138 @@ describe('second full-day table and creator reply optimizations', () => {
         expect.objectContaining({ action: 'Creator Replied', note: 'I can post this Friday.' }),
         expect.objectContaining({ action: 'Message Sent', scenario: '回复达人消息', date: today }),
       ]));
+    });
+  });
+});
+
+describe('today contacted filters and urgency sorted editable table', () => {
+  function seedCreators(rows: CreatorRow[]) {
+    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
+  }
+
+  function optionTexts(): string[] {
+    return Array.from(screen.getByRole('combobox', { name: '选择达人' }).querySelectorAll('option')).map((option) => option.textContent ?? '');
+  }
+
+  function editableBodyRows(): HTMLTableRowElement[] {
+    return Array.from(screen.getByTestId('editable-table-scroll-container').querySelectorAll('tbody tr')) as HTMLTableRowElement[];
+  }
+
+  function creatorNamesInTable(): string[] {
+    return editableBodyRows().map((row) => (within(row).getByLabelText('达人账号') as HTMLInputElement).value);
+  }
+
+  it('marks a message as sent and shows that creator in 今日已联系 and 今日已发送待回复', async () => {
+    const user = userEvent.setup();
+    const today = new Date().toISOString().slice(0, 10);
+    seedCreators([creatorRow({ id: 'send-today', username: 'send_today_creator', lastContactDate: '2026-06-01' })]);
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '筛选今日已联系' })).toHaveTextContent('1'));
+    expect(screen.getByRole('button', { name: '筛选今日已发送待回复' })).toHaveTextContent('1');
+    expect(JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0]).toMatchObject({
+      lastContactDate: today,
+      trackingStatus: 'Followed Up',
+    });
+
+    await user.click(screen.getByRole('button', { name: '筛选今日已联系' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('今日已联系 · 已发送待回复 · send_today_creator')]);
+  });
+
+  it('filters 今日已联系, 今日未联系, and 今日达人已回复待处理 correctly', async () => {
+    const user = userEvent.setup();
+    const today = new Date().toISOString().slice(0, 10);
+    seedCreators([
+      creatorRow({ id: 'contacted', username: 'contacted_today', lastContactDate: today, trackingStatus: 'Followed Up' }),
+      creatorRow({ id: 'not-contacted', username: 'not_contacted_today', lastContactDate: '2026-06-01' }),
+      creatorRow({ id: 'replied', username: 'replied_pending_today', lastContactDate: today, trackingStatus: 'Reply Pending', lastCreatorResponse: 'No problem!' }),
+      creatorRow({ id: 'done', username: 'done_today', currentStatus: 'Completed', trackingStatus: 'Completed', lastContactDate: '2026-06-01', videoProgress: '2 of 2' }),
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '筛选今日已联系' }));
+    expect(optionTexts().join('\n')).toContain('contacted_today');
+    expect(optionTexts().join('\n')).toContain('replied_pending_today');
+    expect(optionTexts().join('\n')).not.toContain('not_contacted_today');
+
+    await user.click(screen.getByRole('button', { name: '筛选今日未联系' }));
+    const notContactedOptions = optionTexts().join('\n');
+    expect(notContactedOptions).toContain('not_contacted_today');
+    expect(notContactedOptions).not.toContain('今日已联系');
+    expect(notContactedOptions).not.toContain('done_today');
+
+    await user.click(screen.getByRole('button', { name: '筛选今日达人已回复待处理' }));
+    expect(optionTexts()).toEqual([expect.stringContaining('replied_pending_today')]);
+  });
+
+  it('shows the 今日已联系 empty state when no creators were contacted today', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: 'old', username: 'old_contact', lastContactDate: '2026-06-01' })]);
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '筛选今日已联系' }));
+
+    expect(screen.getByText('今天还没有联系过的达人。')).toBeInTheDocument();
+  });
+
+  it('sorts the editable table by urgency by default and can preserve upload order when disabled', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'low', username: 'low_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', lastContactDate: '' }),
+      creatorRow({ id: 'archived', username: 'archived_creator', currentStatus: 'Completed', trackingStatus: 'Completed', videoProgress: '2 of 2', sampleDeliveredDate: '' }),
+      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-01', videoProgress: '0 of 2' }),
+      creatorRow({ id: 'medium', username: 'medium_creator', currentStatus: 'Sample Shipped', sampleShippingStatus: 'In Transit', sampleDeliveredDate: '' }),
+    ]);
+
+    render(<App />);
+
+    expect(creatorNamesInTable()).toEqual([
+      'highest_creator',
+      'medium_creator',
+      'low_creator',
+      'archived_creator',
+    ]);
+    expect(screen.getAllByText(/紧急度：/).length).toBeGreaterThanOrEqual(4);
+
+    await user.click(screen.getByLabelText('按紧急程度排序'));
+    expect(creatorNamesInTable()).toEqual([
+      'low_creator',
+      'archived_creator',
+      'highest_creator',
+      'medium_creator',
+    ]);
+  });
+
+  it('edits and deletes the correct creator while the table is sorted', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    seedCreators([
+      creatorRow({ id: 'low', username: 'low_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', lastContactDate: '' }),
+      creatorRow({ id: 'highest', username: 'highest_creator', currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-01', videoProgress: '0 of 2' }),
+    ]);
+
+    render(<App />);
+
+    const highestRow = editableBodyRows().find((row) => (within(row).getByLabelText('达人账号') as HTMLInputElement).value === 'highest_creator') as HTMLTableRowElement;
+    await user.clear(within(highestRow).getByLabelText('达人账号'));
+    await user.type(within(highestRow).getByLabelText('达人账号'), 'renamed_highest');
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
+      expect(saved.find((row) => row.id === 'highest')?.username).toBe('renamed_highest');
+      expect(saved.find((row) => row.id === 'low')?.username).toBe('low_creator');
+    });
+
+    const renamedRow = editableBodyRows().find((row) => (within(row).getByLabelText('达人账号') as HTMLInputElement).value === 'renamed_highest') as HTMLTableRowElement;
+    await user.click(within(renamedRow).getByRole('button', { name: '删除' }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]') as CreatorRow[];
+      expect(saved.map((row) => row.id)).toEqual(['low']);
     });
   });
 });

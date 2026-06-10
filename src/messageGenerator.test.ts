@@ -720,3 +720,57 @@ describe('creator reply follow-up generator', () => {
   });
 
 });
+
+describe('creator reply local intent mapping', () => {
+  function replyTask(reply = 'No problem!'): Task {
+    return task({
+      currentStatus: 'Sample Delivered',
+      trackingStatus: 'Replied',
+      lastCreatorResponse: reply,
+      followUpHistory: [{ date: '2026-06-09', action: 'Creator Replied', note: reply }],
+    });
+  }
+
+  it('maps Chinese 具体时间 focus to an estimated posting date request', () => {
+    const message = generateMessage(replyTask(), 'TikTok DM', requirements(), '有没有具体时间');
+
+    expect(message.scenario).toBe('Creator Reply Follow-up');
+    expect(message.english).toContain('estimated posting date');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('maps Chinese 投流 and 投放计划 focus to ad testing and boost planning', () => {
+    const message = generateMessage(replyTask(), 'TikTok DM', requirements(), '方便团队安排投流和投放计划');
+
+    expect(message.english).toContain('ad testing');
+    expect(message.english).toContain('boost timing');
+    expect(message.english).toContain('campaign planning');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('maps Chinese 记录 focus to noting the update on our side', () => {
+    const message = generateMessage(replyTask(), 'TikTok DM', requirements(), '我这里记录一下');
+
+    expect(message.english).toContain('note this on our side');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('maps Chinese 期待 focus to a natural appreciative reply', () => {
+    const message = generateMessage(replyTask(), 'TikTok DM', requirements(), '期待你拍的视频，谢谢');
+
+    expect(message.english).toContain('thank you for the update');
+    expect(message.english).toContain('looking forward to seeing the content');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('combines looking-forward, posting-date, and ad-planning intents without generic fallback', () => {
+    const message = generateMessage(replyTask(), 'TikTok DM', requirements(), '期待你拍的视频，有没有具体的时间让我流团队安排投放计划');
+
+    expect(message.english).toContain('looking forward to seeing the content');
+    expect(message.english).toContain('estimated posting date');
+    expect(message.english).toMatch(/ad testing|campaign planning/);
+    expect(message.english).not.toContain('Please reply with the clearest next update');
+    expect(message.english).not.toContain('This helps us keep the collaboration timeline clear');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+});

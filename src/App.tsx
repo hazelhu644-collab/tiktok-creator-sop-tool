@@ -226,6 +226,10 @@ const creatorQuickFilters = [
 type CreatorQuickFilterKey = typeof creatorQuickFilters[number]['key'];
 type OverviewFilterKey =
   | 'today'
+  | 'todayContacted'
+  | 'todayNotContacted'
+  | 'todaySentWaiting'
+  | 'todayRepliedPending'
   | '极高'
   | '高'
   | '中'
@@ -330,6 +334,31 @@ function isArchivedCreator(task: Task, requiredVideos: number): boolean {
     || classifyCreatorFollowUp(task, requiredVideos).urgencyLevel === '归档';
 }
 
+function isTodayDate(value: string, today = formatDate(new Date())): boolean {
+  return value.trim() === today;
+}
+
+function wasContactedToday(task: Task | CreatorRow, today = formatDate(new Date())): boolean {
+  return isTodayDate(task.lastContactDate, today);
+}
+
+function isActiveCreator(task: Task | CreatorRow): boolean {
+  return !isCompletedCreator(task) && !isFailedCreator(task);
+}
+
+function isSentWaitingToday(task: Task | CreatorRow, today = formatDate(new Date())): boolean {
+  return wasContactedToday(task, today) && normalizedTrackingLabel(task) === '已发送待回复';
+}
+
+function isRepliedPending(task: Task | CreatorRow): boolean {
+  const label = normalizedTrackingLabel(task);
+  return label === '达人已回复' || label === '达人回复待处理';
+}
+
+function isTodayNotContacted(task: Task, requiredVideos: number, today = formatDate(new Date())): boolean {
+  return task.needsFollowUp && isActiveCreator(task) && !wasContactedToday(task, today) && !isArchivedCreator(task, requiredVideos);
+}
+
 function matchesOverviewFilter(task: Task, overviewFilter: OverviewFilterKey | '', requiredVideos: number): boolean {
   if (!overviewFilter) return true;
 
@@ -342,6 +371,14 @@ function matchesOverviewFilter(task: Task, overviewFilter: OverviewFilterKey | '
   switch (overviewFilter) {
     case 'today':
       return task.needsFollowUp && !isCompletedCreator(task) && !isFailedCreator(task);
+    case 'todayContacted':
+      return wasContactedToday(task);
+    case 'todayNotContacted':
+      return isTodayNotContacted(task, requiredVideos);
+    case 'todaySentWaiting':
+      return isSentWaitingToday(task);
+    case 'todayRepliedPending':
+      return isRepliedPending(task);
     case '极高':
     case '高':
     case '中':
@@ -386,14 +423,17 @@ function countOverviewMatches(tasks: Task[], overviewFilter: OverviewFilterKey, 
   return tasks.filter((task) => matchesOverviewFilter(task, overviewFilter, requiredVideos)).length;
 }
 
-function creatorGeneratorEmptyState(hasOverviewFilter: boolean): string {
-  return hasOverviewFilter ? '当前没有匹配的达人。' : '没有匹配的达人，请调整搜索词或切换筛选。';
+function creatorGeneratorEmptyState(activeFilter: OverviewFilterKey | ''): string {
+  if (activeFilter === 'todayContacted') return '今天还没有联系过的达人。';
+  return activeFilter ? '当前没有匹配的达人。' : '没有匹配的达人，请调整搜索词或切换筛选。';
 }
 
 function creatorOptionLabel(task: Task, requiredVideos: number): string {
   const classification = classifyCreatorFollowUp(task, requiredVideos);
-  const productText = task.product.trim() ? ` · ${task.product.trim()}` : '';
-  return `${classification.urgencyLevel} · ${classification.communicationAction} · ${displayCreatorName(task.username)} · ${statusText(task)}${productText}`;
+  const trackingContext = wasContactedToday(task)
+    ? `今日已联系 · ${normalizedTrackingLabel(task)}`
+    : `今日未联系 · ${classification.urgencyLevel}`;
+  return `${trackingContext} · ${displayCreatorName(task.username)} · ${classification.communicationAction}`;
 }
 
 function formatDate(date: Date): string {
@@ -475,6 +515,7 @@ function App() {
   const [nextFollowUpRecommendation, setNextFollowUpRecommendation] = useState<{ date: string; action: string } | null>(null);
   const [isCreatorTableCollapsed, setIsCreatorTableCollapsed] = useState(false);
   const [isCompactTableMode, setIsCompactTableMode] = useState(false);
+  const [isUrgencySortEnabled, setIsUrgencySortEnabled] = useState(true);
   const [replyFocus, setReplyFocus] = useState('');
   const [creatorRelationshipNote, setCreatorRelationshipNote] = useState('');
   const [replyTone, setReplyTone] = useState<ReplyTone>('中立专业');
@@ -499,6 +540,10 @@ function App() {
   const failedCandidates = tasks.filter((task) => task.failedWarnings.length > 0);
   const todayActionCards = useMemo<OverviewCardConfig[]>(() => ([
     { key: 'today', label: '今日需跟进', value: countOverviewMatches(tasks, 'today', requiredVideos), tone: 'blue' },
+    { key: 'todayContacted', label: '今日已联系', value: countOverviewMatches(tasks, 'todayContacted', requiredVideos), tone: 'green' },
+    { key: 'todayNotContacted', label: '今日未联系', value: countOverviewMatches(tasks, 'todayNotContacted', requiredVideos), tone: 'gold' },
+    { key: 'todaySentWaiting', label: '今日已发送待回复', value: countOverviewMatches(tasks, 'todaySentWaiting', requiredVideos), tone: 'blue' },
+    { key: 'todayRepliedPending', label: '今日达人已回复待处理', value: countOverviewMatches(tasks, 'todayRepliedPending', requiredVideos), tone: 'purple' },
     { key: '极高', label: '极高', value: countOverviewMatches(tasks, '极高', requiredVideos), tone: 'red' },
     { key: '高', label: '高', value: countOverviewMatches(tasks, '高', requiredVideos), tone: 'orange' },
     { key: '物流待确认', label: '物流待确认', value: countOverviewMatches(tasks, '物流待确认', requiredVideos), tone: 'cyan' },
@@ -514,7 +559,14 @@ function App() {
     { key: '已失败', label: '已失败', value: countOverviewMatches(tasks, '已失败', requiredVideos), tone: 'red' },
     { key: '归档', label: '归档', value: countOverviewMatches(tasks, '归档', requiredVideos), tone: 'gray' },
   ]), [tasks, requiredVideos]);
-  const activeOverviewFilterLabel = activeOverviewFilter === 'today' ? '今日需跟进' : activeOverviewFilter;
+  const overviewFilterLabels: Partial<Record<OverviewFilterKey, string>> = {
+    today: '今日需跟进',
+    todayContacted: '今日已联系',
+    todayNotContacted: '今日未联系',
+    todaySentWaiting: '今日已发送待回复',
+    todayRepliedPending: '今日达人已回复待处理',
+  };
+  const activeOverviewFilterLabel = activeOverviewFilter ? overviewFilterLabels[activeOverviewFilter] ?? activeOverviewFilter : '';
   const selectedTask = generatorTasks.find((task) => task.id === selectedCreatorId) ?? generatorTasks[0];
   const selectedTaskClassification = selectedTask ? classifyCreatorFollowUp(selectedTask, requiredVideos) : null;
   const isCreatorReplyScenario = selectedTaskClassification?.communicationAction === '回复达人消息';
@@ -524,6 +576,18 @@ function App() {
   const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
   const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const displayedRows = useMemo(() => {
+    if (!isUrgencySortEnabled) return rows;
+    const originalIndexById = new Map(rows.map((row, index) => [row.id, index]));
+    return [...rows].sort((a, b) => {
+      const aTask = tasksById.get(a.id);
+      const bTask = tasksById.get(b.id);
+      if (aTask && bTask) return compareCreatorQueueOrder(aTask, bTask, requiredVideos);
+      if (aTask && !bTask) return -1;
+      if (!aTask && bTask) return 1;
+      return (originalIndexById.get(a.id) ?? 0) - (originalIndexById.get(b.id) ?? 0);
+    });
+  }, [rows, tasksById, requiredVideos, isUrgencySortEnabled]);
 
   useEffect(() => {
     saveCreatorRows(rows);
@@ -1034,6 +1098,10 @@ function App() {
                   {isCreatorTableCollapsed ? '展开表格' : '收起表格'}
                 </button>
                 <label className="compact-mode-toggle">
+                  <input type="checkbox" checked={isUrgencySortEnabled} onChange={(event) => setIsUrgencySortEnabled(event.target.checked)} />
+                  按紧急程度排序
+                </label>
+                <label className="compact-mode-toggle">
                   <input type="checkbox" checked={isCompactTableMode} onChange={(event) => setIsCompactTableMode(event.target.checked)} />
                   紧凑模式
                 </label>
@@ -1076,7 +1144,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => {
+                  {displayedRows.map((row) => {
                     const rowTask = tasksById.get(row.id);
                     const urgencyLevel = rowTask ? classifyCreatorFollowUp(rowTask, requiredVideos).urgencyLevel : '低';
 
@@ -1294,7 +1362,7 @@ function App() {
                     ))}
                   </select>
                 </label>
-                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState(Boolean(activeOverviewFilter))}</p>}
+                {generatorTasks.length === 0 && <p className="empty">{creatorGeneratorEmptyState(activeOverviewFilter)}</p>}
               </div>
               <label>
                 选择联系渠道

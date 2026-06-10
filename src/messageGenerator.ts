@@ -698,6 +698,15 @@ function sanitizeEnglishText(value: string): string {
 
 type CreatorReplyIntent = 'posting-time' | 'video-length' | 'package-not-arrived' | 'filming-brief' | 'cannot-continue' | 'general';
 
+type ReplyIntentSignal =
+  | 'posting-time'
+  | 'ad-planning'
+  | 'note-internally'
+  | 'friendly-acknowledgement'
+  | 'video-length'
+  | 'product-link'
+  | 'concession';
+
 type CreatorReplyContext = {
   reply: string;
   intent: CreatorReplyIntent;
@@ -709,6 +718,7 @@ type CreatorReplyContext = {
   cleanRelationshipNote: string;
   concessionText: string;
   tone: ReplyTone;
+  intentSignals: Set<ReplyIntentSignal>;
 };
 
 function latestHistoryCreatorReply(entries: FollowUpHistoryEntry[] | undefined): string {
@@ -748,9 +758,90 @@ function detectFocusIntent(value: string): CreatorReplyContext['focusIntent'] {
   return 'general';
 }
 
+
+function hasKeyword(value: string, patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(value));
+}
+
+function detectReplyIntentSignals(...values: Array<string | undefined>): Set<ReplyIntentSignal> {
+  const text = values.filter(Boolean).join(' ').trim().toLowerCase();
+  const signals = new Set<ReplyIntentSignal>();
+  if (!text) return signals;
+
+  if (hasKeyword(text, [/具体(?:的)?时间/, /什么时候/, /几号/, /发布(?:时间|日期)?/, /发布日期/, /预计时间/, /时间线/, /\btimeline\b/, /posting date/, /when to post/])) signals.add('posting-time');
+  if (hasKeyword(text, [/投流/, /广告/, /测试/, /广告测试/, /投放计划/, /安排投放/, /\bboost\b/, /ad testing/, /campaign planning/, /media buying/])) signals.add('ad-planning');
+  if (hasKeyword(text, [/记录/, /记一下/, /我这里记录/, /\bnote\b/, /\bnoted\b/])) signals.add('note-internally');
+  if (hasKeyword(text, [/没问题/, /好的/, /可以/, /顺利/, /期待/, /谢谢/, /no problem/, /sounds good/, /looking forward/])) signals.add('friendly-acknowledgement');
+  if (hasKeyword(text, [/60\s*秒/, /60\s*s(?:ec|econds?)?\b/, /太长/, /短一点/, /35\s*秒/, /35\s*s(?:ec|econds?)?\b/, /视频时长/, /\blength\b/, /shorter/, /too long/])) signals.add('video-length');
+  if (hasKeyword(text, [/挂车/, /产品链接/, /shop link/, /product link/, /\btag\b/, /品牌账号/])) signals.add('product-link');
+  if (hasKeyword(text, [/可以短一点/, /不低于\s*35\s*秒?/, /可以先发\s*1\s*条/, /再补\s*1\s*条/, /周五可以/, /可以周五/, /can be shorter/, /at least 35 seconds/])) signals.add('concession');
+
+  return signals;
+}
+
+function hasSpecificReplyIntent(context: CreatorReplyContext): boolean {
+  return context.intentSignals.size > 0 || context.focusIntent !== 'general' || context.goalIntent !== 'general' || Boolean(context.concessionText);
+}
+
+function replyAcknowledgementLine(context: CreatorReplyContext): string {
+  const reply = normalizeForScenario(context.reply);
+  if (context.intentSignals.has('friendly-acknowledgement') || /no problem|sounds good|okay|ok|sure|thank/.test(reply)) {
+    return 'No problem — thank you for the update.';
+  }
+  return 'Thank you for the update.';
+}
+
+function replyIntentLines(context: CreatorReplyContext, filmingRequirementsReminder: string): string[] {
+  const lines: string[] = [];
+
+  if (context.intentSignals.has('friendly-acknowledgement')) {
+    lines.push('We’re looking forward to seeing the content.');
+  }
+
+  if (context.intentSignals.has('posting-time')) {
+    const isAskingForTimeline = /有没有|什么时候|具体|几号|when|posting date|timeline/i.test(`${context.cleanFocus} ${context.cleanGoal}`);
+    if (!isAskingForTimeline && context.timeline !== 'on the timeline you shared') {
+      lines.push(`That timing works — I’ll note that you expect to post ${context.timeline}.`);
+    } else {
+      lines.push('Do you have an estimated posting date or expected posting timeline?');
+    }
+  }
+
+  if (context.intentSignals.has('ad-planning')) {
+    lines.push('This will help our team plan the ad testing schedule, boost timing, and campaign planning accordingly.');
+  }
+
+  if (context.intentSignals.has('note-internally')) {
+    lines.push('I’ll note this on our side.');
+  }
+
+  if (context.intentSignals.has('video-length')) {
+    lines.push(videoLengthRequirement(context));
+  }
+
+  if (context.intentSignals.has('product-link')) {
+    lines.push('Please make sure the TikTok Shop product link is attached when you post, and tag the brand account if required.');
+  }
+
+  if (context.intentSignals.has('concession') && context.concessionText) {
+    lines.push(`${context.concessionText} Please still make sure the key product use is shown clearly.`);
+  } else if (context.intentSignals.has('concession')) {
+    lines.push('A slightly shorter video is acceptable as long as it is at least 35 seconds and the key product use is shown clearly.');
+  }
+
+  if (context.intentSignals.has('video-length') && filmingRequirementsReminder && !lines.some((line) => line.includes('60-second'))) {
+    lines.push(filmingBriefLine(filmingRequirementsReminder));
+  }
+
+  return lines;
+}
+
 function extractTimeline(value: string): string {
   const normalized = normalizeForScenario(value);
-  if (/end of (?:the )?week|end of week|eow/.test(normalized)) return 'by the end of this week';
+  if (/月底|周末|end of (?:the )?week|end of week|eow/.test(normalized)) return 'by the end of this week';
+  const chineseWeekdays: Record<string, string> = { 周一: 'Monday', 周二: 'Tuesday', 周三: 'Wednesday', 周四: 'Thursday', 周五: 'Friday', 周六: 'Saturday', 周日: 'Sunday', 周天: 'Sunday' };
+  const chineseWeekday = Object.entries(chineseWeekdays).find(([keyword]) => normalized.includes(keyword));
+  if (chineseWeekday) return `on ${chineseWeekday[1]}`;
   const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const weekday = weekdays.find((day) => normalized.includes(day.toLowerCase()));
   if (weekday) return `on ${weekday}`;
@@ -812,8 +903,9 @@ function buildCreatorReplyContext(task: Task, userReplyFocus: string, personaliz
     goalIntent: detectFocusIntent(personalization.replyGoal ?? ''),
     cleanGoal: goalText,
     cleanRelationshipNote: userDirectionText(personalization.relationshipNote ?? '', 'relationship'),
-    concessionText: userDirectionText(personalization.acceptableConcession ?? '', 'concession'),
+    concessionText: userDirectionText(`${personalization.acceptableConcession ?? ''} ${userReplyFocus}`, 'concession'),
     tone: personalization.replyTone ?? '中立专业',
+    intentSignals: detectReplyIntentSignals(userReplyFocus, personalization.replyGoal, personalization.acceptableConcession),
   };
 }
 
@@ -867,8 +959,22 @@ function creatorReplyLines(product: string, task: Task, userReplyFocus: string, 
   const context = buildCreatorReplyContext(task, userReplyFocus, personalization);
   const lines: string[] = [];
   const relationship = relationshipSentence(context);
+  const specificFocusLines = replyIntentLines(context, filmingRequirementsReminder);
+  const hasSpecificFocus = hasSpecificReplyIntent(context);
 
-  if (context.intent === 'posting-time') {
+  if (hasSpecificFocus) {
+    lines.push(replyAcknowledgementLine(context));
+    if (relationship) lines.push(relationship);
+    if (context.intent === 'package-not-arrived') {
+      lines.push('Please keep checking the delivery updates, and let us know if the package still does not arrive or if you see any shipping issue.');
+      lines.push('No need to start filming until the sample has arrived.');
+    }
+    lines.push(...specificFocusLines);
+
+    if (specificFocusLines.length === 0 && context.intent !== 'package-not-arrived') {
+      addUserDirection(lines, context);
+    }
+  } else if (context.intent === 'posting-time') {
     lines.push(`Thank you for the update. That works — I’ll note that you’re planning to complete the ${product} content ${context.timeline}.`);
     const reminder = productLinkReminder(context);
     if (reminder) lines.push(reminder);
@@ -887,12 +993,12 @@ function creatorReplyLines(product: string, task: Task, userReplyFocus: string, 
     if (context.tone === '最后确认') lines.push('No further action is needed from you for this campaign unless anything changes.');
   } else {
     lines.push(`Thank you for the update on the ${product} collaboration.`);
-    addUserDirection(lines, context);
-    if (!context.cleanGoal && !context.cleanFocus) lines.push('We will note this on our side and keep the next step aligned with your update.');
+    lines.push('I’ll note this on our side.');
+    lines.push('Please keep us posted if anything changes with the timeline.');
   }
 
-  if (relationship) lines.splice(1, 0, relationship);
-  addUserDirection(lines, context);
+  if (!hasSpecificFocus && relationship) lines.splice(1, 0, relationship);
+  if (!hasSpecificFocus) addUserDirection(lines, context);
   const closing = toneClosing(context);
   if (closing) lines.push(closing);
 
@@ -979,7 +1085,7 @@ function buildChineseExplanation(scenario: string, channel: Channel, hasReferenc
     'Failed Archive Confirmation': '合作失败归档，默认不催促，只做 campaign status 更新确认。',
     'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进，重点是让达人明确是否还能完成合作。',
     'Second Follow-up': '第二次跟进，重点是再次确认进度和明确发布时间。',
-    'Creator Reply Follow-up': '这个话术用于达人已经回复后继续推进沟通。系统根据达人回复内容生成下一步回复；个性化设置会影响语气、让步空间和回复重点。如果达人已经给出发布时间，话术应确认时间，而不是继续索要 update。目标是让沟通继续流动，而不是只记录达人回复。',
+    'Creator Reply Follow-up': '这个话术用于达人已经回复后继续推进沟通。系统根据达人回复内容和你填写的回复重点生成下一步回复。当前版本不调用外部 AI API，而是通过本地规则识别“发布时间、投流计划、让步、挂车提醒”等常见运营意图。如果填写了具体回复重点，话术不应只生成通用模板。',
     'Light Follow-up': '轻量跟进，适合未命中特定阶段时确认当前合作进展。',
   };
 
