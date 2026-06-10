@@ -11,7 +11,7 @@ import {
 } from './creatorData';
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, buildSummary, buildVideoProgressHint, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
-import { CHANNELS, classifyCreatorFollowUp, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
+import { CHANNELS, classifyCreatorFollowUp, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements, type CreatorReplyPersonalization, type ReplyTone } from './messageGenerator';
 import type { Channel, CreatorRow, FollowUpHistoryEntry, GeneratedMessage, Priority, Task, UrgencyLevel } from './types';
 import './styles.css';
 
@@ -476,6 +476,10 @@ function App() {
   const [isCreatorTableCollapsed, setIsCreatorTableCollapsed] = useState(false);
   const [isCompactTableMode, setIsCompactTableMode] = useState(false);
   const [replyFocus, setReplyFocus] = useState('');
+  const [creatorRelationshipNote, setCreatorRelationshipNote] = useState('');
+  const [replyTone, setReplyTone] = useState<ReplyTone>('中立专业');
+  const [replyGoal, setReplyGoal] = useState('');
+  const [acceptableConcession, setAcceptableConcession] = useState('');
   const generatorSectionRef = useRef<HTMLElement | null>(null);
 
   const requiredVideos = useMemo(() => parseRequiredVideos(filmingRequirements), [filmingRequirements]);
@@ -512,7 +516,11 @@ function App() {
   ]), [tasks, requiredVideos]);
   const activeOverviewFilterLabel = activeOverviewFilter === 'today' ? '今日需跟进' : activeOverviewFilter;
   const selectedTask = generatorTasks.find((task) => task.id === selectedCreatorId) ?? generatorTasks[0];
-  const selectedCreatorReplyDate = selectedTask?.followUpHistory?.slice().reverse().find((entry) => entry.action === 'Creator Replied')?.date;
+  const selectedTaskClassification = selectedTask ? classifyCreatorFollowUp(selectedTask, requiredVideos) : null;
+  const isCreatorReplyScenario = selectedTaskClassification?.communicationAction === '回复达人消息';
+  const selectedCreatorReplyEntry = selectedTask?.followUpHistory?.slice().reverse().find((entry) => entry.action === 'Creator Replied' && entry.note?.trim());
+  const selectedCreatorReplyText = selectedCreatorReplyEntry?.note?.trim() || selectedTask?.lastCreatorResponse?.trim() || '';
+  const selectedCreatorReplyDate = selectedCreatorReplyEntry?.date;
   const generatedMessageCreator = rows.find((row) => row.id === generatedMessageCreatorId);
   const selectedHistory = generatedMessageCreator?.followUpHistory ?? [];
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
@@ -544,7 +552,13 @@ function App() {
 
   function handleGenerateMessage() {
     if (!selectedTask) return;
-    setMessage(generateMessage(selectedTask, channel, filmingRequirements, replyFocus));
+    const replyPersonalization: CreatorReplyPersonalization = {
+      relationshipNote: creatorRelationshipNote,
+      replyTone,
+      replyGoal,
+      acceptableConcession,
+    };
+    setMessage(generateMessage(selectedTask, channel, filmingRequirements, replyFocus, replyPersonalization));
     setGeneratedMessageCreatorId(selectedTask.id);
     setNextFollowUpRecommendation(null);
     setTrackingStatus('');
@@ -1288,10 +1302,10 @@ function App() {
                   {CHANNELS.map((item) => <option key={item}>{item}</option>)}
                 </select>
               </label>
-              {selectedTask?.lastCreatorResponse?.trim() && (
+              {isCreatorReplyScenario && selectedCreatorReplyText && (
                 <section className="creator-reply-panel" aria-labelledby="creator-reply-content-title">
                   <h3 id="creator-reply-content-title">达人回复内容</h3>
-                  <p>{selectedTask.lastCreatorResponse}</p>
+                  <p>{selectedCreatorReplyText}</p>
                   {selectedCreatorReplyDate && <p className="muted">最近回复日期：{selectedCreatorReplyDate}</p>}
                   <label>
                     我想回复的重点（可选）
@@ -1302,6 +1316,45 @@ function App() {
                       rows={3}
                     />
                   </label>
+                  <section className="personalized-reply-panel" aria-labelledby="personalized-reply-settings-title">
+                    <h3 id="personalized-reply-settings-title">个性化回复设置</h3>
+                    <label>
+                      达人关系备注（可选）
+                      <textarea
+                        value={creatorRelationshipNote}
+                        onChange={(event) => setCreatorRelationshipNote(event.target.value)}
+                        placeholder="例如：她之前视频质量不错 / 回复比较慢 / 语气很友好 / 已经拖了很久 / 第一次合作，需要保持专业但不要太冷"
+                        rows={3}
+                      />
+                    </label>
+                    <label>
+                      回复语气（可选）
+                      <select value={replyTone} onChange={(event) => setReplyTone(event.target.value as ReplyTone)}>
+                        <option>中立专业</option>
+                        <option>友好一点</option>
+                        <option>坚定推进</option>
+                        <option>最后确认</option>
+                      </select>
+                    </label>
+                    <label>
+                      这次回复目标（可选）
+                      <textarea
+                        value={replyGoal}
+                        onChange={(event) => setReplyGoal(event.target.value)}
+                        placeholder="例如：确认发布时间 / 解释 60 秒要求 / 轻微让步 / 提醒挂车 / 安抚情绪 / 推进剩余视频 / 确认是否继续合作"
+                        rows={3}
+                      />
+                    </label>
+                    <label>
+                      可接受让步（可选）
+                      <textarea
+                        value={acceptableConcession}
+                        onChange={(event) => setAcceptableConcession(event.target.value)}
+                        placeholder="例如：可以短一点但不能低于 35 秒 / 可以周五发布 / 可以先发 1 条再补 1 条 / 不接受不挂车 / 可以参考对标视频重新拍"
+                        rows={3}
+                      />
+                    </label>
+                  </section>
                 </section>
               )}
               <button onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>

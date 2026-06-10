@@ -1,5 +1,5 @@
 import { normalizeVideoProgress, parseRequiredVideos } from './sopRules';
-import type { Channel, CommunicationAction, GeneratedMessage, Task, UrgencyLevel } from './types';
+import type { Channel, CommunicationAction, FollowUpHistoryEntry, GeneratedMessage, Task, UrgencyLevel } from './types';
 
 export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message', 'Email', 'WhatsApp'];
 
@@ -8,6 +8,15 @@ export type CreatorFilmingRequirements = {
   requirements: string[];
   keyContentPoints: string[];
   referenceLinks?: string[];
+};
+
+export type ReplyTone = '中立专业' | '友好一点' | '坚定推进' | '最后确认';
+
+export type CreatorReplyPersonalization = {
+  relationshipNote?: string;
+  replyTone?: ReplyTone;
+  replyGoal?: string;
+  acceptableConcession?: string;
 };
 
 export const defaultCreatorFilmingRequirements: CreatorFilmingRequirements = {
@@ -63,8 +72,10 @@ function normalizeTrackingStatus(value: string | undefined): string {
 }
 
 function isReplyPendingTask(task: Task): boolean {
+  const latestCreatorReply = task.followUpHistory?.slice().reverse().find((entry) => entry.action === 'Creator Replied' && entry.note?.trim())?.note?.trim();
+  const savedReply = task.lastCreatorResponse?.trim() || latestCreatorReply || task.notes.trim();
   return normalizeTrackingStatus(task.trackingStatus) === 'reply-pending'
-    && Boolean(task.lastCreatorResponse?.trim());
+    && Boolean(savedReply);
 }
 
 function statusIncludes(task: Task, terms: string[]): boolean {
@@ -394,7 +405,8 @@ function joinEnglishList(items: string[]): string {
 }
 
 function isGuidelineScenario(scenario: string): boolean {
-  return scenario === 'Sample Delivered Follow-up'
+  return scenario === 'Creator Reply Follow-up'
+    || scenario === 'Sample Delivered Follow-up'
     || scenario === 'Sample In Transit Reminder'
     || scenario === 'Logistics Exception Confirmation'
     || scenario === 'Partial Video Completion Follow-up'
@@ -462,6 +474,7 @@ export function generateMessage(
   channel: Channel,
   filmingRequirements: CreatorFilmingRequirements = defaultCreatorFilmingRequirements,
   userReplyFocus = '',
+  replyPersonalization: CreatorReplyPersonalization = {},
 ): GeneratedMessage {
   const configuredRequiredVideos = parseRequiredVideos(filmingRequirements);
   const scenarioSelection = scenarioForTask(task, configuredRequiredVideos);
@@ -470,7 +483,9 @@ export function generateMessage(
   const product = toEnglishProductName(task.product || filmingRequirements.productName);
   const cleanReferenceLinks = (filmingRequirements.referenceLinks ?? []).map((link) => link.trim()).filter((link) => link && !hasChineseCharacters(link));
   const hasReferenceLinks = cleanReferenceLinks.length > 0;
-  const guidelineLine = scenario === 'Partial Video Completion Follow-up'
+  const guidelineLine = scenario === 'Creator Reply Follow-up'
+    ? filmingGuidelinesLine(task, filmingRequirements)
+    : scenario === 'Partial Video Completion Follow-up'
     ? partialCompletionGuidelinesLine(hasReferenceLinks)
     : scenario === 'Final Follow-up Before Failed Candidate' || scenario === 'Second Follow-up'
       ? ''
@@ -499,7 +514,7 @@ export function generateMessage(
   } else if (scenario === 'Logistics Exception Confirmation') {
     english = logisticsExceptionMessage(channel, name, product, filmingRequirementsReminder);
   } else if (scenario === 'Creator Reply Follow-up') {
-    english = creatorReplyMessage(channel, name, product, task, userReplyFocus, filmingRequirementsReminder);
+    english = creatorReplyMessage(channel, name, product, task, userReplyFocus, filmingRequirementsReminder, replyPersonalization);
   } else if (scenario === 'Sample Delivered Follow-up') {
     const request = `Just checking in now that the ${product} sample has been delivered. Please confirm your expected posting date for the first video. ${filmingRequirementsReminder}`;
     english = byChannel(channel, name, request, '', highRisk);
@@ -672,65 +687,244 @@ Brand Team`;
 
 function sanitizeEnglishText(value: string): string {
   return removeChineseCharacters(value)
+    .replace(/[，。；：、]/g, ' ')
     .replace(/[\r\n]+/g, ' ')
+    .replace(/\b(?:for example|e\.g\.)\s*[:：]?\s*/gi, '')
+    .replace(/\b(?:no problem|okay|ok)\b[,.]?\s*/gi, '')
+    .replace(/\b(?:noted|i'?ll note it|record it)\b[,.]?\s*/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function summarizeCreatorReplyForEnglish(replyNote: string): string {
-  const normalized = normalizeForScenario(replyNote);
-  if (/too long|long|60\s*sec|60 seconds|length|duration|shorter/.test(normalized)) return 'the video length requirement';
-  if (/friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|post|posting|publish|date|schedule/.test(normalized)) return 'your posting timing update';
-  if (/not arrived|hasn.?t arrived|haven.?t arrived|no package|package|delivery|shipping|tracking|lost|stuck/.test(normalized)) return 'the package delivery update';
-  if (/requirement|guideline|brief|what do you need|details|link|tag|video/.test(normalized)) return 'your question about the campaign requirements';
-  if (/can.?t|cannot|unable|not continue|no longer|stop|cancel|quit|not able/.test(normalized)) return 'your update that you may not be able to continue';
-  return 'your update';
+type CreatorReplyIntent = 'posting-time' | 'video-length' | 'package-not-arrived' | 'filming-brief' | 'cannot-continue' | 'general';
+
+type CreatorReplyContext = {
+  reply: string;
+  intent: CreatorReplyIntent;
+  timeline: string;
+  focusIntent: CreatorReplyIntent | 'product-link' | 'confirmation' | 'general';
+  cleanFocus: string;
+  goalIntent: CreatorReplyIntent | 'product-link' | 'confirmation' | 'general';
+  cleanGoal: string;
+  cleanRelationshipNote: string;
+  concessionText: string;
+  tone: ReplyTone;
+};
+
+function latestHistoryCreatorReply(entries: FollowUpHistoryEntry[] | undefined): string {
+  return entries?.slice().reverse().find((entry) => entry.action === 'Creator Replied' && entry.note?.trim())?.note?.trim() ?? '';
 }
 
-function englishFocusFromUserInput(userReplyFocus: string): string {
-  const normalized = normalizeForScenario(userReplyFocus);
+function creatorReplySource(task: Task): string {
+  const historyReply = latestHistoryCreatorReply(task.followUpHistory);
+  if (historyReply) return historyReply;
+  if (task.lastCreatorResponse?.trim()) return task.lastCreatorResponse.trim();
+
+  const notes = task.notes.trim();
+  if (normalizeTrackingStatus(task.trackingStatus) === 'reply-pending' && notes) return notes;
+  return '';
+}
+
+function detectCreatorReplyIntent(value: string): CreatorReplyIntent {
+  const normalized = normalizeForScenario(value);
+  if (/\b(can'?t|cannot|unable|won'?t|not able|no longer|stop|cancel|quit)\b.*\b(continue|post|do|complete|film|collab|collaboration)?\b|not continue|can't do it|cannot do it|won't be able/.test(normalized)) return 'cannot-continue';
+  if (/not arrived|hasn.?t arrived|haven.?t received|haven.?t arrived|not here|no package|package didn.?t arrive|didn.?t receive|never received|shipping issue|tracking issue|lost|stuck/.test(normalized)) return 'package-not-arrived';
+  if (/too long|60\s*(?:s|sec|second|seconds)|length|duration|shorter|can it be short|that'?s too long/.test(normalized)) return 'video-length';
+  if (/what should i film|what to film|requirements?|guidelines?|brief|any brief|details|what do you need|what format|instructions?/.test(normalized)) return 'filming-brief';
+  if (/\b(end of (?:the )?week|eow|friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|tonight|next week|this week)\b|\b(i'?ll|i will|i can|can)\b.{0,40}\b(post|publish|film|complete|done|get (?:a )?video done|finish|upload)\b|\b(post|publish|film|complete|finish|upload)\b.{0,40}\b(friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|end of (?:the )?week)\b/.test(normalized)) return 'posting-time';
+  return 'general';
+}
+
+function detectFocusIntent(value: string): CreatorReplyContext['focusIntent'] {
+  const normalized = normalizeForScenario(value);
+  if (!normalized) return 'general';
+  if (/没问题|记录|可以|同意|works|ok|okay|fine|confirm/.test(normalized)) return 'confirmation';
+  if (/60|时长|秒|太长|length|duration|shorter/.test(normalized)) return 'video-length';
+  if (/周五|发布|发|post|publish|friday|tomorrow|today|end of (?:the )?week/.test(normalized)) return 'posting-time';
+  if (/物流|快递|包裹|delivery|shipping|package|tracking/.test(normalized)) return 'package-not-arrived';
+  if (/拍什么|要求|brief|requirement|guideline|film/.test(normalized)) return 'filming-brief';
+  if (/挂车|产品链接|shop|link|tag/.test(normalized)) return 'product-link';
+  if (/不能继续|不继续|失败|归档|can'?t|cannot|unable|not continue/.test(normalized)) return 'cannot-continue';
+  return 'general';
+}
+
+function extractTimeline(value: string): string {
+  const normalized = normalizeForScenario(value);
+  if (/end of (?:the )?week|end of week|eow/.test(normalized)) return 'by the end of this week';
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const weekday = weekdays.find((day) => normalized.includes(day.toLowerCase()));
+  if (weekday) return `on ${weekday}`;
+  if (/tomorrow/.test(normalized)) return 'tomorrow';
+  if (/today|tonight/.test(normalized)) return normalized.includes('tonight') ? 'tonight' : 'today';
+  if (/next week/.test(normalized)) return 'next week';
+  if (/this week/.test(normalized)) return 'this week';
+  return 'on the timeline you shared';
+}
+
+function englishInstructionFromChinese(value: string, kind: 'focus' | 'goal' | 'concession' | 'relationship'): string {
+  const normalized = normalizeForScenario(value);
+  const rawNormalized = value.trim().toLowerCase();
   if (!normalized) return '';
-  if (/60|时长|秒|太长|length|duration/.test(normalized)) return 'Clarify that the target length is 60 seconds, while asking what format would be workable for the creator.';
-  if (/周五|friday/.test(normalized)) return 'Confirm that posting on Friday works and ask the creator to send the post link after publishing.';
-  if (/挂车|产品链接|shop|link/.test(normalized)) return 'Remind the creator to attach the TikTok Shop product link.';
-  if (/2\s*条|两条|短视频|videos?/.test(normalized)) return 'Confirm whether the creator can adjust the plan to two short videos.';
-  const cleanFocus = sanitizeEnglishText(userReplyFocus);
-  return cleanFocus;
+  const parts: string[] = [];
+
+  if (kind !== 'concession' && /没问题|可以|同意|记录|顺利/.test(normalized)) parts.push('Confirm that the update works and say we will note it on our side.');
+  if (/周五/.test(normalized)) parts.push('Confirm Friday posting is okay.');
+  if (/月底|周末|end of week|end of the week/.test(normalized)) parts.push('Confirm the end-of-week timeline.');
+  if (/60|时长|秒|太长/.test(normalized)) parts.push('Explain the 60-second requirement clearly.');
+  if (/挂车|产品链接|小黄车|shop/.test(normalized)) parts.push('Remind the creator to attach the TikTok Shop product link.');
+  if (/tag|品牌账号/.test(normalized)) parts.push('Remind the creator to tag the brand account.');
+  if (/物流|快递|包裹|没收到|未收到/.test(normalized)) parts.push('Ask the creator to keep checking delivery updates and tell us if there is a shipping issue.');
+  if (/安抚|情绪/.test(normalized)) parts.push('Keep the reply calm and reassuring.');
+  if (/剩余|补|2\s*条|两条/.test(normalized)) parts.push('Clarify the remaining video deliverables.');
+  if (/确认是否继续|是否继续|继续合作/.test(normalized)) parts.push('Confirm whether the collaboration can continue.');
+  if (/不接受不挂车/.test(normalized)) parts.push('Do not accept posting without the TikTok Shop product link.');
+  if (/可以短一点|短一点/.test(normalized)) parts.push('A slightly shorter video is acceptable.');
+  const minSeconds = rawNormalized.match(/(?:不能低于|不低于|至少|above|over|minimum|min)\s*(\d+)\s*(?:秒|s|sec|seconds)?/)?.[1];
+  if (minSeconds) parts.push(`Keep the video above ${minSeconds} seconds.`);
+  if (/先发\s*1|先发一|1\s*条再补|一条再补/.test(normalized)) parts.push('Posting one video first and completing the remaining video later is acceptable.');
+  if (/周五发布/.test(normalized)) parts.push('Posting on Friday is acceptable.');
+  if (/对标|参考/.test(normalized)) parts.push('The creator can use the reference video direction for a reshoot.');
+
+  if (kind === 'relationship') {
+    if (/友好|沟通还可以|质量不错|第一次合作|专业/.test(normalized)) parts.push('Keep the tone professional and friendly.');
+    if (/回复比较慢|拖了很久|已经拖/.test(normalized)) parts.push('Keep the next action clear because the timeline has been slow.');
+  }
+
+  return Array.from(new Set(parts)).join(' ');
 }
 
-function nextStepForCreatorReply(replyNote: string, userReplyFocus: string, filmingRequirementsReminder: string): string {
-  const normalized = normalizeForScenario(`${replyNote} ${userReplyFocus}`);
-  const cleanFocus = englishFocusFromUserInput(userReplyFocus);
-
-  if (cleanFocus) return cleanFocus;
-  if (/too long|long|60\s*sec|60 seconds|length|duration|shorter/.test(normalized)) return 'The 60-second direction is the campaign target, but please let us know what format would be workable for you while still showing the product clearly.';
-  if (/friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|post|posting|publish|date|schedule/.test(normalized)) return 'That posting timing works. Please keep the TikTok Shop product link attached and send us the post link once it is live.';
-  if (/not arrived|hasn.?t arrived|haven.?t arrived|no package|package|delivery|shipping|tracking|lost|stuck/.test(normalized)) return 'Please keep checking the delivery updates and let us know if the package still does not arrive or if you see any shipping issue.';
-  if (/requirement|guideline|brief|what do you need|details|link|tag|video/.test(normalized)) return filmingRequirementsReminder || 'Please follow the filming guidelines we shared, include the required tag, and attach the TikTok Shop product link.';
-  if (/can.?t|cannot|unable|not continue|no longer|stop|cancel|quit|not able/.test(normalized)) return 'Thank you for letting us know. We will update the campaign status on our side based on your confirmation.';
-  return 'Please confirm the next step or timing when you can, so we can keep the campaign status accurate on our side.';
+function userDirectionText(value: string, kind: 'focus' | 'goal' | 'concession' | 'relationship'): string {
+  const translated = englishInstructionFromChinese(value, kind);
+  const cleaned = sanitizeEnglishText(value);
+  return [translated, cleaned].filter(Boolean).join(' ');
 }
 
-function creatorReplyMessage(channel: Channel, name: string, product: string, task: Task, userReplyFocus: string, filmingRequirementsReminder: string): string {
-  const replyTopic = summarizeCreatorReplyForEnglish(task.lastCreatorResponse ?? '');
-  const nextStep = nextStepForCreatorReply(task.lastCreatorResponse ?? '', userReplyFocus, filmingRequirementsReminder);
-  const statusLine = `I saw your reply about ${replyTopic} for the ${product} collaboration.`;
-  const request = `${statusLine} ${nextStep} Please reply with the clearest next update when you have it.`;
+function buildCreatorReplyContext(task: Task, userReplyFocus: string, personalization: CreatorReplyPersonalization): CreatorReplyContext {
+  const reply = creatorReplySource(task);
+  const focusText = userDirectionText(userReplyFocus, 'focus');
+  const goalText = userDirectionText(personalization.replyGoal ?? '', 'goal');
+  return {
+    reply,
+    intent: detectCreatorReplyIntent(reply),
+    timeline: extractTimeline(`${reply} ${userReplyFocus} ${personalization.replyGoal ?? ''}`),
+    focusIntent: detectFocusIntent(userReplyFocus),
+    cleanFocus: focusText,
+    goalIntent: detectFocusIntent(personalization.replyGoal ?? ''),
+    cleanGoal: goalText,
+    cleanRelationshipNote: userDirectionText(personalization.relationshipNote ?? '', 'relationship'),
+    concessionText: userDirectionText(personalization.acceptableConcession ?? '', 'concession'),
+    tone: personalization.replyTone ?? '中立专业',
+  };
+}
+
+function relationshipSentence(context: CreatorReplyContext): string {
+  if (!context.cleanRelationshipNote) return '';
+  if (/slow|timeline has been slow/i.test(context.cleanRelationshipNote)) return 'To keep the collaboration moving, I want to keep the next step clear.';
+  if (/friendly|professional/i.test(context.cleanRelationshipNote) && context.tone !== '最后确认') return 'I appreciate the communication on this collaboration.';
+  return '';
+}
+
+function toneClosing(context: CreatorReplyContext): string {
+  if (context.intent === 'cannot-continue') return '';
+  if (context.tone === '友好一点') return 'Looking forward to seeing the content.';
+  if (context.tone === '坚定推进') return 'Please keep this timeline so we can continue the campaign smoothly.';
+  if (context.tone === '最后确认') return 'We will use this confirmation to keep the campaign status accurate on our side.';
+  return '';
+}
+
+function productLinkReminder(context: CreatorReplyContext): string {
+  if (context.intent === 'package-not-arrived' || context.intent === 'cannot-continue') return '';
+  const isExplicit = context.focusIntent === 'product-link' || context.goalIntent === 'product-link';
+  return isExplicit
+    ? 'Please make sure the TikTok Shop product link is attached when you post.'
+    : 'Please make sure the TikTok Shop product link is attached and continue following the filming guidelines we shared.';
+}
+
+function videoLengthRequirement(context: CreatorReplyContext): string {
+  const concession = context.concessionText;
+  const concessionLine = concession
+    ? `${concession} Please still make sure the key product use is shown clearly.`
+    : 'The 60-second direction is important because longer videos usually give us enough product detail for ad testing. If your content style needs a small adjustment, please keep the key product use clear.';
+  return `I understand the concern about the video length. ${concessionLine}`;
+}
+
+function filmingBriefLine(filmingRequirementsReminder: string): string {
+  return filmingRequirementsReminder || 'Please follow the filming guidelines we shared, show the main product use clearly, tag the brand account if required, and attach the TikTok Shop product link.';
+}
+
+function addUserDirection(lines: string[], context: CreatorReplyContext) {
+  const direction = [context.cleanGoal, context.cleanFocus].filter(Boolean).join(' ');
+  if (!direction) return;
+  if (context.intent === 'posting-time' && /Confirm that the update works|Confirm Friday posting|Confirm the end-of-week timeline/i.test(direction)) return;
+  if (context.intent === 'video-length' && /60-second|shorter|above \d+ seconds/i.test(direction)) return;
+  if (context.intent === 'package-not-arrived' && /delivery updates|shipping issue/i.test(direction)) return;
+  if (context.intent === 'filming-brief' && /filming|requirement|guideline/i.test(direction)) return;
+  if (context.intent === 'cannot-continue' && /campaign status|continue/i.test(direction)) return;
+  lines.push(direction);
+}
+
+function creatorReplyLines(product: string, task: Task, userReplyFocus: string, filmingRequirementsReminder: string, personalization: CreatorReplyPersonalization): string[] {
+  const context = buildCreatorReplyContext(task, userReplyFocus, personalization);
+  const lines: string[] = [];
+  const relationship = relationshipSentence(context);
+
+  if (context.intent === 'posting-time') {
+    lines.push(`Thank you for the update. That works — I’ll note that you’re planning to complete the ${product} content ${context.timeline}.`);
+    const reminder = productLinkReminder(context);
+    if (reminder) lines.push(reminder);
+  } else if (context.intent === 'video-length') {
+    lines.push(videoLengthRequirement(context));
+    const reminder = productLinkReminder({ ...context, focusIntent: 'product-link' });
+    if (reminder) lines.push(reminder);
+  } else if (context.intent === 'package-not-arrived') {
+    lines.push('Thanks for letting me know. Please keep checking the delivery updates, and let us know if the package still does not arrive or if you see any shipping issue.');
+    lines.push('No need to start filming until the sample has arrived.');
+  } else if (context.intent === 'filming-brief') {
+    lines.push('Of course — here is the main filming direction for this collaboration.');
+    lines.push(filmingBriefLine(filmingRequirementsReminder));
+  } else if (context.intent === 'cannot-continue') {
+    lines.push('Thank you for letting us know. We will update the campaign status on our side.');
+    if (context.tone === '最后确认') lines.push('No further action is needed from you for this campaign unless anything changes.');
+  } else {
+    lines.push(`Thank you for the update on the ${product} collaboration.`);
+    addUserDirection(lines, context);
+    if (!context.cleanGoal && !context.cleanFocus) lines.push('We will note this on our side and keep the next step aligned with your update.');
+  }
+
+  if (relationship) lines.splice(1, 0, relationship);
+  addUserDirection(lines, context);
+  const closing = toneClosing(context);
+  if (closing) lines.push(closing);
+
+  return Array.from(new Set(lines.map((line) => line.trim()).filter(Boolean)));
+}
+
+function creatorReplyMessage(channel: Channel, name: string, product: string, task: Task, userReplyFocus: string, filmingRequirementsReminder: string, personalization: CreatorReplyPersonalization): string {
+  const lines = creatorReplyLines(product, task, userReplyFocus, filmingRequirementsReminder, personalization);
+  const body = lines.join(' ');
 
   if (channel === 'Email') {
     return `Hi ${name},
 
-${statusLine}
-
-${nextStep}
-
-Please reply with the clearest next update when you have it so we can keep the campaign status accurate.
+${lines.join('\n\n')}
 
 Best,
 Brand Team`;
   }
 
-  return byChannel(channel, name, request, '', false);
+  if (channel === 'TikTok Shop Affiliate Message') {
+    return `Hi ${name},
+
+${lines.join('\n\n')}
+
+Thank you.`;
+  }
+
+  if (channel === 'WhatsApp') {
+    return `Hi ${name}, ${body}`;
+  }
+
+  return `Hi ${name}, ${body}`;
 }
 
 function byChannel(channel: Channel, name: string, request: string, filmingRequirementsReminder: string, highRisk: boolean): string {
@@ -785,7 +979,7 @@ function buildChineseExplanation(scenario: string, channel: Channel, hasReferenc
     'Failed Archive Confirmation': '合作失败归档，默认不催促，只做 campaign status 更新确认。',
     'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进，重点是让达人明确是否还能完成合作。',
     'Second Follow-up': '第二次跟进，重点是再次确认进度和明确发布时间。',
-    'Creator Reply Follow-up': '这个话术用于达人已经回复后继续推进沟通。系统结合达人回复内容和你填写的回复重点生成下一步话术。重点是让沟通继续流动，而不是只记录回复。',
+    'Creator Reply Follow-up': '这个话术用于达人已经回复后继续推进沟通。系统根据达人回复内容生成下一步回复；个性化设置会影响语气、让步空间和回复重点。如果达人已经给出发布时间，话术应确认时间，而不是继续索要 update。目标是让沟通继续流动，而不是只记录达人回复。',
     'Light Follow-up': '轻量跟进，适合未命中特定阶段时确认当前合作进展。',
   };
 
