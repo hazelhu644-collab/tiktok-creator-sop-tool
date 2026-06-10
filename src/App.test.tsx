@@ -798,14 +798,24 @@ describe('second full-day table and creator reply optimizations', () => {
     expect(screen.getAllByText('The package has not arrived yet.').length).toBeGreaterThan(0);
     expect(screen.getByText('最近回复日期：2026-06-08')).toBeInTheDocument();
     expect(screen.getByLabelText('我想回复的重点（可选）')).toBeInTheDocument();
+    expect(screen.getByText('个性化回复设置')).toBeInTheDocument();
+    expect(screen.getByLabelText('达人关系备注（可选）')).toBeInTheDocument();
+    expect(screen.getByLabelText('回复语气（可选）')).toHaveValue('中立专业');
+    expect(screen.getByLabelText('这次回复目标（可选）')).toBeInTheDocument();
+    expect(screen.getByLabelText('可接受让步（可选）')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('我想回复的重点（可选）'), '提醒继续查看物流');
+    await user.type(screen.getByLabelText('达人关系备注（可选）'), '她回复比较慢');
+    await user.selectOptions(screen.getByLabelText('回复语气（可选）'), '坚定推进');
+    await user.type(screen.getByLabelText('这次回复目标（可选）'), '安抚情绪');
     await user.click(screen.getByRole('button', { name: '生成话术' }));
 
     const englishMessage = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
     expect(screen.getByText(/沟通动作：回复达人消息/)).toBeInTheDocument();
     expect(englishMessage).toContain('delivery');
     expect(englishMessage).toContain('delivery updates');
+    expect(englishMessage).toContain('No need to start filming');
+    expect(englishMessage).toContain('keep the next step clear');
     expect(englishMessage).not.toMatch(/[\u3400-\u9fff]/);
   });
 

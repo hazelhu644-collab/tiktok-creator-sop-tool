@@ -829,3 +829,28 @@ button.danger {
   resize: vertical;
   width: 100%;
 }
+
+.personalized-reply-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.personalized-reply-panel h3 {
+  margin: 0;
+}
+
+.personalized-reply-panel select,
+.personalized-reply-panel textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 12px 14px;
+  width: 100%;
+}
+
+.personalized-reply-panel textarea {
+  resize: vertical;
+}

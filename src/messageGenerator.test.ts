@@ -573,6 +573,17 @@ describe('creator reply follow-up generator', () => {
     expect(classification.urgencyLevel).toBe('高');
   });
 
+
+  it('classifies replied creators from the latest Creator Replied history note even without lastCreatorResponse', () => {
+    const classification = classifyCreatorFollowUp(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: '',
+      followUpHistory: [{ date: '2026-06-09', action: 'Creator Replied', note: 'I can post Friday.' }],
+    }));
+
+    expect(classification.communicationAction).toBe('回复达人消息');
+  });
+
   it('generates an English-only reply that responds to the saved creator reply note', () => {
     const message = generateMessage(task({
       trackingStatus: 'Replied',
@@ -582,9 +593,9 @@ describe('creator reply follow-up generator', () => {
 
     expect(message.communicationAction).toBe('回复达人消息');
     expect(message.scenario).toBe('Creator Reply Follow-up');
-    expect(message.english).toContain('video length requirement');
+    expect(message.english).toContain('video length');
     expect(message.english).toContain('60-second direction');
-    expect(message.english).toContain('what format would be workable');
+    expect(message.english).toContain('ad testing');
     expect(message.english).not.toMatch(chineseCharacterPattern);
     expect(message.chineseExplanation).toContain('这个话术用于达人已经回复后继续推进沟通');
   });
@@ -597,7 +608,115 @@ describe('creator reply follow-up generator', () => {
     }), 'Email', requirements(), '同意她周五发布，提醒挂车');
 
     expect(message.english).toContain('Friday');
-    expect(message.english).toContain('post link');
+    expect(message.english).toContain('product link');
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
+
+  it('uses the latest saved creator reply from follow-up history before older reply fields', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'Old reply: I can post Friday.',
+      followUpHistory: [
+        { date: '2026-06-08', action: 'Creator Replied', note: 'I cannot continue.' },
+      ],
+    }), 'TikTok DM');
+
+    expect(message.english).toContain('update the campaign status');
+    expect(message.english).not.toContain('Friday');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('uses relationship notes, friendly tone, reply goal, and Chinese focus to confirm an end-of-week timeline', () => {
+    const message = generateMessage(task({
+      username: 'creator',
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'Hi thank you for understanding ill get a video done at the end of week',
+    }), 'TikTok DM', requirements(), '没问题，我这里记录一下。顺利', {
+      relationshipNote: '她之前沟通还可以，保持专业友好',
+      replyTone: '友好一点',
+      replyGoal: '确认发布时间',
+    });
+
+    expect(message.english.toLowerCase()).toContain('thank you for the update');
+    expect(message.english).toContain('by the end of this week');
+    expect(message.english).toContain('I appreciate the communication');
+    expect(message.english).toContain('Looking forward to seeing the content');
+    expect(message.english).not.toContain('clearest next update');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('uses a firm tone to make the expected next action clearer', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'I can post Friday.',
+    }), 'TikTok DM', requirements(), '', { replyTone: '坚定推进' });
+
+    expect(message.english).toContain('Please keep this timeline');
+    expect(message.english).toContain('Friday');
+  });
+
+  it('uses reply goal and acceptable concession for video length clarification', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: '60 seconds is too long.',
+    }), 'TikTok DM', requirements(), '', {
+      replyGoal: '解释 60 秒要求',
+      acceptableConcession: '可以短一点，但不能低于 35 秒',
+    });
+
+    expect(message.english).toContain('video length');
+    expect(message.english).toContain('above 35 seconds');
+    expect(message.english).toContain('key product use');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('generates logistics response when the package has not arrived', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: "I haven't received it yet.",
+      sampleShippingStatus: 'In Transit',
+      sampleDeliveredDate: '',
+    }), 'TikTok DM');
+
+    expect(message.english).toContain('delivery updates');
+    expect(message.english).toContain('shipping issue');
+    expect(message.english).toContain('No need to start filming');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('summarizes filming requirements and reference links when the creator asks what to film', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'What should I film? Any brief?',
+    }), 'TikTok DM', requirements({ referenceLinks: ['https://example.com/ref-video'] }));
+
+    expect(message.english).toContain('main filming direction');
+    expect(message.english).toContain('show the main product use case');
+    expect(message.english).toContain('https://example.com/ref-video');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('generates neutral campaign status response when creator cannot continue', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: "I can't continue.",
+    }), 'TikTok DM', requirements(), '', { replyTone: '最后确认' });
+
+    expect(message.english).toContain('update the campaign status');
+    expect(message.english).toContain('No further action is needed');
+    expect(message.english).not.toMatch(/please keep filming|expected posting date/i);
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
+  it('still works without personalization fields filled', () => {
+    const message = generateMessage(task({
+      trackingStatus: 'Replied',
+      lastCreatorResponse: 'Thanks, I will get the video done tomorrow.',
+    }), 'TikTok Shop Affiliate Message');
+
+    expect(message.english).toContain('tomorrow');
+    expect(message.english).toContain('product link');
+    expect(message.english).not.toMatch(chineseCharacterPattern);
+  });
+
 });
