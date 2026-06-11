@@ -20,10 +20,9 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: '最近沟通渠道', key: 'lastMessageChannel' },
   { header: '下次跟进日期', key: 'nextFollowUpDate' },
   { header: '达人回复/下一步备注', key: 'lastCreatorResponse' },
+  { header: '最近处理日期', key: 'lastHandledDate' },
   { header: '跟进记录', key: 'followUpHistory' },
-  { header: '产品项目备注', key: 'notes' },
-  { header: '当前拍摄要求', key: 'notes' },
-  { header: '备注', key: 'notes' },
+  { header: '达人备注', key: 'notes' },
 ];
 
 export type EditableCreatorField =
@@ -43,6 +42,7 @@ export type EditableCreatorField =
   | 'lastMessageScenario'
   | 'lastMessageChannel'
   | 'lastMessageSentAt'
+  | 'lastHandledDate'
   | 'nextFollowUpDate'
   | 'lastCreatorResponse';
 
@@ -107,6 +107,7 @@ export function createBlankCreatorRow(productName = '', requiredVideos = 2): Cre
     lastMessageScenario: '',
     lastMessageChannel: '',
     lastMessageSentAt: '',
+    lastHandledDate: '',
     nextFollowUpDate: '',
     lastCreatorResponse: '',
   };

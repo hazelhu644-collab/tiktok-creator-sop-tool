@@ -596,7 +596,95 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
         action: "Message Sent",
       });
     });
-    expect(screen.getAllByText("已标记为已发送。").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("已记录处理结果。").length).toBeGreaterThan(0);
+  });
+
+
+  it("records no reply without increasing count and removes creator from today's pending queue", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: "no-reply", username: "no_reply_creator", sampleDeliveredDate: "2026-06-01", lastFollowUpCount: 2 }),
+      creatorRow({ id: "next", username: "next_creator", sampleDeliveredDate: "2026-06-01" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.selectOptions(screen.getByLabelText("选择达人"), "no-reply");
+    await user.click(screen.getByRole("button", { name: "生成话术" }));
+
+    expect(screen.getByRole("button", { name: "标记未回复" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "标记未回复" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const row = saved.find((item) => item.id === "no-reply");
+      expect(row?.trackingStatus).toBe("未回复待跟进");
+      expect(row?.lastFollowUpCount).toBe(2);
+      expect(row?.lastHandledDate).toBe("2026-06-11");
+      expect(row?.nextFollowUpDate).toBe("2026-06-12");
+      expect(row?.followUpHistory?.[row.followUpHistory.length - 1]).toMatchObject({
+        action: "No Reply",
+        date: "2026-06-11",
+        note: "今日检查，达人未回复。",
+      });
+    });
+    await user.click(screen.getByRole("button", { name: "展开达人队列" }));
+    expect(within(screen.getByTestId("creator-queue")).queryByText(/no_reply_creator/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("已记录处理结果。").length).toBeGreaterThan(0);
+  });
+
+  it("skips today with an optional note, keeps count unchanged, and can reveal processed creators", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: "skip", username: "skip_creator", sampleDeliveredDate: "2026-06-01", lastFollowUpCount: 1 })]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.click(screen.getByRole("button", { name: "生成话术" }));
+
+    expect(screen.getByRole("button", { name: "今日暂不跟进" })).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("例如：达人说周五发布，今天不催"), "达人说周五发布，今天不催");
+    await user.click(screen.getByRole("button", { name: "今日暂不跟进" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved[0].trackingStatus).toBe("今日已跳过");
+      expect(saved[0].lastFollowUpCount).toBe(1);
+      expect(saved[0].followUpHistory?.[saved[0].followUpHistory.length - 1]).toMatchObject({
+        action: "Skipped Today",
+        note: "达人说周五发布，今天不催",
+      });
+    });
+    await user.click(screen.getByRole("button", { name: "展开达人队列" }));
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("当前筛选下暂无待处理达人。");
+    await user.click(screen.getByLabelText("显示今日已处理"));
+    expect(within(screen.getByTestId("creator-queue")).getByText(/今日已跳过 · 达人说周五发布/)).toBeInTheDocument();
+  });
+
+  it("selects the next creator after processing and shows creator notes in the compact panel and database", async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: "first", username: "first_creator", sampleDeliveredDate: "2026-06-01", notes: "回复慢，不要每天催" }),
+      creatorRow({ id: "second", username: "second_creator", sampleDeliveredDate: "2026-06-01" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.selectOptions(screen.getByLabelText("选择达人"), "first");
+    await user.click(screen.getByRole("button", { name: "生成话术" }));
+
+    const panel = screen.getByTestId("current-creator-panel");
+    expect(panel).toHaveTextContent("达人备注");
+    expect(panel).toHaveTextContent("回复慢，不要每天催");
+    expect(panel).toHaveTextContent("更多信息");
+    await user.click(screen.getByRole("button", { name: "标记为已发送" }));
+    await user.click(screen.getAllByRole("button", { name: "处理下一个达人" }).slice(-1)[0]);
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("second_creator");
+
+    await goTo(user, /达人数据库/);
+    expect(screen.getByRole("columnheader", { name: "达人备注" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("回复慢，不要每天催")).toBeInTheDocument();
   });
 
   it("records a creator reply from Follow-up Center", async () => {
