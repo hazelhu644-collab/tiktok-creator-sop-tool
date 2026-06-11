@@ -51,18 +51,17 @@ describe('DeepSeek reply API route', () => {
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({ error: '未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。' });
     expect(JSON.stringify(res.body)).not.toContain('test-secret-key');
+    expect(JSON.stringify(res.body)).not.toContain('建议');
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it('translate_creator_reply returns structured JSON', async () => {
+  it('translate_creator_reply returns direct Chinese translation only', async () => {
     process.env.DEEPSEEK_API_KEY = 'test-secret-key';
     createMock.mockResolvedValueOnce({
       choices: [{
         message: {
           content: JSON.stringify({
-            chineseUnderstanding: '达人表示可以周五发布。',
-            detectedIntent: '确认发布时间',
-            recommendedNextAction: '追问具体发布时间，便于安排投流。',
+            chineseTranslation: '我可以周五发布。',
           }),
         },
       }],
@@ -73,9 +72,7 @@ describe('DeepSeek reply API route', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({
-      chineseUnderstanding: '达人表示可以周五发布。',
-      detectedIntent: '确认发布时间',
-      recommendedNextAction: '追问具体发布时间，便于安排投流。',
+      chineseTranslation: '我可以周五发布。',
     });
     expect(createMock).toHaveBeenCalledWith(expect.objectContaining({
       model: 'deepseek-v4-pro',

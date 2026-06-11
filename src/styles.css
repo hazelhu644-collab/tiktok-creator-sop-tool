@@ -30,3 +30,17 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
 .deepseek-actions { margin-top: 14px; border-top: 1px solid rgba(184, 217, 210, .85); padding-top: 14px; }
 .ai-understanding { margin-top: 12px; border: 1px solid #dceee9; border-radius: 16px; background: rgba(255,255,255,.78); padding: 12px 14px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.workbench-panel { scroll-margin-top: 18px; }
+.workbench-controls { grid-template-columns: minmax(220px, 1fr) 150px minmax(280px, 1.2fr) 190px auto; margin-bottom: 14px; }
+.compact-queue { max-height: 340px; overflow-y: auto; padding-right: 6px; margin: 12px 0 16px; border: 1px solid rgba(220, 210, 194, .8); border-radius: 20px; background: rgba(255,255,255,.54); padding: 10px; }
+.queue-item.active { border-color: #17665d; border-left-color: #17665d; background: #eef8f5; }
+.queue-collapsed { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; color: #536071; }
+.current-creator-panel { scroll-margin-top: 18px; margin-top: 16px; border: 1px solid rgba(184, 217, 210, .95); border-radius: 24px; background: linear-gradient(145deg, rgba(244,251,248,.95), rgba(255,250,241,.88)); padding: 18px; }
+.current-creator-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.current-creator-grid span { display: grid; gap: 5px; border-left: 3px solid rgba(23,102,93,.38); border-radius: 14px; background: rgba(255,255,255,.78); padding: 10px 12px; color: #64748b; font-weight: 800; }
+.current-creator-grid b { color: #172033; font-size: .96rem; }
+.simplified-reply-fields label:first-child, .simplified-reply-fields label:nth-child(2), .simplified-reply-fields label:nth-child(3) { grid-column: 1 / -1; }
+.advanced-reply-settings { margin-top: 14px; border: 1px solid #e5dccf; border-radius: 18px; padding: 12px 14px; background: rgba(255,250,243,.78); }
+.advanced-reply-settings summary { cursor: pointer; font-weight: 900; color: #536071; }
+.next-creator-prompt { margin-top: 14px; border: 1px solid #b8d9d2; border-radius: 16px; background: rgba(255,255,255,.82); padding: 12px; display: grid; gap: 10px; color: #17665d; }
+@media (max-width: 1100px) { .workbench-controls { grid-template-columns: 1fr; } }

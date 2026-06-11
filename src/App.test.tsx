@@ -55,7 +55,7 @@ describe('operations workbench navigation and dashboard', () => {
     render(<App />);
 
     expect(screen.getByText('Creator SOP')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '数据看板' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今日工作台' })).toBeInTheDocument();
 
     await goTo(user, /达人数据库/);
     expect(screen.getByRole('heading', { name: '达人数据库' })).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('operations workbench navigation and dashboard', () => {
     expect(screen.getByRole('heading', { name: '样品追踪' })).toBeInTheDocument();
 
     await goTo(user, /达人跟进中心/);
-    expect(screen.getByRole('heading', { name: '达人跟进中心' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今日工作台' })).toBeInTheDocument();
 
     await goTo(user, /内容审核/);
     expect(screen.getByRole('heading', { name: '内容审核' })).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe('operations workbench navigation and dashboard', () => {
   it('keeps Chinese sidebar order with Follow-up Center above Creator Database and Templates', () => {
     render(<App />);
     const navText = screen.getByRole('navigation', { name: '主导航' }).textContent ?? '';
-    expect(navText.indexOf('达人跟进中心')).toBeGreaterThan(navText.indexOf('数据看板'));
+    expect(navText.indexOf('达人跟进中心')).toBeGreaterThan(navText.indexOf('今日工作台'));
     expect(navText.indexOf('达人跟进中心')).toBeLessThan(navText.indexOf('达人数据库'));
     expect(navText.indexOf('达人数据库')).toBeLessThan(navText.indexOf('沟通话术模板'));
   });
@@ -114,11 +114,59 @@ describe('operations workbench navigation and dashboard', () => {
       '可投流素材数量',
     ].forEach((label) => expect(screen.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument());
 
-    expect(screen.getByRole('heading', { name: '今日待办' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今日待处理达人队列' })).toBeInTheDocument();
     expect(screen.getByText('follow_creator')).toBeInTheDocument();
-    expect(screen.getAllByText(/触发原因：/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/建议动作：/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('creator-queue')).toHaveClass('compact-queue');
+    expect(screen.getByTestId('current-creator-panel')).toBeInTheDocument();
   });
+
+
+
+  it('uses product-first workflow to filter overview, queue, and current creator panel while preserving 全部产品', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'fountain', username: 'fountain_creator', product: 'Pet Fountain', currentStatus: 'Delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-20' }),
+      creatorRow({ id: 'comb', username: 'comb_creator', product: 'Pet Comb', currentStatus: 'Delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-20' }),
+    ]);
+
+    render(<App />);
+
+    expect(screen.getByTestId('creator-queue')).toHaveTextContent('fountain_creator');
+    expect(screen.getByTestId('creator-queue')).toHaveTextContent('comb_creator');
+
+    await user.selectOptions(screen.getAllByLabelText('当前产品项目')[0], 'Pet Fountain');
+
+    expect(screen.getByRole('button', { name: /今日待跟进达人数量1Pet Fountain/ })).toBeInTheDocument();
+    expect(screen.getByTestId('creator-queue')).toHaveTextContent('fountain_creator');
+    expect(screen.getByTestId('creator-queue')).not.toHaveTextContent('comb_creator');
+    expect(screen.getByTestId('current-creator-panel')).toHaveTextContent('Pet Fountain');
+
+    await user.selectOptions(screen.getAllByLabelText('当前产品项目')[0], 'ALL');
+    expect(screen.getByTestId('creator-queue')).toHaveTextContent('comb_creator');
+  });
+
+  it('selecting a creator collapses the compact queue and processing next creator advances within the filter', async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: 'first', username: 'first_creator', product: 'Pet Fountain', currentStatus: 'Delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-20' }),
+      creatorRow({ id: 'second', username: 'second_creator', product: 'Pet Fountain', currentStatus: 'Delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-21' }),
+    ]);
+
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText('选择达人'), 'first');
+
+    expect(screen.queryByTestId('creator-queue')).not.toBeInTheDocument();
+    expect(screen.getByText('达人队列已收起。')).toBeInTheDocument();
+    expect(screen.getByTestId('current-creator-panel')).toHaveTextContent('first_creator');
+
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+    await user.click(screen.getByRole('button', { name: '标记为已发送' }));
+    const nextButtons = screen.getAllByRole('button', { name: '处理下一个达人' });
+    await user.click(nextButtons[nextButtons.length - 1]);
+
+    expect(screen.getByTestId('current-creator-panel')).toHaveTextContent('second_creator');
+  });
+
 
   it('clicks a Dashboard card to open Creator Database with the matching status filter', async () => {
     const user = userEvent.setup();
@@ -139,8 +187,8 @@ describe('operations workbench navigation and dashboard', () => {
   it('shows an actionable empty state when there are no todo items', () => {
     render(<App />);
 
-    expect(screen.getByText('今天暂无高优先级待办。')).toBeInTheDocument();
-    expect(screen.getByText('下一步：导入达人表或新增达人，系统会自动生成跟进队列。')).toBeInTheDocument();
+    expect(screen.getByText('暂无待处理达人。')).toBeInTheDocument();
+    expect(screen.getByText('请导入达人数据，或切换到「全部产品」查看完整队列。')).toBeInTheDocument();
   });
 });
 
@@ -288,7 +336,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
       expect(saved.lastFollowUpCount).toBe(2);
       expect(saved.followUpHistory?.[0]).toMatchObject({ action: 'Message Sent' });
     });
-    expect(screen.getByText('已标记为发送，并同步更新数据表格。')).toBeInTheDocument();
+    expect(screen.getAllByText('已标记为已发送。是否处理下一个达人？').length).toBeGreaterThan(0);
   });
 
   it('records a creator reply from Follow-up Center', async () => {
@@ -325,7 +373,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     await goTo(user, /达人跟进中心/);
 
     expect(screen.getByRole('heading', { name: '达人回复处理' })).toBeInTheDocument();
-    await user.type(screen.getByLabelText('我想回复的重点（可选）'), '期待你拍的视频，有没有具体的时间让我团队安排投流计划');
+    await user.type(screen.getByLabelText('我想回复的重点'), '期待你拍的视频，有没有具体的时间让我团队安排投流计划');
     await user.click(screen.getByRole('button', { name: '生成话术' }));
 
     const english = String(screen.getByLabelText('英文话术').getAttribute('value') ?? (screen.getByLabelText('英文话术') as HTMLTextAreaElement).value);
@@ -343,8 +391,8 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     await goTo(user, /达人跟进中心/);
 
     expect(screen.getByRole('button', { name: 'DeepSeek 翻译达人回复' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'DeepSeek 生成个性化回复' })).toBeInTheDocument();
-    expect(screen.getByText('仅点击按钮时调用 DeepSeek API，普通本地规则生成不会产生 API 费用。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'DeepSeek 生成英文回复' })).toBeInTheDocument();
+    expect(screen.getByText('DeepSeek 翻译只做直译；英文回复会把你的中文重点准确转成 creator-facing English。')).toBeInTheDocument();
   });
 
   it('clicking DeepSeek translate shows loading and then AI Chinese understanding', async () => {
@@ -360,12 +408,11 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('DeepSeek 生成中…');
     resolveFetch(new Response(JSON.stringify({
-      chineseUnderstanding: '达人确认周五可发布。',
-      detectedIntent: '确认发布时间',
-      recommendedNextAction: '确认具体发布时间并安排投流。',
+      chineseTranslation: '我可以周五发布。',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    await waitFor(() => expect(screen.getByText('AI 中文理解')).toBeInTheDocument());
-    expect(screen.getByText('达人确认周五可发布。')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('中文翻译')).toBeInTheDocument());
+    expect(screen.getAllByText('我可以周五发布。').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/建议下一步/)).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/deepseek-reply', expect.objectContaining({ method: 'POST' }));
     const payload = JSON.parse(String((fetchMock.mock.calls[0] as unknown[])[1] && ((fetchMock.mock.calls[0] as unknown[])[1] as { body?: string }).body));
     expect(payload).toMatchObject({ action: 'translate_creator_reply', channel: 'TikTok DM', productName: 'Pet Fountain' });
@@ -381,7 +428,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
-    await user.click(screen.getByRole('button', { name: 'DeepSeek 生成个性化回复' }));
+    await user.click(screen.getByRole('button', { name: 'DeepSeek 生成英文回复' }));
 
     expect(screen.getByRole('status')).toHaveTextContent('DeepSeek 生成中…');
     resolveFetch(new Response(JSON.stringify({
@@ -392,7 +439,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     await waitFor(() => expect((screen.getByLabelText('英文话术') as HTMLTextAreaElement).value).toContain('ad testing schedule'));
     expect((screen.getByLabelText('英文话术') as HTMLTextAreaElement).value).not.toMatch(/[㐀-鿿]/);
-    expect(screen.getByText('DeepSeek 中文解释')).toBeInTheDocument();
+    expect(screen.getByText('中文解释')).toBeInTheDocument();
     expect(screen.getAllByText('这条回复先表示理解，再确认发布时间，方便投流安排。').length).toBeGreaterThan(0);
     const payload = JSON.parse(String((fetchMock.mock.calls[0] as unknown[])[1] && ((fetchMock.mock.calls[0] as unknown[])[1] as { body?: string }).body));
     expect(payload).toMatchObject({ action: 'generate_personalized_reply', channel: 'TikTok DM', productName: 'Pet Fountain' });
@@ -409,7 +456,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     await user.click(screen.getByRole('button', { name: '生成话术' }));
     const localMessage = (screen.getByLabelText('英文话术') as HTMLTextAreaElement).value;
 
-    await user.click(screen.getByRole('button', { name: 'DeepSeek 生成个性化回复' }));
+    await user.click(screen.getByRole('button', { name: 'DeepSeek 生成英文回复' }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。'));
     expect(screen.getByLabelText('英文话术')).toHaveValue(localMessage);
