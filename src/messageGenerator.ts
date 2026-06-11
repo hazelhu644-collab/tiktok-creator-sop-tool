@@ -1027,7 +1027,7 @@ Thank you.`;
   }
 
   if (channel === 'WhatsApp') {
-    return `Hi ${name}, ${body}`;
+    return `Hi ${name}, thanks for the update. ${body.replace(/^No problem — thank you for the update\.\s*/i, '').replace(/^Thank you for the update\.\s*/i, '')}`.replace(/\s+/g, ' ').trim();
   }
 
   return `Hi ${name}, ${body}`;

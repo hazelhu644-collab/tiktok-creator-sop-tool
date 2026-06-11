@@ -773,4 +773,21 @@ describe('creator reply local intent mapping', () => {
     expect(message.english).not.toContain('This helps us keep the collaboration timeline clear');
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
+
+  it('generates distinct channel-specific creator replies', () => {
+    const baseTask = replyTask('No problem!');
+    const focus = '期待你拍的视频，有没有具体的时间让我团队安排投流计划';
+    const affiliate = generateMessage(baseTask, 'TikTok Shop Affiliate Message', requirements(), focus).english;
+    const dm = generateMessage(baseTask, 'TikTok DM', requirements(), focus).english;
+    const email = generateMessage(baseTask, 'Email', requirements(), focus).english;
+    const whatsapp = generateMessage(baseTask, 'WhatsApp', requirements(), focus).english;
+
+    expect(new Set([affiliate, dm, email, whatsapp]).size).toBe(4);
+    expect(affiliate).toContain('Thank you.');
+    expect(email).toContain('Best,');
+    expect(dm.length).toBeLessThan(email.length);
+    expect(whatsapp.length).toBeLessThan(email.length);
+    [affiliate, dm, email, whatsapp].forEach((text) => expect(text).not.toMatch(chineseCharacterPattern));
+  });
+
 });
