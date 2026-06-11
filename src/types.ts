@@ -16,14 +16,14 @@ export type VideoProgressNormalization = {
 
 export type FollowUpHistoryEntry = {
   date: string;
-  action: 'Message Sent' | 'Creator Replied' | 'Completed' | 'Failed';
+  action: 'Message Sent' | 'Creator Replied' | 'No Reply' | 'Skipped Today' | 'Completed' | 'Failed';
   channel?: Channel | string;
   scenario?: string;
   message?: string;
   note?: string;
 };
 
-export type TrackingStatus = 'Followed Up' | 'Replied' | 'Reply Pending' | 'Completed' | 'Failed' | '';
+export type TrackingStatus = 'Followed Up' | 'Replied' | 'Reply Pending' | 'No Reply Pending' | 'Skipped Today' | 'Completed' | 'Failed' | '';
 
 export type CreatorRow = {
   id: string;
@@ -44,6 +44,7 @@ export type CreatorRow = {
   lastMessageScenario?: string;
   lastMessageChannel?: Channel | string;
   lastMessageSentAt?: string;
+  lastHandledDate?: string;
   nextFollowUpDate?: string;
   lastCreatorResponse?: string;
   followUpHistory?: FollowUpHistoryEntry[];

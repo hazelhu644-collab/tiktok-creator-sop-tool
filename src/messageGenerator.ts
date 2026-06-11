@@ -786,7 +786,7 @@ function hasSpecificReplyIntent(context: CreatorReplyContext): boolean {
 function replyAcknowledgementLine(context: CreatorReplyContext): string {
   const reply = normalizeForScenario(context.reply);
   if (context.intentSignals.has('friendly-acknowledgement') || /no problem|sounds good|okay|ok|sure|thank/.test(reply)) {
-    return 'No problem — thank you for the update.';
+    return 'Thank you for the update.';
   }
   return 'Thank you for the update.';
 }
@@ -795,13 +795,13 @@ function replyIntentLines(context: CreatorReplyContext, filmingRequirementsRemin
   const lines: string[] = [];
 
   if (context.intentSignals.has('friendly-acknowledgement')) {
-    lines.push('We’re looking forward to seeing the content.');
+    lines.push('We’re looking forward to seeing the content and will update the campaign status on our side.');
   }
 
   if (context.intentSignals.has('posting-time')) {
     const isAskingForTimeline = /有没有|什么时候|具体|几号|when|posting date|timeline/i.test(`${context.cleanFocus} ${context.cleanGoal}`);
     if (!isAskingForTimeline && context.timeline !== 'on the timeline you shared') {
-      lines.push(`That timing works — I’ll note that you expect to post ${context.timeline}.`);
+      lines.push(`I’ll note that you’re planning to complete the content ${context.timeline}.`);
     } else {
       lines.push('Do you have an estimated posting date or expected posting timeline?');
     }
@@ -975,7 +975,7 @@ function creatorReplyLines(product: string, task: Task, userReplyFocus: string, 
       addUserDirection(lines, context);
     }
   } else if (context.intent === 'posting-time') {
-    lines.push(`Thank you for the update. That works — I’ll note that you’re planning to complete the ${product} content ${context.timeline}.`);
+    lines.push(`Thank you for the update. I’ll note that you’re planning to complete the ${product} content ${context.timeline}.`);
     const reminder = productLinkReminder(context);
     if (reminder) lines.push(reminder);
   } else if (context.intent === 'video-length') {
@@ -1027,10 +1027,10 @@ Thank you.`;
   }
 
   if (channel === 'WhatsApp') {
-    return `Hi ${name}, thanks for the update. ${body.replace(/^No problem — thank you for the update\.\s*/i, '').replace(/^Thank you for the update\.\s*/i, '')}`.replace(/\s+/g, ' ').trim();
+    return `Hi ${name}, thank you for the update — ${body.replace(/^Thank you for the update\.\s*/i, '')}`.replace(/\s+/g, ' ').trim();
   }
 
-  return `Hi ${name}, ${body}`;
+  return `Hi ${name}, ${body.charAt(0).toLowerCase()}${body.slice(1)}`;
 }
 
 function byChannel(channel: Channel, name: string, request: string, filmingRequirementsReminder: string, highRisk: boolean): string {
