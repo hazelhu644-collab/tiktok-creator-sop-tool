@@ -78,6 +78,7 @@ type ModuleKey =
   | "settings";
 type Toast = { tone: "success" | "warning"; text: string } | null;
 type DeepSeekAction = "translate_creator_reply" | "generate_personalized_reply";
+type MessageSource = "local" | "deepseek";
 type WorkbenchFilterKey =
   | "initial_outreach"
   | "follow_up_today"
@@ -497,6 +498,7 @@ function App() {
   const [channel, setChannel] = useState<Channel>("TikTok DM");
   const [selectedCreatorId, setSelectedCreatorId] = useState("");
   const [message, setMessage] = useState<GeneratedMessage | null>(null);
+  const [messageSource, setMessageSource] = useState<MessageSource>("local");
   const [trackingStatus, setTrackingStatus] = useState("");
   const [templateCreatorId, setTemplateCreatorId] = useState("");
   const [followupSearch, setFollowupSearch] = useState("");
@@ -769,6 +771,9 @@ function App() {
     setDeepSeekDetectedIntent("");
     setDeepSeekRecommendedTrackingStatus("");
     setIsTranslationEditing(false);
+    setMessageSource("local");
+    const selected = tasks.find((task) => task.id === creatorId);
+    setMessage(selected ? buildLocalMessageForTask(selected) : null);
     scrollToCurrentCreator();
   }
 
@@ -779,6 +784,7 @@ function App() {
       return;
     }
     setMessage(null);
+    setMessageSource("local");
     setTrackingStatus("");
     setLastProcessingResult("");
     setShowNextCreatorPrompt(false);
@@ -1025,6 +1031,7 @@ function App() {
       ),
     );
     setMessage(null);
+    setMessageSource("local");
   }
 
   function handleDashboardCardClick(card: (typeof dashboardCards)[number]) {
@@ -1038,7 +1045,8 @@ function App() {
       matchesWorkbenchFilter(task, card.filterKey),
     );
     setSelectedCreatorId(firstMatch?.id ?? "");
-    setMessage(null);
+    setMessage(firstMatch ? buildLocalMessageForTask(firstMatch) : null);
+    setMessageSource("local");
     setShowNextCreatorPrompt(false);
     scrollToQueue();
   }
@@ -1152,10 +1160,41 @@ function App() {
     );
   }
 
+  useEffect(() => {
+    if (!selectedTask) {
+      setMessage(null);
+      setMessageSource("local");
+      return;
+    }
+    if (messageSource === "deepseek") return;
+    setMessage(buildLocalMessageForTask(selectedTask));
+    setMessageSource("local");
+  }, [
+    selectedTask?.id,
+    selectedTask?.currentStatus,
+    selectedTask?.sampleShippingStatus,
+    selectedTask?.sampleDeliveredDate,
+    selectedTask?.videoProgress,
+    selectedTask?.lastFollowUpCount,
+    selectedTask?.trackingStatus,
+    selectedTask?.lastCreatorResponse,
+    selectedTask?.notes,
+    channel,
+    replyFocus,
+    replyRelationshipNote,
+    replyTone,
+    replyGoal,
+    replyConcession,
+    activeFilmingRequirements,
+    mergedCampaigns,
+    messageSource,
+  ]);
+
   function handleGenerateMessage() {
     if (!selectedTask) return;
     const generated = buildLocalMessageForTask(selectedTask);
     setMessage(generated);
+    setMessageSource("local");
     setSelectedCreatorId(selectedTask.id);
     setIsQueueExpanded(false);
     scrollToMessageArea();
@@ -1275,6 +1314,7 @@ function App() {
     try {
       if (action === "generate_personalized_reply" && !message) {
         setMessage(buildLocalMessageForTask(selectedTask));
+        setMessageSource("local");
       }
 
       const response = await fetch("/api/deepseek-reply", {
@@ -1303,6 +1343,7 @@ function App() {
         chineseExplanation:
           result.chineseExplanation || localFallback.chineseExplanation,
       });
+      setMessageSource(result.englishMessage ? "deepseek" : "local");
       setDeepSeekDetectedIntent(result.detectedIntent || "");
       setDeepSeekChineseExplanation(result.chineseExplanation || "");
       setDeepSeekRecommendedTrackingStatus(
@@ -1578,6 +1619,7 @@ function App() {
               setSelectedIds([]);
               setSelectedCreatorId("");
               setMessage(null);
+              setMessageSource("local");
               setIsQueueExpanded(true);
               setOnlyCurrentCreator(false);
             }}
@@ -2224,30 +2266,13 @@ function App() {
                       </label>
                     </div>
                   </details>
-                  <div className="deepseek-actions">
-                    <p className="muted">
-                      DeepSeek 翻译只做直译；英文回复会把你的中文重点准确转成
-                      creator-facing English。
-                    </p>
-                    <div className="inline-actions">
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() =>
-                          void callDeepSeek("generate_personalized_reply")
-                        }
-                        disabled={deepSeekLoadingAction !== null}
-                      >
-                        DeepSeek 生成英文回复
-                      </button>
-                    </div>
-                    {deepSeekLoadingAction ===
-                      "generate_personalized_reply" && (
-                      <p className="ai-status" role="status">
-                        DeepSeek 生成中…
-                      </p>
-                    )}
-                  </div>
+                  <p className="muted compact-helper">
+                    默认先使用本地专业话术。DeepSeek 仅用于复杂回复或需要个性化优化时。
+                  </p>
+                  <p className="muted compact-helper">
+                    DeepSeek 翻译只做直译；英文回复会把你的中文重点准确转成
+                    creator-facing English。
+                  </p>
                   {message && (
                     <div ref={messageAreaRef} className="message-output">
                       <h3>场景 / 沟通动作</h3>
@@ -2255,6 +2280,11 @@ function App() {
                         {message.scenario} · {message.communicationAction}
                       </p>
                       <h3>英文话术</h3>
+                      <p className="message-source-label">
+                        {messageSource === "deepseek"
+                          ? "DeepSeek 优化话术"
+                          : "本地推荐话术"}
+                      </p>
                       <label
                         className="sr-only"
                         htmlFor="generated-english-message"
@@ -2269,6 +2299,26 @@ function App() {
                         }
                         rows={7}
                       />
+                      <div className="deepseek-actions">
+                        <div className="inline-actions">
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() =>
+                              void callDeepSeek("generate_personalized_reply")
+                            }
+                            disabled={deepSeekLoadingAction !== null}
+                          >
+                            DeepSeek 生成英文回复
+                          </button>
+                        </div>
+                        {deepSeekLoadingAction ===
+                          "generate_personalized_reply" && (
+                          <p className="ai-status" role="status">
+                            DeepSeek 生成中…
+                          </p>
+                        )}
+                      </div>
                       <h3>中文对照 / 中文解释</h3>
                       <span className="sr-only">中文解释</span>
                       <p>

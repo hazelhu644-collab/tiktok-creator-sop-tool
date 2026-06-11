@@ -71,3 +71,14 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
 .skip-today-control { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 10px; align-items: end; margin-top: 10px; }
 .skip-today-control label { display: grid; gap: 6px; color: #536071; font-size: .82rem; font-weight: 850; }
 @media (max-width: 760px) { .creator-note-preview { grid-column: auto; } .skip-today-control { grid-template-columns: 1fr; } }
+.message-source-label {
+  display: inline-flex;
+  width: fit-content;
+  margin: 0 0 8px;
+  border-radius: 999px;
+  background: rgba(23, 102, 93, .1);
+  color: #17665d;
+  padding: 4px 10px;
+  font-size: .78rem;
+  font-weight: 900;
+}

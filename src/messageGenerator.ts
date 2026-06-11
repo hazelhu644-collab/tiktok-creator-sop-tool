@@ -516,7 +516,7 @@ export function generateMessage(
   } else if (scenario === 'Creator Reply Follow-up') {
     english = creatorReplyMessage(channel, name, product, task, userReplyFocus, filmingRequirementsReminder, replyPersonalization);
   } else if (scenario === 'Sample Delivered Follow-up') {
-    const request = `Just checking in now that the ${product} sample has been delivered. Please confirm your expected posting date for the first video. ${filmingRequirementsReminder}`;
+    const request = `Tracking shows the ${product} sample has been delivered. Could you please confirm you received it and share your expected posting date for the first video or filming schedule? ${filmingRequirementsReminder}`;
     english = byChannel(channel, name, request, '', highRisk);
   } else if (scenario === 'Partial Video Completion Follow-up') {
     english = partialCompletionMessage(channel, name, remainingVideos, filmingRequirementsReminder);
@@ -527,7 +527,7 @@ export function generateMessage(
   } else if (scenario === 'Failed Archive Confirmation') {
     english = failedArchiveMessage(channel, name, product);
   } else if (scenario === 'Second Follow-up' || scenario === 'Final Follow-up Before Failed Candidate') {
-    const request = `I’m checking in to confirm the current status of the ${product} collaboration. We haven’t seen the remaining deliverable completed yet, so I’d like to confirm whether you’re still able to complete the remaining video(s) and what posting timeline we should expect. The required video(s) are still incomplete on our side, so please confirm your expected posting date if you are continuing. If you’re no longer able to continue, please let us know so we can update the campaign status on our end.`;
+    const request = `I’m following up on the ${product} collaboration. The required video(s) are still incomplete on our side. Could you please confirm whether you’re still able to complete the remaining video(s) and confirm your expected posting date? If you’re no longer able to continue, please let us know so we can update the campaign status on our side.`;
     english = byChannel(channel, name, request, filmingRequirementsReminder, true);
   } else {
     const request = `I’m checking in on the ${product} collaboration. Please send a quick update on the current status so we can keep the campaign status accurate on our side.`;
@@ -545,7 +545,7 @@ export function generateMessage(
 }
 
 function firstOutreachMessage(channel: Channel, name: string, product: string): string {
-  const request = `We manage TikTok Shop affiliate campaigns for US market products, and we’re reaching out about a potential collaboration for the ${product}. If you’re interested, please let us know and we can share the campaign details, product link, and next steps.`;
+  const request = `We’re reaching out about a potential collaboration for the ${product}. If you’re interested, please let us know and we can share the product link, content requirements, and next steps.`;
   return byChannel(channel, name, request, '', false);
 }
 
@@ -568,7 +568,7 @@ function sampleInTransitMessage(channel: Channel, name: string, product: string,
   const reminder = filmingRequirementsReminder.trim();
 
   if (channel === 'TikTok DM') {
-    return `Hi ${name}, the ${product} sample has shipped and is on the way. The sample is on the way, so please keep an eye on delivery updates. No posting is needed before the sample is delivered. Once it arrives, please plan filming based on the guidelines and attach the TikTok Shop product link. Could you confirm when you expect to start filming after receiving it? ${reminder}`.replace(/\s+/g, ' ').trim();
+    return `Hi ${name}, the ${product} sample has been shipped and the sample is on the way. Please keep an eye on the delivery updates. No posting is needed before the sample is delivered. Once it arrives, please test it in a real pet-care scene and share your posting plan. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
   }
 
   if (channel === 'TikTok Shop Affiliate Message') {
@@ -584,7 +584,7 @@ Thank you.`;
   }
 
   if (channel === 'WhatsApp') {
-    return `Hi ${name}, the ${product} sample has been shipped and is currently on the way. Please keep an eye on delivery updates. Once it arrives, please plan filming based on the guidelines and attach the TikTok Shop product link. Could you confirm when you expect to start filming after receiving it? ${reminder}`.replace(/\s+/g, ' ').trim();
+    return `Hi ${name}, the ${product} sample has been shipped and the sample is on the way. Please keep an eye on the delivery updates. No posting is needed before the sample is delivered. Once it arrives, please test it in a real pet-care scene and share your posting plan. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
   }
 
   return `Hi ${name},
