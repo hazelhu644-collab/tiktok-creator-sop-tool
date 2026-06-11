@@ -551,6 +551,189 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     ).toBeInTheDocument();
   });
 
+
+
+  it("shows a local recommended message and tracking actions immediately without DeepSeek", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    seedCreators([
+      creatorRow({
+        id: "immediate-local",
+        username: "local_creator",
+        product: "Pet Fountain",
+        sampleDeliveredDate: "2026-06-02",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+
+    await waitFor(() =>
+      expect(screen.getByText("本地推荐话术")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("场景 / 沟通动作")).toBeInTheDocument();
+    expect(screen.getByText("中文对照 / 中文解释")).toBeInTheDocument();
+    expect(screen.getByText("发送后追踪")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "默认先使用本地专业话术。DeepSeek 仅用于复杂回复或需要个性化优化时。",
+      ),
+    ).toBeInTheDocument();
+    const localEnglish = (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value;
+    expect(localEnglish).toContain("Hi @local_creator");
+    expect(localEnglish).toContain("expected posting date");
+    expect(localEnglish).not.toMatch(/[㐀-鿿]/);
+    [
+      "复制英文话术",
+      "标记为已发送",
+      "标记达人已回复",
+      "标记未回复",
+      "标记合作完成",
+      "标记合作失败",
+      "今日暂不跟进",
+    ].forEach((name) =>
+      expect(screen.getByRole("button", { name })).toBeInTheDocument(),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("processes local-message tracking actions without calling DeepSeek", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    seedCreators([
+      creatorRow({ id: "local-sent", username: "local_sent", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({ id: "local-no-reply", username: "local_no_reply", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({ id: "local-skip", username: "local_skip", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({ id: "local-complete", username: "local_complete", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({ id: "local-fail", username: "local_fail", sampleDeliveredDate: "2026-06-01" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await waitFor(() => expect(screen.getByText("本地推荐话术")).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "local-sent");
+    await user.clear(screen.getByLabelText("英文话术"));
+    await user.type(screen.getByLabelText("英文话术"), "Manual local message");
+    await user.click(screen.getByRole("button", { name: "标记为已发送" }));
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "local-no-reply");
+    await user.click(screen.getByRole("button", { name: "标记未回复" }));
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "local-skip");
+    await user.click(screen.getByRole("button", { name: "今日暂不跟进" }));
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "local-complete");
+    await user.click(screen.getByRole("button", { name: "标记合作完成" }));
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "local-fail");
+    await user.click(screen.getByRole("button", { name: "标记合作失败" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.id === "local-sent")?.trackingStatus).toBe("已发送待回复");
+      expect(saved.find((row) => row.id === "local-sent")?.lastMessageChannel).toBe("TikTok DM");
+      const sentHistory = saved.find((row) => row.id === "local-sent")?.followUpHistory ?? [];
+      expect(sentHistory[sentHistory.length - 1]).toMatchObject({
+        action: "Message Sent",
+        date: "2026-06-11",
+        message: "Manual local message",
+      });
+      expect(saved.find((row) => row.id === "local-no-reply")?.trackingStatus).toBe("未回复待跟进");
+      expect(saved.find((row) => row.id === "local-skip")?.trackingStatus).toBe("今日已跳过");
+      expect(saved.find((row) => row.id === "local-complete")?.trackingStatus).toBe("合作完成");
+      expect(saved.find((row) => row.id === "local-fail")?.trackingStatus).toBe("合作失败");
+    });
+    await user.click(screen.getByRole("button", { name: "展开达人队列" }));
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("当前筛选下暂无待处理达人。");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("only calls DeepSeek from DeepSeek buttons and keeps the local message visible on failure", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    seedCreators([
+      creatorRow({
+        id: "deepseek-optional",
+        username: "optional_creator",
+        trackingStatus: "达人回复待处理",
+        lastCreatorResponse: "Can I post Friday?",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await waitFor(() => expect(screen.getByText("本地推荐话术")).toBeInTheDocument());
+    const localMessage = (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value;
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "复制英文话术" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "DeepSeek 生成英文回复" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("英文话术")).toHaveValue(localMessage);
+    expect(screen.getByRole("button", { name: "标记为已发送" })).toBeInTheDocument();
+  });
+
+  it("uses DeepSeek output as the active message for copy and tracking when generation succeeds", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            englishMessage: "Hi @ai_creator, thanks for confirming. Please post on Friday so we can review the campaign schedule.",
+            chineseExplanation: "DeepSeek 版本用于确认周五发布时间。",
+            detectedIntent: "确认发布时间",
+            recommendedTrackingStatus: "等待周五发布",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    seedCreators([
+      creatorRow({
+        id: "ai-active",
+        username: "ai_creator",
+        trackingStatus: "达人回复待处理",
+        lastCreatorResponse: "I can post Friday.",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.click(screen.getByRole("button", { name: "DeepSeek 生成英文回复" }));
+
+    await waitFor(() => expect(screen.getByText("DeepSeek 优化话术")).toBeInTheDocument());
+    expect((screen.getByLabelText("英文话术") as HTMLTextAreaElement).value).toContain("Please post on Friday");
+    await user.click(screen.getByRole("button", { name: "复制英文话术" }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Please post on Friday"));
+
+    await user.click(screen.getByRole("button", { name: "标记为已发送" }));
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const history = saved[0].followUpHistory ?? [];
+      expect(history[history.length - 1]?.message).toContain("Please post on Friday");
+      expect(saved[0].trackingStatus).toBe("已发送待回复");
+    });
+  });
+
   it("generates follow-up copy and marks a message as sent", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(async () => undefined);
