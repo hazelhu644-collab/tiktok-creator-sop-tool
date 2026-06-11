@@ -30,9 +30,7 @@ type DeepSeekReplyRequest = {
 };
 
 type TranslateCreatorReplyResponse = {
-  chineseUnderstanding: string;
-  detectedIntent: string;
-  recommendedNextAction: string;
+  chineseTranslation: string;
 };
 
 type GeneratePersonalizedReplyResponse = {
@@ -97,19 +95,19 @@ Tone options:
 function buildTranslateMessages(input: DeepSeekReplyRequest): ChatCompletionMessageParam[] {
   const context = compactJson({
     creatorReply: cleanText(input.creatorReply),
-    productName: cleanText(input.productName),
-    currentStatus: cleanText(input.currentStatus),
-    channel: cleanText(input.channel),
-    campaignContext: cleanText(input.campaignContext),
   });
 
   return [
-    { role: 'system', content: systemPrompt() },
+    { role: 'system', content: 'You are a direct translation engine. Return valid JSON only. Translate English creator replies into faithful, easy-to-understand Simplified Chinese. Do not summarize, infer intent, recommend actions, analyze strategy, or add any information not present in the original reply.' },
     {
       role: 'user',
-      content: `Translate and summarize this creator reply for a Chinese TikTok Shop operator.
-Return exactly this JSON shape: {"chineseUnderstanding":"...","detectedIntent":"...","recommendedNextAction":"..."}.
-Use concise Simplified Chinese for all three fields.
+      content: `Translate only the creatorReply field into Simplified Chinese.
+Return exactly this JSON shape: {"chineseTranslation":"..."}.
+Rules:
+- Direct translation only.
+- Do not include recommended actions.
+- Do not explain the business meaning.
+- Do not guess reasons or timelines beyond the original words.
 Context:
 ${context}`,
     },
@@ -146,10 +144,12 @@ function buildGenerateMessages(input: DeepSeekReplyRequest): ChatCompletionMessa
 Return exactly this JSON shape: {"englishMessage":"...","chineseExplanation":"...","detectedIntent":"...","recommendedTrackingStatus":"..."}.
 Requirements:
 - englishMessage must be English only and must not contain Chinese characters.
-- Directly use the creator reply, user focus, relationship note, reply goal, acceptable concession, channel, and product campaign context.
+- Treat userReplyFocus as Simplified Chinese operator intent that must be accurately converted into natural English inside englishMessage. Never leave userReplyFocus in Chinese and never ignore it.
+- Directly use the creator reply, available Chinese translation, user focus, relationship note, reply goal, acceptable concession, channel, and product campaign context.
 - chineseExplanation, detectedIntent, and recommendedTrackingStatus should be Simplified Chinese for the operator.
 - Do not claim an action was sent or completed.
 - Do not add login, database, payment, TikTok API, auto-send, or monthly-report behavior.
+- Adapt style by channel so TikTok DM, Affiliate Message, Email, and WhatsApp are not identical.
 Context:
 ${context}`,
     },
@@ -171,11 +171,9 @@ function extractJsonObject(content: string): unknown {
 function validateTranslateResponse(value: unknown): TranslateCreatorReplyResponse | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
-  const chineseUnderstanding = cleanText(record.chineseUnderstanding);
-  const detectedIntent = cleanText(record.detectedIntent);
-  const recommendedNextAction = cleanText(record.recommendedNextAction);
-  if (!chineseUnderstanding || !detectedIntent || !recommendedNextAction) return null;
-  return { chineseUnderstanding, detectedIntent, recommendedNextAction };
+  const chineseTranslation = cleanText(record.chineseTranslation);
+  if (!chineseTranslation) return null;
+  return { chineseTranslation };
 }
 
 export function hasChineseCharacters(value: string): boolean {
