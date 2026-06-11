@@ -80,14 +80,14 @@ type Toast = { tone: "success" | "warning"; text: string } | null;
 type DeepSeekAction = "translate_creator_reply" | "generate_personalized_reply";
 type MessageSource = "local" | "deepseek";
 type WorkbenchFilterKey =
-  | "initial_outreach"
   | "follow_up_today"
-  | "sample_pending"
-  | "sample_shipped"
+  | "processed_today"
   | "delivered_waiting_video"
-  | "posted_this_week"
   | "content_review_pending"
-  | "ads_ready";
+  | "posted_this_week"
+  | "sample_shipped"
+  | "sample_pending"
+  | "initial_outreach";
 type DeepSeekTranslateResult = { chineseTranslation: string };
 type DeepSeekGenerateResult = {
   englishMessage: string;
@@ -569,7 +569,6 @@ function App() {
   const [isAdvancedReplyOpen, setIsAdvancedReplyOpen] = useState(false);
   const [showNextCreatorPrompt, setShowNextCreatorPrompt] = useState(false);
   const [showProcessedToday, setShowProcessedToday] = useState(false);
-  const [skipTodayNote, setSkipTodayNote] = useState("");
   const [lastProcessingResult, setLastProcessingResult] = useState("");
   const queueRef = useRef<HTMLElement | null>(null);
   const currentCreatorRef = useRef<HTMLDivElement | null>(null);
@@ -617,6 +616,8 @@ function App() {
         return status === "Not Contacted";
       case "follow_up_today":
         return Boolean(taskMeta?.needsFollowUp || task.needsFollowUp);
+      case "processed_today":
+        return isHandledToday(task);
       case "sample_pending":
         return ["Sample Requested", "Sample Approved"].includes(status);
       case "sample_shipped":
@@ -628,13 +629,6 @@ function App() {
       case "content_review_pending":
         return ["Posted", "Need Revision", "Product Tag Missing"].includes(
           status,
-        );
-      case "ads_ready":
-        return (
-          ["Ready for Ads", "Spark Ads Requested"].includes(status) ||
-          ((progress.postedCount ?? 0) >=
-            (progress.requiredVideos ?? requiredVideos) &&
-            safeLower(task.notes).includes("ready for ads"))
         );
       default:
         return true;
@@ -653,7 +647,8 @@ function App() {
       task.lastHandledDate === today ||
       task.lastMessageSentAt === today ||
       task.followUpHistory?.some(
-        (entry) => entry.date === today && handledActions.includes(entry.action),
+        (entry) =>
+          entry.date === today && handledActions.includes(entry.action),
       )
     );
   }
@@ -665,13 +660,16 @@ function App() {
       .reverse()
       .find((entry) => entry.date === todayString());
     if (handledToday && latestTodayEntry?.action === "No Reply") {
-      return `今日未回复 · 明日再跟进`;
+      return `今日已处理 · 未回复 · 明日再跟进`;
     }
     if (handledToday && latestTodayEntry?.action === "Skipped Today") {
-      const note = latestTodayEntry.note?.replace(/^今日暂不跟进。?/, "").trim();
-      return `今日已跳过${note ? ` · ${note}` : ""}`;
+      const note = latestTodayEntry.note
+        ?.replace(/^今日暂不跟进。?/, "")
+        .trim();
+      return `今日已处理 · 今日已跳过${note ? ` · ${note}` : ""}`;
     }
-    if (handledToday && task.trackingStatus) return `今日已处理 · ${task.trackingStatus}`;
+    if (handledToday && task.trackingStatus)
+      return `今日已处理 · ${task.trackingStatus}`;
     if (task.trackingStatus) return task.trackingStatus;
     return priorityLabel(task);
   }
@@ -721,7 +719,8 @@ function App() {
     showProcessedToday,
   ]);
   const selectedTask =
-    (selectedCreatorId && tasks.find((task) => task.id === selectedCreatorId)) ||
+    (selectedCreatorId &&
+      tasks.find((task) => task.id === selectedCreatorId)) ||
     filteredTasks[0];
   const selectedTemplateCreator =
     visibleRows.find((row) => row.id === templateCreatorId) ??
@@ -732,7 +731,10 @@ function App() {
     : -1;
   const nextTask =
     currentTaskIndex >= 0
-      ? filteredTasks[currentTaskIndex + 1]
+      ? filteredTasks.find(
+          (task, index) =>
+            index > currentTaskIndex && task.id !== selectedTask?.id,
+        )
       : filteredTasks[0];
 
   function scrollToQueue() {
@@ -767,6 +769,7 @@ function App() {
     setIsQueueExpanded(false);
     setShowNextCreatorPrompt(false);
     setDeepSeekError("");
+    setDeepSeekChineseTranslation("");
     setDeepSeekChineseExplanation("");
     setDeepSeekDetectedIntent("");
     setDeepSeekRecommendedTrackingStatus("");
@@ -783,7 +786,6 @@ function App() {
       setLastProcessingResult("当前筛选下暂无更多待处理达人。");
       return;
     }
-    setMessage(null);
     setMessageSource("local");
     setTrackingStatus("");
     setLastProcessingResult("");
@@ -943,34 +945,27 @@ function App() {
     [tasks, requiredVideos],
   );
 
+  const processedTodayCount = tasks.filter((task) =>
+    isHandledToday(task),
+  ).length;
+  const pendingFollowUpCount = tasks.filter(
+    (task) => task.needsFollowUp && !isHandledToday(task),
+  ).length;
+
   const dashboardCards: Array<{
     label: string;
     value: number;
     filterKey: WorkbenchFilterKey;
   }> = [
     {
-      label: "今日待邀约达人数量",
-      value: enrichedRows.filter((entry) => entry.status === "Not Contacted")
-        .length,
-      filterKey: "initial_outreach",
-    },
-    {
       label: "今日待跟进达人数量",
-      value: tasks.filter((task) => task.needsFollowUp).length,
+      value: pendingFollowUpCount,
       filterKey: "follow_up_today",
     },
     {
-      label: "待寄样达人数量",
-      value: enrichedRows.filter((entry) =>
-        ["Sample Requested", "Sample Approved"].includes(entry.status),
-      ).length,
-      filterKey: "sample_pending",
-    },
-    {
-      label: "已寄样待签收数量",
-      value: enrichedRows.filter((entry) => entry.status === "Sample Shipped")
-        .length,
-      filterKey: "sample_shipped",
+      label: "今日已处理达人人数",
+      value: processedTodayCount,
+      filterKey: "processed_today",
     },
     {
       label: "已签收待发视频数量",
@@ -978,11 +973,6 @@ function App() {
         ["Delivered", "Waiting Video"].includes(entry.status),
       ).length,
       filterKey: "delivered_waiting_video",
-    },
-    {
-      label: "本周已发布视频数量",
-      value: enrichedRows.filter((entry) => entry.status === "Posted").length,
-      filterKey: "posted_this_week",
     },
     {
       label: "待验收视频数量",
@@ -994,11 +984,28 @@ function App() {
       filterKey: "content_review_pending",
     },
     {
-      label: "可投流素材数量",
+      label: "本周已发布视频数量",
+      value: enrichedRows.filter((entry) => entry.status === "Posted").length,
+      filterKey: "posted_this_week",
+    },
+    {
+      label: "已寄样待签收数量",
+      value: enrichedRows.filter((entry) => entry.status === "Sample Shipped")
+        .length,
+      filterKey: "sample_shipped",
+    },
+    {
+      label: "待寄样达人数量",
       value: enrichedRows.filter((entry) =>
-        ["Ready for Ads", "Spark Ads Requested"].includes(entry.status),
+        ["Sample Requested", "Sample Approved"].includes(entry.status),
       ).length,
-      filterKey: "ads_ready",
+      filterKey: "sample_pending",
+    },
+    {
+      label: "今日待邀约达人数量",
+      value: enrichedRows.filter((entry) => entry.status === "Not Contacted")
+        .length,
+      filterKey: "initial_outreach",
     },
   ];
 
@@ -1039,6 +1046,7 @@ function App() {
     setWorkbenchFilter({ key: card.filterKey, label: card.label });
     setFollowupSearch("");
     setFollowupUrgency("All");
+    setShowProcessedToday(card.filterKey === "processed_today");
     setOnlyCurrentCreator(false);
     setIsQueueExpanded(true);
     const firstMatch = tasks.find((task) =>
@@ -1432,7 +1440,11 @@ function App() {
               nextFollowUpDate: addDays(1),
               followUpHistory: [
                 ...(row.followUpHistory ?? []),
-                { date: today, action: "No Reply", note: "今日检查，达人未回复。" },
+                {
+                  date: today,
+                  action: "No Reply",
+                  note: row.notes.trim() || "今日检查，达人未回复。",
+                },
               ],
             }
           : row,
@@ -1447,7 +1459,7 @@ function App() {
   function markCreatorSkippedToday() {
     if (!selectedTask) return;
     const today = todayString();
-    const note = skipTodayNote.trim() || "今日暂不跟进。";
+    const note = selectedTask.notes.trim() || "今日暂不跟进。";
     setRows((currentRows) =>
       currentRows.map((row) =>
         row.id === selectedTask.id
@@ -1464,7 +1476,6 @@ function App() {
           : row,
       ),
     );
-    setSkipTodayNote("");
     setTrackingStatus("已记录处理结果。");
     setLastProcessingResult("已记录处理结果。");
     setShowNextCreatorPrompt(true);
@@ -1488,7 +1499,10 @@ function App() {
                 {
                   date: today,
                   action: outcome,
-                  note: outcome === "Completed" ? "今日标记合作完成。" : "今日标记合作失败。",
+                  note:
+                    outcome === "Completed"
+                      ? "今日标记合作完成。"
+                      : "今日标记合作失败。",
                 },
               ],
             }
@@ -1498,7 +1512,10 @@ function App() {
     setTrackingStatus("已记录处理结果。");
     setLastProcessingResult("已记录处理结果。");
     setShowNextCreatorPrompt(true);
-    setToast({ tone: "success", text: outcome === "Completed" ? "已标记合作完成。" : "已标记合作失败。" });
+    setToast({
+      tone: "success",
+      text: outcome === "Completed" ? "已标记合作完成。" : "已标记合作失败。",
+    });
   }
 
   function handleMarkCreatorReplied() {
@@ -1665,7 +1682,9 @@ function App() {
     );
     return {
       creatorCount: campaignRows.length,
-      todayFollowUp: campaignTasks.filter((task) => task.needsFollowUp && !isHandledToday(task)).length,
+      todayFollowUp: campaignTasks.filter(
+        (task) => task.needsFollowUp && !isHandledToday(task),
+      ).length,
       highest: campaignTasks.filter((task) => task.priority === "Highest")
         .length,
       high: campaignTasks.filter((task) => task.priority === "High").length,
@@ -1913,7 +1932,9 @@ function App() {
               <input
                 type="checkbox"
                 checked={showProcessedToday}
-                onChange={(event) => setShowProcessedToday(event.target.checked)}
+                onChange={(event) =>
+                  setShowProcessedToday(event.target.checked)
+                }
               />
               显示今日已处理
             </label>
@@ -2034,20 +2055,44 @@ function App() {
                   跟进状态<b>{selectedTask.trackingStatus || "—"}</b>
                 </span>
                 <span className="creator-note-preview">
-                  达人备注<b>{selectedTask.notes.trim() || "—"}</b>
+                  处理备注 / 达人备注<b>{selectedTask.notes.trim() || "—"}</b>
                 </span>
               </div>
               <details className="more-info-card">
                 <summary>更多信息</summary>
                 <div className="current-creator-grid secondary-grid">
-                  <span>联系渠道<b>{channel}</b></span>
-                  <span>最近联系日期<b>{selectedTask.lastContactDate || "—"}</b></span>
-                  <span>样品状态<b>{selectedTask.sampleShippingStatus || "—"}</b></span>
-                  <span>样品到货时间<b>{selectedTask.sampleDeliveredDate || "—"}</b></span>
-                  <span>视频进度<b>{selectedTask.videoProgress || "—"}</b></span>
-                  <span>首条视频发布时间<b>{selectedTask.firstVideoPostedDate || "—"}</b></span>
-                  <span>最近回复日期<b>{selectedTask.followUpHistory?.slice().reverse().find((entry) => entry.action === "Creator Replied")?.date || "—"}</b></span>
-                  <span>主页链接<b>{selectedTask.profileLink || "—"}</b></span>
+                  <span>
+                    联系渠道<b>{channel}</b>
+                  </span>
+                  <span>
+                    最近联系日期<b>{selectedTask.lastContactDate || "—"}</b>
+                  </span>
+                  <span>
+                    样品状态<b>{selectedTask.sampleShippingStatus || "—"}</b>
+                  </span>
+                  <span>
+                    样品到货时间<b>{selectedTask.sampleDeliveredDate || "—"}</b>
+                  </span>
+                  <span>
+                    视频进度<b>{selectedTask.videoProgress || "—"}</b>
+                  </span>
+                  <span>
+                    首条视频发布时间
+                    <b>{selectedTask.firstVideoPostedDate || "—"}</b>
+                  </span>
+                  <span>
+                    最近回复日期
+                    <b>
+                      {selectedTask.followUpHistory
+                        ?.slice()
+                        .reverse()
+                        .find((entry) => entry.action === "Creator Replied")
+                        ?.date || "—"}
+                    </b>
+                  </span>
+                  <span>
+                    主页链接<b>{selectedTask.profileLink || "—"}</b>
+                  </span>
                 </div>
               </details>
             </div>
@@ -2093,13 +2138,13 @@ function App() {
                     会基于这里的内容翻译和生成回复。
                   </p>
                   <label>
-                    达人备注
+                    处理备注 / 达人备注
                     <textarea
                       value={selectedTask.notes}
                       onChange={(event) =>
                         updateRow(selectedTask.id, "notes", event.target.value)
                       }
-                      placeholder="例如：回复慢，不要每天催 / 周五后再跟进"
+                      placeholder="例如：周末发布 / 回复慢，不要每天催 / 脚受伤，周五后再跟进 / 已沟通，等待剪辑 / 今天不催"
                       rows={3}
                     />
                   </label>
@@ -2199,19 +2244,7 @@ function App() {
                     />
                   </label>
                   <div className="reply-inline-fields">
-                    <label>
-                      联系渠道
-                      <select
-                        value={channel}
-                        onChange={(event) =>
-                          setChannel(event.target.value as Channel)
-                        }
-                      >
-                        {CHANNELS.map((item) => (
-                          <option key={item}>{item}</option>
-                        ))}
-                      </select>
-                    </label>
+                    <p className="readonly-channel">当前联系渠道：{channel}</p>
                     <label>
                       回复语气
                       <select
@@ -2267,7 +2300,8 @@ function App() {
                     </div>
                   </details>
                   <p className="muted compact-helper">
-                    默认先使用本地专业话术。DeepSeek 仅用于复杂回复或需要个性化优化时。
+                    默认先使用本地专业话术。DeepSeek
+                    仅用于复杂回复或需要个性化优化时。
                   </p>
                   <p className="muted compact-helper">
                     DeepSeek 翻译只做直译；英文回复会把你的中文重点准确转成
@@ -2369,14 +2403,6 @@ function App() {
                         </button>
                       </div>
                       <div className="skip-today-control">
-                        <label>
-                          跳过原因 / 备注（可选）
-                          <input
-                            value={skipTodayNote}
-                            onChange={(event) => setSkipTodayNote(event.target.value)}
-                            placeholder="例如：达人说周五发布，今天不催"
-                          />
-                        </label>
                         <button
                           type="button"
                           className="secondary"
@@ -2390,7 +2416,9 @@ function App() {
                       )}
                       {showNextCreatorPrompt && (
                         <div className="next-creator-prompt">
-                          <strong>{lastProcessingResult || "已记录处理结果。"}</strong>
+                          <strong>
+                            {lastProcessingResult || "已记录处理结果。"}
+                          </strong>
                           <div className="inline-actions">
                             <button
                               type="button"

@@ -177,20 +177,33 @@ describe("operations workbench navigation and dashboard", () => {
 
     render(<App />);
 
-    [
-      "今日待邀约达人数量",
+    const expectedCardOrder = [
       "今日待跟进达人数量",
-      "待寄样达人数量",
-      "已寄样待签收数量",
+      "今日已处理达人人数",
       "已签收待发视频数量",
-      "本周已发布视频数量",
       "待验收视频数量",
-      "可投流素材数量",
-    ].forEach((label) =>
+      "本周已发布视频数量",
+      "已寄样待签收数量",
+      "待寄样达人数量",
+      "今日待邀约达人数量",
+    ];
+    expectedCardOrder.forEach((label) =>
       expect(
         screen.getByRole("button", { name: new RegExp(label) }),
       ).toBeInTheDocument(),
     );
+    expect(screen.queryByText("可投流素材数量")).not.toBeInTheDocument();
+    const cardLabels = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent ?? "")
+      .filter((text) =>
+        expectedCardOrder.some((label) => text.includes(label)),
+      );
+    expect(
+      cardLabels.map((text) =>
+        expectedCardOrder.find((label) => text.includes(label)),
+      ),
+    ).toEqual(expectedCardOrder);
 
     expect(
       screen.getByRole("heading", { name: "今日待处理达人队列" }),
@@ -198,6 +211,95 @@ describe("operations workbench navigation and dashboard", () => {
     expect(screen.getByText("follow_creator")).toBeInTheDocument();
     expect(screen.getByTestId("creator-queue")).toHaveClass("compact-queue");
     expect(screen.getByTestId("current-creator-panel")).toBeInTheDocument();
+  });
+
+  it("keeps overview card clicks on 今日工作台 and reveals processed creators from the processed card", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({
+        id: "pending",
+        username: "pending_creator",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+      creatorRow({
+        id: "handled",
+        username: "handled_creator",
+        sampleDeliveredDate: "2026-06-01",
+        trackingStatus: "已发送待回复",
+        lastHandledDate: "2026-06-11",
+        followUpHistory: [
+          { date: "2026-06-11", action: "Message Sent", channel: "TikTok DM" },
+        ],
+      }),
+    ]);
+
+    render(<App />);
+    await user.click(
+      screen.getByRole("button", { name: /今日待跟进达人数量/ }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "今日工作台" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "今日待处理达人队列" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "pending_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
+      "handled_creator",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /今日已处理达人人数/ }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "今日工作台" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("显示今日已处理")).toBeChecked();
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "handled_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("今日已处理");
+  });
+
+  it("uses one editable 联系渠道 selector for selected creator workflow and stores it in sent history", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({
+        id: "channel",
+        username: "channel_creator",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+    ]);
+
+    render(<App />);
+    const editableChannelSelectors = screen.getAllByLabelText("联系渠道");
+    expect(editableChannelSelectors).toHaveLength(1);
+    await user.selectOptions(
+      editableChannelSelectors[0],
+      "TikTok Shop Affiliate Message",
+    );
+    expect(
+      screen.getByText("当前联系渠道：TikTok Shop Affiliate Message"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/渠道：TikTok Shop Affiliate Message/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "标记为已发送" }));
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      expect(saved[0].lastMessageChannel).toBe("TikTok Shop Affiliate Message");
+      expect(saved[0].followUpHistory?.[0]).toMatchObject({
+        action: "Message Sent",
+        channel: "TikTok Shop Affiliate Message",
+      });
+    });
   });
 
   it("uses product-first workflow to filter overview, queue, and current creator panel while preserving 全部产品", async () => {
@@ -551,8 +653,6 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     ).toBeInTheDocument();
   });
 
-
-
   it("shows a local recommended message and tracking actions immediately without DeepSeek", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn();
@@ -580,7 +680,9 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
         "默认先使用本地专业话术。DeepSeek 仅用于复杂回复或需要个性化优化时。",
       ),
     ).toBeInTheDocument();
-    const localEnglish = (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value;
+    const localEnglish = (
+      screen.getByLabelText("英文话术") as HTMLTextAreaElement
+    ).value;
     expect(localEnglish).toContain("Hi @local_creator");
     expect(localEnglish).toContain("expected posting date");
     expect(localEnglish).not.toMatch(/[㐀-鿿]/);
@@ -604,61 +706,115 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     seedCreators([
-      creatorRow({ id: "local-sent", username: "local_sent", sampleDeliveredDate: "2026-06-01" }),
-      creatorRow({ id: "local-no-reply", username: "local_no_reply", sampleDeliveredDate: "2026-06-01" }),
-      creatorRow({ id: "local-skip", username: "local_skip", sampleDeliveredDate: "2026-06-01" }),
-      creatorRow({ id: "local-complete", username: "local_complete", sampleDeliveredDate: "2026-06-01" }),
-      creatorRow({ id: "local-fail", username: "local_fail", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({
+        id: "local-sent",
+        username: "local_sent",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+      creatorRow({
+        id: "local-no-reply",
+        username: "local_no_reply",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+      creatorRow({
+        id: "local-skip",
+        username: "local_skip",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+      creatorRow({
+        id: "local-complete",
+        username: "local_complete",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+      creatorRow({
+        id: "local-fail",
+        username: "local_fail",
+        sampleDeliveredDate: "2026-06-01",
+      }),
     ]);
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
-    await waitFor(() => expect(screen.getByText("本地推荐话术")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("本地推荐话术")).toBeInTheDocument(),
+    );
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "local-sent");
     await user.clear(screen.getByLabelText("英文话术"));
     await user.type(screen.getByLabelText("英文话术"), "Manual local message");
     await user.click(screen.getByRole("button", { name: "标记为已发送" }));
 
-    await user.selectOptions(screen.getByLabelText("选择达人"), "local-no-reply");
+    await user.selectOptions(
+      screen.getByLabelText("选择达人"),
+      "local-no-reply",
+    );
     await user.click(screen.getByRole("button", { name: "标记未回复" }));
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "local-skip");
     await user.click(screen.getByRole("button", { name: "今日暂不跟进" }));
 
-    await user.selectOptions(screen.getByLabelText("选择达人"), "local-complete");
+    await user.selectOptions(
+      screen.getByLabelText("选择达人"),
+      "local-complete",
+    );
     await user.click(screen.getByRole("button", { name: "标记合作完成" }));
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "local-fail");
     await user.click(screen.getByRole("button", { name: "标记合作失败" }));
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
-      expect(saved.find((row) => row.id === "local-sent")?.trackingStatus).toBe("已发送待回复");
-      expect(saved.find((row) => row.id === "local-sent")?.lastMessageChannel).toBe("TikTok DM");
-      const sentHistory = saved.find((row) => row.id === "local-sent")?.followUpHistory ?? [];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      expect(saved.find((row) => row.id === "local-sent")?.trackingStatus).toBe(
+        "已发送待回复",
+      );
+      expect(
+        saved.find((row) => row.id === "local-sent")?.lastMessageChannel,
+      ).toBe("TikTok DM");
+      const sentHistory =
+        saved.find((row) => row.id === "local-sent")?.followUpHistory ?? [];
       expect(sentHistory[sentHistory.length - 1]).toMatchObject({
         action: "Message Sent",
         date: "2026-06-11",
         message: "Manual local message",
       });
-      expect(saved.find((row) => row.id === "local-no-reply")?.trackingStatus).toBe("未回复待跟进");
-      expect(saved.find((row) => row.id === "local-skip")?.trackingStatus).toBe("今日已跳过");
-      expect(saved.find((row) => row.id === "local-complete")?.trackingStatus).toBe("合作完成");
-      expect(saved.find((row) => row.id === "local-fail")?.trackingStatus).toBe("合作失败");
+      expect(
+        saved.find((row) => row.id === "local-no-reply")?.trackingStatus,
+      ).toBe("未回复待跟进");
+      expect(saved.find((row) => row.id === "local-skip")?.trackingStatus).toBe(
+        "今日已跳过",
+      );
+      expect(
+        saved.find((row) => row.id === "local-complete")?.trackingStatus,
+      ).toBe("合作完成");
+      expect(saved.find((row) => row.id === "local-fail")?.trackingStatus).toBe(
+        "合作失败",
+      );
     });
-    await user.click(screen.getByRole("button", { name: "展开达人队列" }));
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("当前筛选下暂无待处理达人。");
+    const expandQueueButton = screen.queryByRole("button", {
+      name: "展开达人队列",
+    });
+    if (expandQueueButton) await user.click(expandQueueButton);
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "当前筛选下暂无待处理达人。",
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("only calls DeepSeek from DeepSeek buttons and keeps the local message visible on failure", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ error: "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。",
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
     seedCreators([
@@ -672,18 +828,30 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
-    await waitFor(() => expect(screen.getByText("本地推荐话术")).toBeInTheDocument());
-    const localMessage = (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value;
+    await waitFor(() =>
+      expect(screen.getByText("本地推荐话术")).toBeInTheDocument(),
+    );
+    const localMessage = (
+      screen.getByLabelText("英文话术") as HTMLTextAreaElement
+    ).value;
     expect(fetchMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "复制英文话术" }));
     expect(fetchMock).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "DeepSeek 生成英文回复" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。"));
+    await user.click(
+      screen.getByRole("button", { name: "DeepSeek 生成英文回复" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。",
+      ),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("英文话术")).toHaveValue(localMessage);
-    expect(screen.getByRole("button", { name: "标记为已发送" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "标记为已发送" }),
+    ).toBeInTheDocument();
   });
 
   it("uses DeepSeek output as the active message for copy and tracking when generation succeeds", async () => {
@@ -695,16 +863,18 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            englishMessage: "Hi @ai_creator, thanks for confirming. Please post on Friday so we can review the campaign schedule.",
-            chineseExplanation: "DeepSeek 版本用于确认周五发布时间。",
-            detectedIntent: "确认发布时间",
-            recommendedTrackingStatus: "等待周五发布",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              englishMessage:
+                "Hi @ai_creator, thanks for confirming. Please post on Friday so we can review the campaign schedule.",
+              chineseExplanation: "DeepSeek 版本用于确认周五发布时间。",
+              detectedIntent: "确认发布时间",
+              recommendedTrackingStatus: "等待周五发布",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
       ),
     );
     seedCreators([
@@ -718,18 +888,30 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
-    await user.click(screen.getByRole("button", { name: "DeepSeek 生成英文回复" }));
+    await user.click(
+      screen.getByRole("button", { name: "DeepSeek 生成英文回复" }),
+    );
 
-    await waitFor(() => expect(screen.getByText("DeepSeek 优化话术")).toBeInTheDocument());
-    expect((screen.getByLabelText("英文话术") as HTMLTextAreaElement).value).toContain("Please post on Friday");
+    await waitFor(() =>
+      expect(screen.getByText("DeepSeek 优化话术")).toBeInTheDocument(),
+    );
+    expect(
+      (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value,
+    ).toContain("Please post on Friday");
     await user.click(screen.getByRole("button", { name: "复制英文话术" }));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Please post on Friday"));
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("Please post on Friday"),
+    );
 
     await user.click(screen.getByRole("button", { name: "标记为已发送" }));
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       const history = saved[0].followUpHistory ?? [];
-      expect(history[history.length - 1]?.message).toContain("Please post on Friday");
+      expect(history[history.length - 1]?.message).toContain(
+        "Please post on Friday",
+      );
       expect(saved[0].trackingStatus).toBe("已发送待回复");
     });
   });
@@ -782,91 +964,147 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     expect(screen.getAllByText("已记录处理结果。").length).toBeGreaterThan(0);
   });
 
-
   it("records no reply without increasing count and removes creator from today's pending queue", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
     seedCreators([
-      creatorRow({ id: "no-reply", username: "no_reply_creator", sampleDeliveredDate: "2026-06-01", lastFollowUpCount: 2 }),
-      creatorRow({ id: "next", username: "next_creator", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({
+        id: "no-reply",
+        username: "no_reply_creator",
+        sampleDeliveredDate: "2026-06-01",
+        lastFollowUpCount: 2,
+      }),
+      creatorRow({
+        id: "next",
+        username: "next_creator",
+        sampleDeliveredDate: "2026-06-01",
+      }),
     ]);
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
     await user.selectOptions(screen.getByLabelText("选择达人"), "no-reply");
-    await user.click(screen.getByRole("button", { name: "生成话术" }));
-
-    expect(screen.getByRole("button", { name: "标记未回复" })).toBeInTheDocument();
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "no_reply_creator",
+    );
+    expect(
+      screen.getByRole("button", { name: "标记未回复" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "标记未回复" }));
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       const row = saved.find((item) => item.id === "no-reply");
       expect(row?.trackingStatus).toBe("未回复待跟进");
       expect(row?.lastFollowUpCount).toBe(2);
       expect(row?.lastHandledDate).toBe("2026-06-11");
       expect(row?.nextFollowUpDate).toBe("2026-06-12");
-      expect(row?.followUpHistory?.[row.followUpHistory.length - 1]).toMatchObject({
+      expect(
+        row?.followUpHistory?.[row.followUpHistory.length - 1],
+      ).toMatchObject({
         action: "No Reply",
         date: "2026-06-11",
         note: "今日检查，达人未回复。",
       });
     });
     await user.click(screen.getByRole("button", { name: "展开达人队列" }));
-    expect(within(screen.getByTestId("creator-queue")).queryByText(/no_reply_creator/)).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("creator-queue")).queryByText(
+        /no_reply_creator/,
+      ),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("已记录处理结果。").length).toBeGreaterThan(0);
   });
 
   it("skips today with an optional note, keeps count unchanged, and can reveal processed creators", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
-    seedCreators([creatorRow({ id: "skip", username: "skip_creator", sampleDeliveredDate: "2026-06-01", lastFollowUpCount: 1 })]);
+    seedCreators([
+      creatorRow({
+        id: "skip",
+        username: "skip_creator",
+        sampleDeliveredDate: "2026-06-01",
+        lastFollowUpCount: 1,
+      }),
+    ]);
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
-    await user.click(screen.getByRole("button", { name: "生成话术" }));
-
-    expect(screen.getByRole("button", { name: "今日暂不跟进" })).toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText("例如：达人说周五发布，今天不催"), "达人说周五发布，今天不催");
+    expect(
+      screen.getByRole("button", { name: "今日暂不跟进" }),
+    ).toBeInTheDocument();
+    await user.type(
+      screen.getByLabelText("处理备注 / 达人备注"),
+      "达人说周五发布，今天不催",
+    );
     await user.click(screen.getByRole("button", { name: "今日暂不跟进" }));
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       expect(saved[0].trackingStatus).toBe("今日已跳过");
       expect(saved[0].lastFollowUpCount).toBe(1);
-      expect(saved[0].followUpHistory?.[saved[0].followUpHistory.length - 1]).toMatchObject({
+      expect(
+        saved[0].followUpHistory?.[saved[0].followUpHistory.length - 1],
+      ).toMatchObject({
         action: "Skipped Today",
         note: "达人说周五发布，今天不催",
       });
     });
-    await user.click(screen.getByRole("button", { name: "展开达人队列" }));
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("当前筛选下暂无待处理达人。");
+    const expandQueueButton = screen.queryByRole("button", {
+      name: "展开达人队列",
+    });
+    if (expandQueueButton) await user.click(expandQueueButton);
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "当前筛选下暂无待处理达人。",
+    );
     await user.click(screen.getByLabelText("显示今日已处理"));
-    expect(within(screen.getByTestId("creator-queue")).getByText(/今日已跳过 · 达人说周五发布/)).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("creator-queue")).getByText(
+        /今日已处理 · 今日已跳过 · 达人说周五发布/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("selects the next creator after processing and shows creator notes in the compact panel and database", async () => {
     const user = userEvent.setup();
     seedCreators([
-      creatorRow({ id: "first", username: "first_creator", sampleDeliveredDate: "2026-06-01", notes: "回复慢，不要每天催" }),
-      creatorRow({ id: "second", username: "second_creator", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({
+        id: "first",
+        username: "first_creator",
+        sampleDeliveredDate: "2026-06-01",
+        notes: "回复慢，不要每天催",
+      }),
+      creatorRow({
+        id: "second",
+        username: "second_creator",
+        sampleDeliveredDate: "2026-06-01",
+      }),
     ]);
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
     await user.selectOptions(screen.getByLabelText("选择达人"), "first");
-    await user.click(screen.getByRole("button", { name: "生成话术" }));
 
     const panel = screen.getByTestId("current-creator-panel");
-    expect(panel).toHaveTextContent("达人备注");
+    expect(panel).toHaveTextContent("处理备注 / 达人备注");
     expect(panel).toHaveTextContent("回复慢，不要每天催");
     expect(panel).toHaveTextContent("更多信息");
     await user.click(screen.getByRole("button", { name: "标记为已发送" }));
-    await user.click(screen.getAllByRole("button", { name: "处理下一个达人" }).slice(-1)[0]);
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("second_creator");
+    await user.click(
+      screen.getAllByRole("button", { name: "处理下一个达人" }).slice(-1)[0],
+    );
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "second_creator",
+    );
 
     await goTo(user, /达人数据库/);
-    expect(screen.getByRole("columnheader", { name: "达人备注" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "达人备注" }),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue("回复慢，不要每天催")).toBeInTheDocument();
   });
 
