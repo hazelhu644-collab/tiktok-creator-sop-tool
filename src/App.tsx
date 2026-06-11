@@ -39,6 +39,9 @@ const creatorStatuses = [
 type CreatorStatus = typeof creatorStatuses[number];
 type ModuleKey = 'dashboard' | 'creators' | 'templates' | 'samples' | 'followup' | 'review' | 'ads' | 'settings';
 type Toast = { tone: 'success' | 'warning'; text: string } | null;
+type DeepSeekAction = 'translate_creator_reply' | 'generate_personalized_reply';
+type DeepSeekTranslateResult = { chineseUnderstanding: string; detectedIntent: string; recommendedNextAction: string };
+type DeepSeekGenerateResult = { englishMessage: string; chineseExplanation: string; detectedIntent: string; recommendedTrackingStatus: string };
 
 type TemplateForm = {
   creatorName: string;
@@ -357,6 +360,13 @@ function App() {
   const [promptHelperForm, setPromptHelperForm] = useState({ sellingPoints: '', videoCount: '', durationRequirement: '', targetPetOrScene: '', mustShowShots: '', avoidShots: '', referenceLinks: '' });
   const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState('');
   const [promptCopyStatus, setPromptCopyStatus] = useState('');
+  const [deepSeekLoadingAction, setDeepSeekLoadingAction] = useState<DeepSeekAction | null>(null);
+  const [deepSeekError, setDeepSeekError] = useState('');
+  const [deepSeekChineseUnderstanding, setDeepSeekChineseUnderstanding] = useState('');
+  const [deepSeekDetectedIntent, setDeepSeekDetectedIntent] = useState('');
+  const [deepSeekRecommendedNextAction, setDeepSeekRecommendedNextAction] = useState('');
+  const [deepSeekChineseExplanation, setDeepSeekChineseExplanation] = useState('');
+  const [deepSeekRecommendedTrackingStatus, setDeepSeekRecommendedTrackingStatus] = useState('');
 
   const mergedCampaigns = useMemo(() => mergeDetectedCampaigns(campaigns, rows, filmingRequirements), [campaigns, rows, filmingRequirements]);
   const activeCampaign = selectedCampaign === 'ALL' ? undefined : mergedCampaigns.find((campaign) => campaign.productName === selectedCampaign);
@@ -541,17 +551,117 @@ function App() {
     void copyText(selectedRows.map(buildOutreachForRow).join('\n\n---\n\n'), `已复制 ${selectedRows.length} 条邀约话术。`);
   }
 
-  function handleGenerateMessage() {
-    if (!selectedTask) return;
-    const creatorCampaign = mergedCampaigns.find((campaign) => campaign.productName === selectedTask.product);
-    const generated = generateMessage(selectedTask, channel, campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements), replyFocus, {
+  function buildLocalMessageForTask(task: Task): GeneratedMessage {
+    const creatorCampaign = mergedCampaigns.find((campaign) => campaign.productName === task.product);
+    return generateMessage(task, channel, campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements), replyFocus, {
       relationshipNote: replyRelationshipNote,
       replyTone,
       replyGoal,
       acceptableConcession: replyConcession,
     });
+  }
+
+  function handleGenerateMessage() {
+    if (!selectedTask) return;
+    const generated = buildLocalMessageForTask(selectedTask);
     setMessage(generated);
     setSelectedCreatorId(selectedTask.id);
+  }
+
+  function updateGeneratedEnglishMessage(english: string) {
+    if (!message) return;
+    setMessage({ ...message, english });
+  }
+
+  function currentCreatorReply(task: Task): string {
+    const latestCreatorReply = task.followUpHistory?.slice().reverse().find((entry) => entry.action === 'Creator Replied' && entry.note?.trim())?.note?.trim();
+    return task.lastCreatorResponse?.trim() || latestCreatorReply || task.notes.trim();
+  }
+
+  function buildCampaignContext(task: Task): string {
+    const campaign = mergedCampaigns.find((item) => item.productName === task.product);
+    const requirements = campaignToFilmingRequirements(campaign, activeFilmingRequirements);
+    return [
+      `产品：${task.product || requirements.productName}`,
+      campaign?.sellingPoints ? `卖点：${campaign.sellingPoints}` : '',
+      requirements.requirements.length ? `拍摄要求：${requirements.requirements.join('；')}` : '',
+      requirements.keyContentPoints.length ? `内容重点：${requirements.keyContentPoints.join('；')}` : '',
+      campaign?.avoidShots ? `避免事项：${campaign.avoidShots}` : '',
+      campaign?.productLink ? `产品链接：${campaign.productLink}` : '',
+      requirements.referenceLinks?.length ? `参考链接：${requirements.referenceLinks.join('；')}` : '',
+      campaign?.notes ? `项目备注：${campaign.notes}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  function buildDeepSeekPayload(task: Task, action: DeepSeekAction) {
+    const campaign = mergedCampaigns.find((item) => item.productName === task.product);
+    const requirements = campaignToFilmingRequirements(campaign, activeFilmingRequirements);
+    return {
+      action,
+      creatorUsername: displayName(task),
+      creatorReply: currentCreatorReply(task),
+      userReplyFocus: replyFocus,
+      creatorRelationshipNote: replyRelationshipNote,
+      replyTone,
+      replyGoal,
+      acceptableConcession: replyConcession,
+      channel,
+      productName: task.product || requirements.productName,
+      productSellingPoints: campaign?.sellingPoints || requirements.keyContentPoints.join('；'),
+      filmingRequirements: requirements.requirements.join('；'),
+      requiredVideoCount: campaign?.videoCount || String(parseRequiredVideos(requirements)),
+      requiredVideoLength: campaign?.videoLength || requirements.requirements.find((item) => item.includes('秒')) || '',
+      productLinkRequirement: campaign?.tagRequirement || requirements.requirements.find((item) => item.includes('链接') || item.toLowerCase().includes('product link')) || '必须挂 TikTok Shop 产品链接',
+      referenceVideoLinks: requirements.referenceLinks?.join('\n') || '',
+      currentStatus: task.currentStatus || displayStatus(inferStatus(task, requiredVideos)),
+      campaignContext: buildCampaignContext(task),
+      chineseUnderstanding: deepSeekChineseUnderstanding,
+    };
+  }
+
+  function deepSeekErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    return 'DeepSeek 调用失败，请检查 API Key 或稍后重试。';
+  }
+
+  async function callDeepSeek(action: DeepSeekAction) {
+    if (!selectedTask) return;
+    setDeepSeekLoadingAction(action);
+    setDeepSeekError('');
+    try {
+      if (action === 'generate_personalized_reply' && !message) {
+        setMessage(buildLocalMessageForTask(selectedTask));
+      }
+
+      const response = await fetch('/api/deepseek-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildDeepSeekPayload(selectedTask, action)),
+      });
+      const result = await response.json() as Partial<DeepSeekTranslateResult & DeepSeekGenerateResult & { error: string }>;
+      if (!response.ok) throw new Error(result.error || 'DeepSeek 调用失败，请检查 API Key 或稍后重试。');
+
+      if (action === 'translate_creator_reply') {
+        setDeepSeekChineseUnderstanding(result.chineseUnderstanding || '');
+        setDeepSeekDetectedIntent(result.detectedIntent || '');
+        setDeepSeekRecommendedNextAction(result.recommendedNextAction || '');
+        return;
+      }
+
+      const localFallback = message ?? buildLocalMessageForTask(selectedTask);
+      setMessage({
+        ...localFallback,
+        english: result.englishMessage || localFallback.english,
+        chineseExplanation: result.chineseExplanation || localFallback.chineseExplanation,
+      });
+      setDeepSeekDetectedIntent(result.detectedIntent || '');
+      setDeepSeekChineseExplanation(result.chineseExplanation || '');
+      setDeepSeekRecommendedTrackingStatus(result.recommendedTrackingStatus || '');
+    } catch (error) {
+      setDeepSeekError(deepSeekErrorMessage(error));
+    } finally {
+      setDeepSeekLoadingAction(null);
+    }
   }
 
   async function handleCopyGeneratedMessage() {
@@ -959,8 +1069,8 @@ function App() {
             <button type="button" onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
           </div>
           <div className="queue-list">{filteredTasks.map((task) => <button type="button" key={task.id} className="queue-item" onClick={() => setSelectedCreatorId(task.id)}>{priorityText(task)} · {task.suggestedAction} · {displayName(task)} · {task.product || '缺少产品名称'} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}</button>)}</div>
-          {shouldShowReplyBlock && selectedTask && <section className="reply-panel"><div className="section-heading"><div><h2>达人回复处理</h2><p className="muted">基于达人回复、产品项目、渠道和运营目标，本地规则生成个性化英文回复。</p></div></div><div className="reply-context"><span>达人回复内容：<b>{selectedTask.lastCreatorResponse || selectedTask.notes || '—'}</b></span><span>最近回复日期：<b>{selectedTask.lastContactDate || '—'}</b></span><span>当前产品项目：<b>{selectedTask.product || '缺少产品名称'}</b></span><span>当前合作状态：<b>{selectedTask.currentStatus || '—'}</b></span><span>当前沟通渠道：<b>{channel}</b></span><span>当前沟通动作：<b>回复达人消息</b></span></div><div className="reply-fields"><label>我想回复的重点（可选）<textarea value={replyFocus} onChange={(event) => setReplyFocus(event.target.value)} placeholder="例如：确认发布时间 / 询问具体发布日期方便安排投流 / 解释 60 秒要求 / 提醒挂车 / 同意周五发布 / 可以短一点但不能低于 35 秒" /></label><label>达人关系备注（可选）<textarea value={replyRelationshipNote} onChange={(event) => setReplyRelationshipNote(event.target.value)} placeholder="例如：她之前视频质量不错 / 沟通比较慢 / 语气很友好 / 第一次合作，需要保持专业但不要太冷 / 已经拖了很久，需要明确推进" /></label><label>回复语气<select value={replyTone} onChange={(event) => setReplyTone(event.target.value as ReplyTone)}><option>中立专业</option><option>友好一点</option><option>坚定推进</option><option>最后确认</option></select></label><label>这次回复目标（可选）<textarea value={replyGoal} onChange={(event) => setReplyGoal(event.target.value)} placeholder="例如：确认发布时间 / 推进剩余视频 / 安抚情绪 / 解释要求 / 让达人确认是否继续合作" /></label><label>可接受让步（可选）<textarea value={replyConcession} onChange={(event) => setReplyConcession(event.target.value)} placeholder="例如：可以短一点但不能低于 35 秒 / 可以周五发布 / 可以先发 1 条再补 1 条 / 不接受不挂车 / 可以参考对标视频重新拍" /></label></div></section>}
-          {message && <div className="message-output"><h3>场景 / 沟通动作</h3><p>{message.scenario} · {message.communicationAction}</p><h3>英文话术</h3><pre>{message.english}</pre><h3>中文对照 / 中文解释</h3><p>{message.chineseExplanation}</p><h3>发送后追踪</h3><p>发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制英文话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
+          {shouldShowReplyBlock && selectedTask && <section className="reply-panel"><div className="section-heading"><div><h2>达人回复处理</h2><p className="muted">基于达人回复、产品项目、渠道和运营目标，本地规则生成个性化英文回复；DeepSeek 仅作为可选增强。</p></div></div><div className="reply-context"><span>达人回复内容：<b>{currentCreatorReply(selectedTask) || '—'}</b></span><span>最近回复日期：<b>{selectedTask.lastContactDate || '—'}</b></span><span>当前产品项目：<b>{selectedTask.product || '缺少产品名称'}</b></span><span>当前合作状态：<b>{selectedTask.currentStatus || '—'}</b></span><span>当前沟通渠道：<b>{channel}</b></span><span>当前沟通动作：<b>回复达人消息</b></span></div><div className="reply-fields"><label>我想回复的重点（可选）<textarea value={replyFocus} onChange={(event) => setReplyFocus(event.target.value)} placeholder="例如：确认发布时间 / 询问具体发布日期方便安排投流 / 解释 60 秒要求 / 提醒挂车 / 同意周五发布 / 可以短一点但不能低于 35 秒" /></label><label>达人关系备注（可选）<textarea value={replyRelationshipNote} onChange={(event) => setReplyRelationshipNote(event.target.value)} placeholder="例如：她之前视频质量不错 / 沟通比较慢 / 语气很友好 / 第一次合作，需要保持专业但不要太冷 / 已经拖了很久，需要明确推进" /></label><label>回复语气<select value={replyTone} onChange={(event) => setReplyTone(event.target.value as ReplyTone)}><option>中立专业</option><option>友好一点</option><option>坚定推进</option><option>最后确认</option></select></label><label>这次回复目标（可选）<textarea value={replyGoal} onChange={(event) => setReplyGoal(event.target.value)} placeholder="例如：确认发布时间 / 推进剩余视频 / 安抚情绪 / 解释要求 / 让达人确认是否继续合作" /></label><label>可接受让步（可选）<textarea value={replyConcession} onChange={(event) => setReplyConcession(event.target.value)} placeholder="例如：可以短一点但不能低于 35 秒 / 可以周五发布 / 可以先发 1 条再补 1 条 / 不接受不挂车 / 可以参考对标视频重新拍" /></label></div><div className="deepseek-actions"><p className="muted">仅点击按钮时调用 DeepSeek API，普通本地规则生成不会产生 API 费用。</p><div className="inline-actions"><button type="button" className="secondary" onClick={() => void callDeepSeek('translate_creator_reply')} disabled={deepSeekLoadingAction !== null}>DeepSeek 翻译达人回复</button><button type="button" className="secondary" onClick={() => void callDeepSeek('generate_personalized_reply')} disabled={deepSeekLoadingAction !== null}>DeepSeek 生成个性化回复</button></div>{deepSeekLoadingAction && <p className="ai-status" role="status">DeepSeek 生成中…</p>}{deepSeekError && <p className="error" role="alert">{deepSeekError.includes('DEEPSEEK_API_KEY') ? '未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。' : 'DeepSeek 调用失败，请检查 API Key 或稍后重试。'}</p>}{deepSeekChineseUnderstanding && <div className="ai-understanding"><h3>AI 中文理解</h3><p>{deepSeekChineseUnderstanding}</p>{deepSeekDetectedIntent && <p><b>识别意图：</b>{deepSeekDetectedIntent}</p>}{deepSeekRecommendedNextAction && <p><b>建议下一步：</b>{deepSeekRecommendedNextAction}</p>}</div>}{deepSeekChineseExplanation && <div className="ai-understanding"><h3>DeepSeek 中文解释</h3><p>{deepSeekChineseExplanation}</p>{deepSeekDetectedIntent && <p><b>识别意图：</b>{deepSeekDetectedIntent}</p>}{deepSeekRecommendedTrackingStatus && <p><b>建议追踪状态：</b>{deepSeekRecommendedTrackingStatus}</p>}</div>}</div></section>}
+          {message && <div className="message-output"><h3>场景 / 沟通动作</h3><p>{message.scenario} · {message.communicationAction}</p><h3>英文话术</h3><label className="sr-only" htmlFor="generated-english-message">英文话术</label><textarea id="generated-english-message" value={message.english} onChange={(event) => updateGeneratedEnglishMessage(event.target.value)} rows={8} /><h3>中文对照 / 中文解释</h3><p>{message.chineseExplanation}</p><h3>发送后追踪</h3><p>发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制英文话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
         </section>
       </>
     );

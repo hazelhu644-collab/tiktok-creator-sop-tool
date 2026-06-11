@@ -272,11 +272,11 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     await user.click(screen.getByRole('button', { name: '生成话术' }));
 
     expect(screen.getByText('场景 / 沟通动作')).toBeInTheDocument();
-    expect(screen.getByText('英文话术')).toBeInTheDocument();
+    expect(screen.getAllByText('英文话术').length).toBeGreaterThan(0);
     expect(screen.getByText('中文对照 / 中文解释')).toBeInTheDocument();
     expect(screen.getByText('发送后追踪')).toBeInTheDocument();
     expect(screen.getByText(/发送后请点击/)).toBeInTheDocument();
-    expect(screen.getByText('英文话术').nextElementSibling?.textContent ?? '').not.toMatch(/[\u3400-\u9fff]/);
+    expect((screen.getByLabelText('英文话术') as HTMLTextAreaElement).value).not.toMatch(/[\u3400-\u9fff]/);
 
     await user.click(screen.getByRole('button', { name: '复制英文话术' }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('follow_creator'));
@@ -328,12 +328,93 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     await user.type(screen.getByLabelText('我想回复的重点（可选）'), '期待你拍的视频，有没有具体的时间让我团队安排投流计划');
     await user.click(screen.getByRole('button', { name: '生成话术' }));
 
-    const english = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
+    const english = String(screen.getByLabelText('英文话术').getAttribute('value') ?? (screen.getByLabelText('英文话术') as HTMLTextAreaElement).value);
     expect(english).toContain('estimated posting date');
     expect(english).toMatch(/ad testing|boost timing|campaign planning/);
     expect(english).not.toMatch(/[㐀-鿿]/);
     expect(screen.getByText('中文对照 / 中文解释').nextElementSibling?.textContent ?? '').toMatch(/[㐀-鿿]/);
   });
+
+  it('shows DeepSeek optional reply buttons and helper text in creator reply handling', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: 'deepseek-ui', trackingStatus: '达人回复待处理', lastCreatorResponse: 'Can I post Friday?' })]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+
+    expect(screen.getByRole('button', { name: 'DeepSeek 翻译达人回复' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'DeepSeek 生成个性化回复' })).toBeInTheDocument();
+    expect(screen.getByText('仅点击按钮时调用 DeepSeek API，普通本地规则生成不会产生 API 费用。')).toBeInTheDocument();
+  });
+
+  it('clicking DeepSeek translate shows loading and then AI Chinese understanding', async () => {
+    const user = userEvent.setup();
+    let resolveFetch!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { resolveFetch = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    seedCreators([creatorRow({ id: 'deepseek-translate', product: 'Pet Fountain', trackingStatus: '达人回复待处理', lastCreatorResponse: 'I can post Friday.' })]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.click(screen.getByRole('button', { name: 'DeepSeek 翻译达人回复' }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('DeepSeek 生成中…');
+    resolveFetch(new Response(JSON.stringify({
+      chineseUnderstanding: '达人确认周五可发布。',
+      detectedIntent: '确认发布时间',
+      recommendedNextAction: '确认具体发布时间并安排投流。',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await waitFor(() => expect(screen.getByText('AI 中文理解')).toBeInTheDocument());
+    expect(screen.getByText('达人确认周五可发布。')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/deepseek-reply', expect.objectContaining({ method: 'POST' }));
+    const payload = JSON.parse(String((fetchMock.mock.calls[0] as unknown[])[1] && ((fetchMock.mock.calls[0] as unknown[])[1] as { body?: string }).body));
+    expect(payload).toMatchObject({ action: 'translate_creator_reply', channel: 'TikTok DM', productName: 'Pet Fountain' });
+    expect(payload.campaignContext).toContain('Pet Fountain');
+  });
+
+  it('clicking DeepSeek generate fills English message and shows Chinese explanation', async () => {
+    const user = userEvent.setup();
+    let resolveFetch!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { resolveFetch = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    seedCreators([creatorRow({ id: 'deepseek-generate', username: 'deep_creator', product: 'Pet Fountain', trackingStatus: '达人回复待处理', lastCreatorResponse: 'I sprained my ankle but my daughter is editing today.' })]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.click(screen.getByRole('button', { name: 'DeepSeek 生成个性化回复' }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('DeepSeek 生成中…');
+    resolveFetch(new Response(JSON.stringify({
+      englishMessage: 'Hi @deep_creator, thank you for the update. Could you confirm the expected posting date so our team can plan the ad testing schedule?',
+      chineseExplanation: '这条回复先表示理解，再确认发布时间，方便投流安排。',
+      detectedIntent: '因个人情况延迟但仍会完成',
+      recommendedTrackingStatus: '达人已回复，等待确认发布时间',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await waitFor(() => expect((screen.getByLabelText('英文话术') as HTMLTextAreaElement).value).toContain('ad testing schedule'));
+    expect((screen.getByLabelText('英文话术') as HTMLTextAreaElement).value).not.toMatch(/[㐀-鿿]/);
+    expect(screen.getByText('DeepSeek 中文解释')).toBeInTheDocument();
+    expect(screen.getAllByText('这条回复先表示理解，再确认发布时间，方便投流安排。').length).toBeGreaterThan(0);
+    const payload = JSON.parse(String((fetchMock.mock.calls[0] as unknown[])[1] && ((fetchMock.mock.calls[0] as unknown[])[1] as { body?: string }).body));
+    expect(payload).toMatchObject({ action: 'generate_personalized_reply', channel: 'TikTok DM', productName: 'Pet Fountain' });
+    expect(payload.campaignContext).toContain('Pet Fountain');
+  });
+
+  it('DeepSeek API failure shows a clear error and keeps local fallback message', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: '未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。' }), { status: 500, headers: { 'Content-Type': 'application/json' } })));
+    seedCreators([creatorRow({ id: 'deepseek-fail', username: 'fail_creator', trackingStatus: '达人回复待处理', lastCreatorResponse: 'No problem!' })]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+    const localMessage = (screen.getByLabelText('英文话术') as HTMLTextAreaElement).value;
+
+    await user.click(screen.getByRole('button', { name: 'DeepSeek 生成个性化回复' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。'));
+    expect(screen.getByLabelText('英文话术')).toHaveValue(localMessage);
+  });
+
 
   it('marks a selected creator as sent from the standard template library', async () => {
     const user = userEvent.setup();
