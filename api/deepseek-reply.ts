@@ -1,11 +1,14 @@
-import OpenAI from 'openai';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
-const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-pro';
-const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
-const MISSING_DEEPSEEK_API_KEY_ERROR = '未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。';
+const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro";
+const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const MISSING_DEEPSEEK_API_KEY_ERROR =
+  "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。";
 
-export type DeepSeekAction = 'translate_creator_reply' | 'generate_personalized_reply';
+export type DeepSeekAction =
+  | "translate_creator_reply"
+  | "generate_personalized_reply";
 
 type DeepSeekReplyRequest = {
   action?: DeepSeekAction;
@@ -40,7 +43,9 @@ type GeneratePersonalizedReplyResponse = {
   recommendedTrackingStatus: string;
 };
 
-type DeepSeekReplyResponse = TranslateCreatorReplyResponse | GeneratePersonalizedReplyResponse;
+type DeepSeekReplyResponse =
+  | TranslateCreatorReplyResponse
+  | GeneratePersonalizedReplyResponse;
 
 type ServerlessRequest = {
   method?: string;
@@ -54,11 +59,13 @@ type ServerlessResponse = {
 };
 
 function cleanText(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function parseRequestBody(body: ServerlessRequest['body']): DeepSeekReplyRequest {
-  if (typeof body === 'string') {
+function parseRequestBody(
+  body: ServerlessRequest["body"],
+): DeepSeekReplyRequest {
+  if (typeof body === "string") {
     try {
       return JSON.parse(body) as DeepSeekReplyRequest;
     } catch {
@@ -92,15 +99,21 @@ Tone options:
 - 最后确认: firm, administrative, not threatening.`;
 }
 
-function buildTranslateMessages(input: DeepSeekReplyRequest): ChatCompletionMessageParam[] {
+function buildTranslateMessages(
+  input: DeepSeekReplyRequest,
+): ChatCompletionMessageParam[] {
   const context = compactJson({
     creatorReply: cleanText(input.creatorReply),
   });
 
   return [
-    { role: 'system', content: 'You are a direct translation engine. Return valid JSON only. Translate English creator replies into faithful, easy-to-understand Simplified Chinese. Do not summarize, infer intent, recommend actions, analyze strategy, or add any information not present in the original reply.' },
     {
-      role: 'user',
+      role: "system",
+      content:
+        "You are a direct translation engine. Return valid JSON only. Translate English creator replies into faithful, easy-to-understand Simplified Chinese. Do not summarize, infer intent, recommend actions, analyze strategy, or add any information not present in the original reply.",
+    },
+    {
+      role: "user",
       content: `Translate only the creatorReply field into Simplified Chinese.
 Return exactly this JSON shape: {"chineseTranslation":"..."}.
 Rules:
@@ -114,13 +127,15 @@ ${context}`,
   ];
 }
 
-function buildGenerateMessages(input: DeepSeekReplyRequest): ChatCompletionMessageParam[] {
+function buildGenerateMessages(
+  input: DeepSeekReplyRequest,
+): ChatCompletionMessageParam[] {
   const context = compactJson({
     creatorUsername: cleanText(input.creatorUsername),
     creatorReply: cleanText(input.creatorReply),
     userReplyFocus: cleanText(input.userReplyFocus),
     creatorRelationshipNote: cleanText(input.creatorRelationshipNote),
-    replyTone: cleanText(input.replyTone) || '中立专业',
+    replyTone: cleanText(input.replyTone) || "中立专业",
     replyGoal: cleanText(input.replyGoal),
     acceptableConcession: cleanText(input.acceptableConcession),
     channel: cleanText(input.channel),
@@ -137,15 +152,16 @@ function buildGenerateMessages(input: DeepSeekReplyRequest): ChatCompletionMessa
   });
 
   return [
-    { role: 'system', content: systemPrompt() },
+    { role: "system", content: systemPrompt() },
     {
-      role: 'user',
+      role: "user",
       content: `Generate a personalized creator-facing reply for overseas TikTok Shop creator BD.
 Return exactly this JSON shape: {"englishMessage":"...","chineseExplanation":"...","detectedIntent":"...","recommendedTrackingStatus":"..."}.
 Requirements:
 - englishMessage must be English only and must not contain Chinese characters.
 - Treat userReplyFocus as Simplified Chinese operator intent that must be accurately converted into natural English inside englishMessage. Never leave userReplyFocus in Chinese and never ignore it.
 - Directly use the creator reply, available Chinese translation, user focus, relationship note, reply goal, acceptable concession, channel, and product campaign context.
+- Use filming requirements only when relevant to the creator reply or operator focus; do not force unrelated requirements into every reply.
 - chineseExplanation, detectedIntent, and recommendedTrackingStatus should be Simplified Chinese for the operator.
 - Do not claim an action was sent or completed.
 - Do not add login, database, payment, TikTok API, auto-send, or monthly-report behavior.
@@ -161,15 +177,18 @@ function extractJsonObject(content: string): unknown {
   try {
     return JSON.parse(trimmed);
   } catch {
-    const firstBrace = trimmed.indexOf('{');
-    const lastBrace = trimmed.lastIndexOf('}');
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) throw new Error('DeepSeek 返回内容不是有效 JSON。');
+    const firstBrace = trimmed.indexOf("{");
+    const lastBrace = trimmed.lastIndexOf("}");
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace)
+      throw new Error("DeepSeek 返回内容不是有效 JSON。");
     return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
   }
 }
 
-function validateTranslateResponse(value: unknown): TranslateCreatorReplyResponse | null {
-  if (!value || typeof value !== 'object') return null;
+function validateTranslateResponse(
+  value: unknown,
+): TranslateCreatorReplyResponse | null {
+  if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   const chineseTranslation = cleanText(record.chineseTranslation);
   if (!chineseTranslation) return null;
@@ -180,32 +199,52 @@ export function hasChineseCharacters(value: string): boolean {
   return /[\u3400-\u9fff]/.test(value);
 }
 
-function validateGenerateResponse(value: unknown): GeneratePersonalizedReplyResponse | null {
-  if (!value || typeof value !== 'object') return null;
+function validateGenerateResponse(
+  value: unknown,
+): GeneratePersonalizedReplyResponse | null {
+  if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   const englishMessage = cleanText(record.englishMessage);
   const chineseExplanation = cleanText(record.chineseExplanation);
   const detectedIntent = cleanText(record.detectedIntent);
   const recommendedTrackingStatus = cleanText(record.recommendedTrackingStatus);
-  if (!englishMessage || !chineseExplanation || !detectedIntent || !recommendedTrackingStatus) return null;
+  if (
+    !englishMessage ||
+    !chineseExplanation ||
+    !detectedIntent ||
+    !recommendedTrackingStatus
+  )
+    return null;
   if (hasChineseCharacters(englishMessage)) return null;
-  return { englishMessage, chineseExplanation, detectedIntent, recommendedTrackingStatus };
+  return {
+    englishMessage,
+    chineseExplanation,
+    detectedIntent,
+    recommendedTrackingStatus,
+  };
 }
 
-function validateDeepSeekResponse(action: DeepSeekAction, content: string): DeepSeekReplyResponse {
+function validateDeepSeekResponse(
+  action: DeepSeekAction,
+  content: string,
+): DeepSeekReplyResponse {
   const parsedContent = extractJsonObject(content);
-  const validated = action === 'translate_creator_reply'
-    ? validateTranslateResponse(parsedContent)
-    : validateGenerateResponse(parsedContent);
+  const validated =
+    action === "translate_creator_reply"
+      ? validateTranslateResponse(parsedContent)
+      : validateGenerateResponse(parsedContent);
 
   if (!validated) {
-    throw new Error('DeepSeek 返回 JSON 缺少必要字段或英文话术包含中文。');
+    throw new Error("DeepSeek 返回 JSON 缺少必要字段或英文话术包含中文。");
   }
 
   return validated;
 }
 
-async function requestDeepSeek(action: DeepSeekAction, input: DeepSeekReplyRequest): Promise<DeepSeekReplyResponse> {
+async function requestDeepSeek(
+  action: DeepSeekAction,
+  input: DeepSeekReplyRequest,
+): Promise<DeepSeekReplyResponse> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error(MISSING_DEEPSEEK_API_KEY_ERROR);
 
@@ -216,39 +255,56 @@ async function requestDeepSeek(action: DeepSeekAction, input: DeepSeekReplyReque
 
   const completion = await client.chat.completions.create({
     model: process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL,
-    temperature: action === 'translate_creator_reply' ? 0.2 : 0.4,
-    response_format: { type: 'json_object' },
-    messages: action === 'translate_creator_reply' ? buildTranslateMessages(input) : buildGenerateMessages(input),
-    extra_body: { thinking: { type: 'disabled' } },
-  } as Parameters<typeof client.chat.completions.create>[0] & { stream?: false; extra_body: { thinking: { type: string } } });
+    temperature: action === "translate_creator_reply" ? 0.2 : 0.4,
+    response_format: { type: "json_object" },
+    messages:
+      action === "translate_creator_reply"
+        ? buildTranslateMessages(input)
+        : buildGenerateMessages(input),
+    extra_body: { thinking: { type: "disabled" } },
+  } as Parameters<typeof client.chat.completions.create>[0] & {
+    stream?: false;
+    extra_body: { thinking: { type: string } };
+  });
 
-  const content = (completion as { choices?: Array<{ message?: { content?: string | null } }> }).choices?.[0]?.message?.content;
-  if (!content) throw new Error('DeepSeek 调用失败：未收到有效内容。');
+  const content = (
+    completion as { choices?: Array<{ message?: { content?: string | null } }> }
+  ).choices?.[0]?.message?.content;
+  if (!content) throw new Error("DeepSeek 调用失败：未收到有效内容。");
 
   return validateDeepSeekResponse(action, content);
 }
 
-export default async function handler(req: ServerlessRequest, res: ServerlessResponse) {
-  if (req.method && req.method !== 'POST') {
-    res.setHeader?.('Allow', 'POST');
-    return res.status(405).json({ error: '仅支持 POST 请求。' });
+export default async function handler(
+  req: ServerlessRequest,
+  res: ServerlessResponse,
+) {
+  if (req.method && req.method !== "POST") {
+    res.setHeader?.("Allow", "POST");
+    return res.status(405).json({ error: "仅支持 POST 请求。" });
   }
 
   try {
     const input = parseRequestBody(req.body);
-    if (input.action !== 'translate_creator_reply' && input.action !== 'generate_personalized_reply') {
-      return res.status(400).json({ error: 'DeepSeek action 不支持。' });
+    if (
+      input.action !== "translate_creator_reply" &&
+      input.action !== "generate_personalized_reply"
+    ) {
+      return res.status(400).json({ error: "DeepSeek action 不支持。" });
     }
 
     const result = await requestDeepSeek(input.action, input);
     return res.status(200).json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'DeepSeek 调用失败，请检查 API Key 或稍后重试。';
+    const message =
+      error instanceof Error
+        ? error.message
+        : "DeepSeek 调用失败，请检查 API Key 或稍后重试。";
     const statusCode = message === MISSING_DEEPSEEK_API_KEY_ERROR ? 500 : 502;
     return res.status(statusCode).json({ error: message });
   }
 }
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: "nodejs",
 };
