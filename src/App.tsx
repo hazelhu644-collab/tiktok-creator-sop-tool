@@ -11,7 +11,7 @@ import {
 } from './creatorData';
 import { parseCreatorFile } from './fileParser';
 import { analyzeCreators, daysSince, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
-import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements } from './messageGenerator';
+import { CHANNELS, defaultCreatorFilmingRequirements, generateMessage, type CreatorFilmingRequirements, type ReplyTone } from './messageGenerator';
 import { campaignToFilmingRequirements, createCampaignFromName, loadCampaigns, mergeDetectedCampaigns, saveCampaigns } from './campaignData';
 import type { Campaign, Channel, CreatorRow, GeneratedMessage, Task } from './types';
 import './styles.css';
@@ -104,10 +104,10 @@ const navIcons: Record<ModuleKey, string> = { dashboard: '⌁', creators: '◌',
 
 const navItems: Array<{ key: ModuleKey; label: string; helper: string }> = [
   { key: 'dashboard', label: '数据看板', helper: '今日跟进总览' },
-  { key: 'creators', label: '达人数据库', helper: '搜索、筛选、批量更新' },
-  { key: 'templates', label: '沟通话术模板', helper: '变量化话术生成器' },
-  { key: 'samples', label: '样品追踪', helper: '物流与到货跟进' },
   { key: 'followup', label: '达人跟进中心', helper: '优先级行动队列' },
+  { key: 'creators', label: '达人数据库', helper: '搜索、筛选、批量更新' },
+  { key: 'samples', label: '样品追踪', helper: '物流与到货跟进' },
+  { key: 'templates', label: '沟通话术模板', helper: '标准英文话术库' },
   { key: 'review', label: '内容审核', helper: '视频验收清单' },
   { key: 'ads', label: '投流素材库', helper: '可投流 UGC 素材' },
   { key: 'settings', label: '设置', helper: '数据与 SOP 默认值' },
@@ -336,6 +336,14 @@ function App() {
   const [selectedCreatorId, setSelectedCreatorId] = useState('');
   const [message, setMessage] = useState<GeneratedMessage | null>(null);
   const [trackingStatus, setTrackingStatus] = useState('');
+  const [templateCreatorId, setTemplateCreatorId] = useState('');
+  const [followupSearch, setFollowupSearch] = useState('');
+  const [followupUrgency, setFollowupUrgency] = useState<'All' | 'Highest' | 'High' | 'Medium' | 'Low'>('All');
+  const [replyFocus, setReplyFocus] = useState('');
+  const [replyRelationshipNote, setReplyRelationshipNote] = useState('');
+  const [replyTone, setReplyTone] = useState<ReplyTone>('中立专业');
+  const [replyGoal, setReplyGoal] = useState('');
+  const [replyConcession, setReplyConcession] = useState('');
   const [templateForm, setTemplateForm] = useState<TemplateForm>(() => emptyTemplateForm);
   const [filmingRequirements, setFilmingRequirements] = useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => loadCampaigns());
@@ -356,8 +364,17 @@ function App() {
   const requiredVideos = useMemo(() => parseRequiredVideos(activeFilmingRequirements), [activeFilmingRequirements]);
   const visibleRows = useMemo(() => selectedCampaign === 'ALL' ? rows : rows.filter((row) => row.product.trim() === selectedCampaign), [rows, selectedCampaign]);
   const tasks = useMemo(() => analyzeCreators(visibleRows, undefined, requiredVideos), [visibleRows, requiredVideos]);
+  const filteredTasks = useMemo(() => {
+    const normalized = followupSearch.trim().toLowerCase();
+    return tasks.filter((task) => {
+      const urgencyLabel = task.priority === 'Highest' ? '极高' : task.priority === 'High' ? '高' : task.priority === 'Medium' ? '中' : '低';
+      const haystack = [task.username, task.profileLink, task.product, task.currentStatus, task.sampleShippingStatus, task.suggestedAction, task.triggerReason, urgencyLabel].join(' ').toLowerCase();
+      return (followupUrgency === 'All' || task.priority === followupUrgency) && (!normalized || haystack.includes(normalized));
+    }).sort((a, b) => a.priorityRank - b.priorityRank);
+  }, [tasks, followupSearch, followupUrgency]);
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
-  const selectedTask = tasks.find((task) => task.id === selectedCreatorId) ?? tasks[0];
+  const selectedTask = tasks.find((task) => task.id === selectedCreatorId) ?? filteredTasks[0] ?? tasks[0];
+  const selectedTemplateCreator = visibleRows.find((row) => row.id === templateCreatorId) ?? visibleRows.find((row) => row.id === selectedCreatorId);
   const templateMessages = useMemo(() => buildTemplateMessages(templateForm), [templateForm]);
 
   useEffect(() => saveCreatorRows(rows), [rows]);
@@ -378,6 +395,24 @@ function App() {
       tagRequirement: target.tagRequirement || form.tagRequirement,
     }));
   }, [activeCampaign, mergedCampaigns, filmingRequirements]);
+
+  useEffect(() => {
+    if (!selectedTemplateCreator) return;
+    const creatorCampaign = mergedCampaigns.find((campaign) => campaign.productName === selectedTemplateCreator.product);
+    const creatorRequirements = campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements);
+    setTemplateForm((form) => ({
+      ...form,
+      creatorName: selectedTemplateCreator.username || form.creatorName,
+      productName: selectedTemplateCreator.product || creatorRequirements.productName,
+      sellingPoint: creatorCampaign?.sellingPoints || form.sellingPoint,
+      requirement: [...creatorRequirements.requirements, ...creatorRequirements.keyContentPoints].filter(Boolean).join('; ') || form.requirement,
+      length: creatorCampaign?.videoLength || form.length,
+      videos: creatorCampaign?.videoCount || String(parseRequiredVideos(creatorRequirements)),
+      tagRequirement: creatorCampaign?.tagRequirement || form.tagRequirement,
+      trackingNumber: parseNumberFromNotes(selectedTemplateCreator.notes, ['tracking', 'tracking number']) === '—' ? form.trackingNumber : parseNumberFromNotes(selectedTemplateCreator.notes, ['tracking', 'tracking number']),
+      deadline: selectedTemplateCreator.nextFollowUpDate || form.deadline,
+    }));
+  }, [selectedTemplateCreator, mergedCampaigns, activeFilmingRequirements]);
 
   useEffect(() => {
     if (!toast) return;
@@ -509,7 +544,12 @@ function App() {
   function handleGenerateMessage() {
     if (!selectedTask) return;
     const creatorCampaign = mergedCampaigns.find((campaign) => campaign.productName === selectedTask.product);
-    const generated = generateMessage(selectedTask, channel, campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements));
+    const generated = generateMessage(selectedTask, channel, campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements), replyFocus, {
+      relationshipNote: replyRelationshipNote,
+      replyTone,
+      replyGoal,
+      acceptableConcession: replyConcession,
+    });
     setMessage(generated);
     setSelectedCreatorId(selectedTask.id);
   }
@@ -520,21 +560,25 @@ function App() {
     setTrackingStatus('已复制英文话术。');
   }
 
-  function handleMarkMessageSent() {
-    if (!selectedTask || !message) return;
+  function markCreatorMessageSent(rowId: string, scenario: string, english: string, selectedChannel: Channel) {
     const today = todayString();
-    setRows((currentRows) => currentRows.map((row) => (row.id === selectedTask.id ? {
+    setRows((currentRows) => currentRows.map((row) => (row.id === rowId ? {
       ...row,
       currentStatus: inferStatus(row, requiredVideos) === 'Not Contacted' ? 'Invited' : row.currentStatus,
       lastContactDate: today,
       lastFollowUpCount: row.lastFollowUpCount + 1,
-      trackingStatus: 'Followed Up',
-      lastMessageScenario: message.scenario,
-      lastMessageChannel: channel,
+      trackingStatus: '已发送待回复',
+      lastMessageScenario: scenario,
+      lastMessageChannel: selectedChannel,
       lastMessageSentAt: today,
       nextFollowUpDate: addDays(2),
-      followUpHistory: [...(row.followUpHistory ?? []), { date: today, action: 'Message Sent', channel, scenario: message.scenario, message: message.english }],
+      followUpHistory: [...(row.followUpHistory ?? []), { date: today, action: 'Message Sent', channel: selectedChannel, scenario, message: english }],
     } : row)));
+  }
+
+  function handleMarkMessageSent() {
+    if (!selectedTask || !message) return;
+    markCreatorMessageSent(selectedTask.id, message.scenario, message.english, channel);
     setTrackingStatus('已标记为发送，并同步更新数据表格。');
     setToast({ tone: 'success', text: '状态已更新，下一次跟进已排程。' });
   }
@@ -546,7 +590,7 @@ function App() {
     setRows((currentRows) => currentRows.map((row) => (row.id === selectedTask.id ? {
       ...row,
       currentStatus: 'Replied',
-      trackingStatus: 'Replied',
+      trackingStatus: '达人回复待处理',
       lastContactDate: today,
       lastCreatorResponse: note,
       followUpHistory: [...(row.followUpHistory ?? []), { date: today, action: 'Creator Replied', note }],
@@ -821,10 +865,52 @@ function App() {
     );
   }
 
+  function applyTemplateToSelectedCreator() {
+    if (!selectedTemplateCreator) {
+      setToast({ tone: 'warning', text: '请先选择达人。' });
+      return;
+    }
+    const creatorCampaign = mergedCampaigns.find((campaign) => campaign.productName === selectedTemplateCreator.product);
+    const creatorRequirements = campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements);
+    setTemplateForm((form) => ({
+      ...form,
+      creatorName: selectedTemplateCreator.username,
+      productName: selectedTemplateCreator.product || creatorRequirements.productName,
+      sellingPoint: creatorCampaign?.sellingPoints || form.sellingPoint,
+      requirement: [...creatorRequirements.requirements, ...creatorRequirements.keyContentPoints].filter(Boolean).join('; '),
+      length: creatorCampaign?.videoLength || form.length,
+      videos: creatorCampaign?.videoCount || String(parseRequiredVideos(creatorRequirements)),
+      tagRequirement: creatorCampaign?.tagRequirement || form.tagRequirement,
+      trackingNumber: parseNumberFromNotes(selectedTemplateCreator.notes, ['tracking', 'tracking number']) === '—' ? '' : parseNumberFromNotes(selectedTemplateCreator.notes, ['tracking', 'tracking number']),
+      deadline: selectedTemplateCreator.nextFollowUpDate || '',
+    }));
+    setSelectedCreatorId(selectedTemplateCreator.id);
+    setToast({ tone: 'success', text: '已套用当前达人和产品项目数据。' });
+  }
+
+  function markTemplateSent(template: TemplateMessage) {
+    if (!selectedTemplateCreator) {
+      setToast({ tone: 'warning', text: '请先选择达人。' });
+      return;
+    }
+    markCreatorMessageSent(selectedTemplateCreator.id, template.name, template.english, channel);
+    setSelectedCreatorId(selectedTemplateCreator.id);
+    setTrackingStatus('已标记为发送，并同步更新数据表格。');
+    setToast({ tone: 'success', text: '模板已标记为已发送，并同步到达人跟进记录。' });
+  }
+
   function renderTemplates() {
     return (
       <>
-        {renderPageHeader('沟通话术模板', '输入变量后，生成适合海外达人的英文沟通话术，并提供中文对照。')}
+        {renderPageHeader('沟通话术模板', '标准话术库：维护常用英文模板，可套用到具体达人，但不替代每日跟进队列。')}
+        <section className="panel template-selector-panel">
+          <div className="section-heading"><div><h2>模板套用对象</h2><p className="muted">选择达人后，模板会读取同一份达人数据库和产品项目要求。</p></div></div>
+          <div className="generator-controls">
+            <label>当前产品项目<input value={selectedCampaign === 'ALL' ? '全部产品' : selectedCampaign} readOnly /></label>
+            <label>选择达人<select aria-label="选择模板达人" value={selectedTemplateCreator?.id ?? ''} onChange={(event) => { setTemplateCreatorId(event.target.value); setSelectedCreatorId(event.target.value); }}><option value="">不选择达人，使用通用占位符</option>{visibleRows.map((row) => <option key={row.id} value={row.id}>{displayName(row)} · {row.product || '缺少产品名称'}</option>)}</select></label>
+            <label>联系渠道<select aria-label="模板联系渠道" value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>{CHANNELS.map((item) => <option key={item}>{item}</option>)}</select></label>
+          </div>
+        </section>
         <section className="panel template-layout">
           <div className="template-form">
             {(Object.keys(templateForm) as Array<keyof TemplateForm>).map((key) => (
@@ -839,7 +925,8 @@ function App() {
                 <p>{template.english}</p>
                 <h4>中文对照</h4>
                 <p>{template.chinese}</p>
-                <div className="inline-actions"><button type="button" className="secondary" onClick={() => void copyText(template.english, '英文话术已复制。')}>复制英文话术</button><button type="button" className="secondary" disabled={selectedIds.length === 0}>应用到当前达人</button><button type="button" onClick={() => setToast({ tone: 'success', text: '已标记为已发送。' })}>标记为已发送</button></div>
+                <div className="inline-actions"><button type="button" className="secondary" onClick={() => void copyText(template.english, '英文话术已复制。')}>复制英文话术</button><button type="button" className="secondary" onClick={applyTemplateToSelectedCreator} disabled={!selectedTemplateCreator}>应用到当前达人</button><button type="button" onClick={() => markTemplateSent(template)} disabled={!selectedTemplateCreator}>标记为已发送</button></div>
+                {!selectedTemplateCreator && <p className="muted">请先选择达人。</p>}
               </article>
             ))}
           </div>
@@ -858,16 +945,22 @@ function App() {
   }
 
   function renderFollowup() {
+    const shouldShowReplyBlock = Boolean(selectedTask && ((selectedTask.trackingStatus ?? '').match(/Replied|Reply Pending|达人已回复|达人回复待处理/i) || selectedTask.lastCreatorResponse?.trim() || selectedTask.notes.trim()));
+    const priorityText = (task: Task) => task.priority === 'Highest' ? '极高' : task.priority === 'High' ? '高' : task.priority === 'Medium' ? '中' : '低';
     return (
       <>
-        {renderPageHeader('达人跟进中心', '按紧急程度和合作阶段筛选达人，生成下一步英文沟通话术。')}
+        {renderPageHeader('达人跟进中心', '每日高频工作区：筛选今日要跟进的达人，生成下一步话术，并记录发送/回复结果。')}
         <section className="panel generator-panel">
           <div className="generator-controls">
-            <label>选择达人<select aria-label="选择达人" value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>{tasks.map((task) => <option key={task.id} value={task.id}>{task.priority === 'Highest' ? '极高' : task.priority === 'High' ? '高' : task.priority === 'Medium' ? '中' : '低'} · {task.suggestedAction} · {displayName(task)} · {task.product || '缺少产品名称'} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}</option>)}</select></label>
+            <label>搜索队列<input value={followupSearch} onChange={(event) => setFollowupSearch(event.target.value)} placeholder="达人 / 产品 / 状态 / 动作 / 紧急程度" /></label>
+            <label>紧急程度<select value={followupUrgency} onChange={(event) => setFollowupUrgency(event.target.value as typeof followupUrgency)}><option value="All">全部</option><option value="Highest">极高</option><option value="High">高</option><option value="Medium">中</option><option value="Low">低</option></select></label>
+            <label>选择达人<select aria-label="选择达人" value={selectedTask?.id ?? ''} onChange={(event) => setSelectedCreatorId(event.target.value)}>{filteredTasks.map((task) => <option key={task.id} value={task.id}>{priorityText(task)} · {task.suggestedAction} · {displayName(task)} · {task.product || '缺少产品名称'} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}</option>)}</select></label>
             <label>渠道<select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>{CHANNELS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <button type="button" onClick={handleGenerateMessage} disabled={!selectedTask}>生成话术</button>
           </div>
-          <div className="queue-list">{tasks.map((task) => <button type="button" key={task.id} className="queue-item" onClick={() => setSelectedCreatorId(task.id)}>{task.priority === 'Highest' ? '极高' : task.priority === 'High' ? '高' : task.priority === 'Medium' ? '中' : '低'} · {task.suggestedAction} · {displayName(task)} · {task.product || '缺少产品名称'} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}</button>)}</div>{message && <div className="message-output"><h3>场景 / 沟通动作</h3><p>{message.scenario} · {message.communicationAction}</p><h3>英文话术</h3><pre>{message.english}</pre><h3>中文对照 / 中文解释</h3><p>{message.chineseExplanation}</p><h3>发送后追踪</h3><p>发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制英文话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
+          <div className="queue-list">{filteredTasks.map((task) => <button type="button" key={task.id} className="queue-item" onClick={() => setSelectedCreatorId(task.id)}>{priorityText(task)} · {task.suggestedAction} · {displayName(task)} · {task.product || '缺少产品名称'} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}</button>)}</div>
+          {shouldShowReplyBlock && selectedTask && <section className="reply-panel"><div className="section-heading"><div><h2>达人回复处理</h2><p className="muted">基于达人回复、产品项目、渠道和运营目标，本地规则生成个性化英文回复。</p></div></div><div className="reply-context"><span>达人回复内容：<b>{selectedTask.lastCreatorResponse || selectedTask.notes || '—'}</b></span><span>最近回复日期：<b>{selectedTask.lastContactDate || '—'}</b></span><span>当前产品项目：<b>{selectedTask.product || '缺少产品名称'}</b></span><span>当前合作状态：<b>{selectedTask.currentStatus || '—'}</b></span><span>当前沟通渠道：<b>{channel}</b></span><span>当前沟通动作：<b>回复达人消息</b></span></div><div className="reply-fields"><label>我想回复的重点（可选）<textarea value={replyFocus} onChange={(event) => setReplyFocus(event.target.value)} placeholder="例如：确认发布时间 / 询问具体发布日期方便安排投流 / 解释 60 秒要求 / 提醒挂车 / 同意周五发布 / 可以短一点但不能低于 35 秒" /></label><label>达人关系备注（可选）<textarea value={replyRelationshipNote} onChange={(event) => setReplyRelationshipNote(event.target.value)} placeholder="例如：她之前视频质量不错 / 沟通比较慢 / 语气很友好 / 第一次合作，需要保持专业但不要太冷 / 已经拖了很久，需要明确推进" /></label><label>回复语气<select value={replyTone} onChange={(event) => setReplyTone(event.target.value as ReplyTone)}><option>中立专业</option><option>友好一点</option><option>坚定推进</option><option>最后确认</option></select></label><label>这次回复目标（可选）<textarea value={replyGoal} onChange={(event) => setReplyGoal(event.target.value)} placeholder="例如：确认发布时间 / 推进剩余视频 / 安抚情绪 / 解释要求 / 让达人确认是否继续合作" /></label><label>可接受让步（可选）<textarea value={replyConcession} onChange={(event) => setReplyConcession(event.target.value)} placeholder="例如：可以短一点但不能低于 35 秒 / 可以周五发布 / 可以先发 1 条再补 1 条 / 不接受不挂车 / 可以参考对标视频重新拍" /></label></div></section>}
+          {message && <div className="message-output"><h3>场景 / 沟通动作</h3><p>{message.scenario} · {message.communicationAction}</p><h3>英文话术</h3><pre>{message.english}</pre><h3>中文对照 / 中文解释</h3><p>{message.chineseExplanation}</p><h3>发送后追踪</h3><p>发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。</p><div className="inline-actions"><button type="button" onClick={() => void handleCopyGeneratedMessage()}>复制英文话术</button><button type="button" onClick={handleMarkMessageSent}>标记为已发送</button><button type="button" className="secondary" onClick={handleMarkCreatorReplied}>标记达人已回复</button></div>{trackingStatus && <p className="tracking-status">{trackingStatus}</p>}</div>}
         </section>
       </>
     );

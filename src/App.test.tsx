@@ -80,6 +80,15 @@ describe('operations workbench navigation and dashboard', () => {
     expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument();
   });
 
+
+  it('keeps Chinese sidebar order with Follow-up Center above Creator Database and Templates', () => {
+    render(<App />);
+    const navText = screen.getByRole('navigation', { name: '主导航' }).textContent ?? '';
+    expect(navText.indexOf('达人跟进中心')).toBeGreaterThan(navText.indexOf('数据看板'));
+    expect(navText.indexOf('达人跟进中心')).toBeLessThan(navText.indexOf('达人数据库'));
+    expect(navText.indexOf('达人数据库')).toBeLessThan(navText.indexOf('沟通话术模板'));
+  });
+
   it('shows the eight Dashboard metric cards and a priority todo list', () => {
     seedCreators([
       creatorRow({ id: 'invite', username: 'invite_creator', currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '', videoProgress: '0 of 2' }),
@@ -275,7 +284,7 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
     await user.click(screen.getByRole('button', { name: '标记为已发送' }));
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
-      expect(saved.trackingStatus).toBe('Followed Up');
+      expect(saved.trackingStatus).toBe('已发送待回复');
       expect(saved.lastFollowUpCount).toBe(2);
       expect(saved.followUpHistory?.[0]).toMatchObject({ action: 'Message Sent' });
     });
@@ -297,6 +306,50 @@ describe('templates, follow-up, samples, review, and ads modules', () => {
       expect(saved.currentStatus).toBe('Replied');
       expect(saved.lastCreatorResponse).toBe('Creator can post Friday');
       expect(saved.followUpHistory?.[0]).toMatchObject({ action: 'Creator Replied', note: 'Creator can post Friday' });
+    });
+  });
+
+
+  it('shows personalized reply processing fields and lets Chinese focus shape the generated reply', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({
+      id: 'reply-focus',
+      username: 'focus_creator',
+      trackingStatus: '达人回复待处理',
+      currentStatus: 'Replied',
+      lastCreatorResponse: 'No problem!',
+      followUpHistory: [{ date: '2026-06-10', action: 'Creator Replied', note: 'No problem!' }],
+    })]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+
+    expect(screen.getByRole('heading', { name: '达人回复处理' })).toBeInTheDocument();
+    await user.type(screen.getByLabelText('我想回复的重点（可选）'), '期待你拍的视频，有没有具体的时间让我团队安排投流计划');
+    await user.click(screen.getByRole('button', { name: '生成话术' }));
+
+    const english = screen.getByText('英文话术').nextElementSibling?.textContent ?? '';
+    expect(english).toContain('estimated posting date');
+    expect(english).toMatch(/ad testing|boost timing|campaign planning/);
+    expect(english).not.toMatch(/[㐀-鿿]/);
+    expect(screen.getByText('中文对照 / 中文解释').nextElementSibling?.textContent ?? '').toMatch(/[㐀-鿿]/);
+  });
+
+  it('marks a selected creator as sent from the standard template library', async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: 'template-creator', username: 'template_creator', product: 'Cat Teaser Wand' })]);
+
+    render(<App />);
+    await goTo(user, /沟通话术模板/);
+    await user.selectOptions(screen.getByLabelText('选择模板达人'), 'template-creator');
+    await user.click(screen.getAllByRole('button', { name: '标记为已发送' })[0]);
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? '[]')[0] as CreatorRow;
+      expect(saved.trackingStatus).toBe('已发送待回复');
+      expect(saved.lastFollowUpCount).toBe(1);
+      expect(saved.lastMessageScenario).toBe('初次邀约');
+      expect(saved.followUpHistory?.[0]).toMatchObject({ action: 'Message Sent', scenario: '初次邀约' });
     });
   });
 
