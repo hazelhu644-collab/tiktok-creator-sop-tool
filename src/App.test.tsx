@@ -1022,6 +1022,77 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     });
   });
 
+  it("uses compact creator selector labels and keeps details in current creator panel", async () => {
+    const user = userEvent.setup();
+    const longProduct = "Pet Brush for Shedding & Grooming Extra Long Campaign Product Name";
+    const longActionStatus = "Delivered / Waiting for Video";
+    seedCreators([
+      creatorRow({
+        id: "compact-a",
+        username: "callie.the.weenie",
+        product: longProduct,
+        currentStatus: longActionStatus,
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-01",
+        trackingStatus: "已发送待回复",
+      }),
+      creatorRow({
+        id: "compact-b",
+        username: "happyfeet111",
+        product: "另一个产品",
+        currentStatus: "Invited",
+        sampleShippingStatus: "Pending",
+        sampleDeliveredDate: "",
+        lastContactDate: "2026-06-10",
+        trackingStatus: "待跟进",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+
+    const selector = screen.getByLabelText("选择达人") as HTMLSelectElement;
+    const firstOption = within(selector).getByRole("option", { name: /@callie\.the\.weenie · 极高 · 已发送待回复/ });
+    expect(firstOption).toHaveTextContent("@callie.the.weenie · 极高 · 已发送待回复");
+    expect(firstOption).not.toHaveTextContent(longProduct);
+    expect(firstOption).not.toHaveTextContent("发送第一次拍摄跟进");
+    expect(firstOption).not.toHaveTextContent(longActionStatus);
+
+    await user.selectOptions(selector, "compact-b");
+    expect(selector.selectedOptions[0].textContent).toBe("@happyfeet111 · 中 · 待跟进");
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("happyfeet111");
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("另一个产品");
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("Invited");
+    expect((screen.getByLabelText("英文话术") as HTMLTextAreaElement).value).toContain("happyfeet111");
+
+    await user.click(screen.getByRole("button", { name: "展开达人队列" }));
+    const search = screen.getByLabelText("搜索队列");
+    await user.clear(search);
+    await user.type(search, "Grooming Extra Long");
+    expect(within(screen.getByTestId("creator-queue")).getByText(/@callie\.the\.weenie/)).toBeInTheDocument();
+    expect(within(screen.getByTestId("creator-queue")).queryByText(/@happyfeet111/)).not.toBeInTheDocument();
+  });
+
+  it("shows short priority reason in the current creator panel", async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({
+        id: "reason-reply",
+        username: "reply_creator",
+        trackingStatus: "Replied",
+        lastCreatorResponse: "I can post tomorrow.",
+        sampleShippingStatus: "",
+        sampleDeliveredDate: "",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("优先级原因");
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("达人已回复，需先处理对话。");
+  });
+
   it("generates follow-up copy and marks a message as sent", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(async () => undefined);

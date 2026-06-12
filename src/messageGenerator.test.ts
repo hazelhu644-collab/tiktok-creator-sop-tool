@@ -21,6 +21,7 @@ function task(overrides: Partial<Task> = {}): Task {
     notes: '',
     priority: 'Highest',
     priorityRank: 1,
+    stageRank: 2,
     triggerReason: '样品已到货 3 天但未发视频',
     suggestedAction: '催拍第一条视频',
     failedWarnings: [],

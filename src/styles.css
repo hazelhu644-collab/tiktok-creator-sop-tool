@@ -34,6 +34,11 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
 .workbench-controls { grid-template-columns: minmax(220px, 1fr) 150px minmax(280px, 1.2fr) 190px auto; margin-bottom: 14px; }
 .compact-queue { max-height: 340px; overflow-y: auto; padding-right: 6px; margin: 12px 0 16px; border: 1px solid rgba(220, 210, 194, .8); border-radius: 20px; background: rgba(255,255,255,.54); padding: 10px; }
 .queue-item.active { border-color: #17665d; border-left-color: #17665d; background: #eef8f5; }
+.queue-main-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+.queue-badges { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.queue-badges em { border-radius: 999px; background: rgba(23,102,93,.1); color: #17665d; font-style: normal; font-size: .74rem; font-weight: 900; padding: 3px 8px; }
+.queue-sub-line { display: block; margin-top: 4px; color: #64748b; font-size: .82rem; text-align: left; }
+
 .queue-collapsed { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; color: #536071; }
 .current-creator-panel { scroll-margin-top: 18px; margin-top: 16px; border: 1px solid rgba(184, 217, 210, .95); border-radius: 24px; background: linear-gradient(145deg, rgba(244,251,248,.95), rgba(255,250,241,.88)); padding: 18px; }
 .current-creator-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }

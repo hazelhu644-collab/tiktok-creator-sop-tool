@@ -245,6 +245,11 @@ function displayName(row: Pick<CreatorRow, "username">): string {
   return row.username.trim() || "未命名达人";
 }
 
+function creatorHandle(row: Pick<CreatorRow, "username">): string {
+  const name = displayName(row);
+  return name === "未命名达人" || name.startsWith("@") ? name : `@${name}`;
+}
+
 function displayStatus(status: CreatorStatus): string {
   return statusLabels[status] ?? status;
 }
@@ -257,6 +262,20 @@ function priorityLabel(task: Task): string {
       : task.priority === "Medium"
         ? "中"
         : "低";
+}
+
+function compactCreatorLabel(task: Task): string {
+  return `${creatorHandle(task)} · ${priorityLabel(task)} · ${queueStatusLabelText(task)}`;
+}
+
+function queueStatusLabelText(task: Task): string {
+  if (task.trackingStatus?.trim()) return task.trackingStatus.trim();
+  if (task.priority === "Low" && task.triggerReason.includes("今日已处理")) return "今日已处理";
+  if (task.priority === "Low" && task.triggerReason.includes("暂不催")) return "暂不催";
+  if (task.priority === "Highest") return "待优先处理";
+  if (task.priority === "High") return "待跟进";
+  if (task.priority === "Medium") return "轻跟进";
+  return "稍后复查";
 }
 
 function containsChinese(value: string): boolean {
@@ -738,7 +757,7 @@ function App() {
           (!normalized || haystack.includes(normalized))
         );
       })
-      .sort((a, b) => a.priorityRank - b.priorityRank);
+      .sort((a, b) => a.stageRank - b.stageRank || a.priorityRank - b.priorityRank);
   }, [
     tasks,
     followupSearch,
@@ -970,7 +989,7 @@ function App() {
             inferStatus(task, requiredVideos) === "Product Tag Missing" ||
             inferStatus(task, requiredVideos) === "Ready for Ads",
         )
-        .sort((a, b) => a.priorityRank - b.priorityRank)
+        .sort((a, b) => a.stageRank - b.stageRank || a.priorityRank - b.priorityRank)
         .slice(0, 12),
     [tasks, requiredVideos],
   );
@@ -2019,7 +2038,7 @@ function App() {
               <input
                 value={followupSearch}
                 onChange={(event) => setFollowupSearch(event.target.value)}
-                placeholder="达人 / 产品 / 状态 / 动作 / 紧急程度"
+                placeholder="达人 / 产品 / 状态 / 跟进状态 / 紧急程度"
               />
             </label>
             <label>
@@ -2058,10 +2077,7 @@ function App() {
               >
                 {filteredTasks.map((task) => (
                   <option key={task.id} value={task.id}>
-                    {queueStatusLabel(task)} · {task.suggestedAction} ·{" "}
-                    {displayName(task)} · {task.product || "缺少产品名称"} ·{" "}
-                    {task.currentStatus ||
-                      displayStatus(inferStatus(task, requiredVideos))}
+                    {compactCreatorLabel(task)}
                   </option>
                 ))}
               </select>
@@ -2098,10 +2114,16 @@ function App() {
                     className={`queue-item ${selectedTask?.id === task.id ? "active" : ""}`}
                     onClick={() => handleSelectCreator(task.id)}
                   >
-                    {queueStatusLabel(task)} · {task.suggestedAction} ·{" "}
-                    {displayName(task)} · {task.product || "缺少产品名称"} ·{" "}
-                    {task.currentStatus ||
-                      displayStatus(inferStatus(task, requiredVideos))}
+                    <span className="queue-main-line">
+                      <strong>{creatorHandle(task)}</strong>
+                      <span className="queue-badges">
+                        <em>{priorityLabel(task)}</em>
+                        <em>{queueStatusLabel(task)}</em>
+                      </span>
+                    </span>
+                    <span className="queue-sub-line">
+                      {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}
+                    </span>
                   </button>
                 ))
               ) : (
@@ -2158,6 +2180,9 @@ function App() {
                 </span>
                 <span>
                   紧急程度<b>{priorityText(selectedTask)}</b>
+                </span>
+                <span>
+                  优先级原因<b>{selectedTask.triggerReason}</b>
                 </span>
                 <span>
                   沟通动作<b>{selectedTask.suggestedAction}</b>

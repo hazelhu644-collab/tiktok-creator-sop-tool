@@ -95,8 +95,8 @@ describe('MVP SOP rules', () => {
       row({ id: 'high', username: 'high', videoProgress: '1/2', firstVideoPostedDate: '2026-06-04' }),
     ], today, 2);
 
-    expect(tasks.map((task) => task.priority)).toEqual(['Highest', 'High', 'Medium', 'Low']);
-    expect(buildSummary(tasks)).toMatchObject({ totalCreators: 4, needsFollowUp: 4, highest: 1, high: 1, medium: 1, low: 1 });
+    expect(tasks.map((task) => task.priority)).toEqual(['Highest', 'Highest', 'Medium', 'Low']);
+    expect(buildSummary(tasks)).toMatchObject({ totalCreators: 4, needsFollowUp: 4, highest: 2, high: 0, medium: 1, low: 1 });
   });
 
   it.each([1, 3, 5, 7, 10])('keeps priority and task analysis populated for requiredVideos=%i', (requiredVideos) => {
@@ -131,7 +131,7 @@ describe('MVP SOP rules', () => {
       row({ videoProgress: '1 of 3', firstVideoPostedDate: '2026-06-04' }),
     ], today, 3);
 
-    expect(task.priority).toBe('High');
+    expect(task.priority).toBe('Highest');
     expect(task.suggestedAction).toContain('剩余 2 条视频');
   });
 
@@ -170,7 +170,7 @@ describe('MVP SOP rules', () => {
     ], today, 2);
 
     expect(task.priority).toBe('Highest');
-    expect(task.triggerReason).toContain('样品已到货 3 天');
+    expect(task.triggerReason).toContain('样品已签收但仍未发布视频');
     expect(task.currentStatus).toBe('To Contact');
   });
 
@@ -179,8 +179,55 @@ describe('MVP SOP rules', () => {
       row({ currentStatus: 'To Contact', sampleShippingStatus: 'Shipped', lastContactDate: '2026-06-01', videoProgress: '0 of 2' }),
     ], today, 2);
 
-    expect(task.priority).toBe('None');
-    expect(task.triggerReason).toBe('根据当前 MVP 规则，今天暂无必须跟进的任务。');
+    expect(task.priority).toBe('Medium');
+    expect(task.triggerReason).toBe('样品仍在运输中，仅需轻提醒。');
+  });
+
+
+  it('uses daily workflow urgency instead of follow-up count alone', () => {
+    const tasks = analyzeCreators([
+      row({ id: 'invited', username: 'invited', currentStatus: 'Invited', lastContactDate: '2026-06-01', lastFollowUpCount: 5 }),
+      row({ id: 'transit', username: 'transit', currentStatus: 'Sample Shipped', sampleShippingStatus: 'Shipped', lastFollowUpCount: 5 }),
+      row({ id: 'delivered', username: 'delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-02', videoProgress: '0/2' }),
+      row({ id: 'reply', username: 'reply', trackingStatus: 'Replied', lastCreatorResponse: 'Yes, I can post tomorrow.' }),
+    ], today, 2);
+
+    expect(tasks.map((task) => task.id)).toEqual(['reply', 'delivered', 'transit', 'invited']);
+    expect(tasks.find((task) => task.id === 'reply')).toMatchObject({ priority: 'Highest', triggerReason: '达人已回复，需先处理对话。' });
+    expect(tasks.find((task) => task.id === 'delivered')).toMatchObject({ priority: 'Highest' });
+    expect(tasks.find((task) => task.id === 'transit')).toMatchObject({ priority: 'High' });
+    expect(tasks.find((task) => task.id === 'invited')).toMatchObject({ priority: 'Medium' });
+  });
+
+  it('lowers processed, skipped, pause-note, and future-follow-up creators', () => {
+    const tasks = analyzeCreators([
+      row({ id: 'processed', username: 'processed', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastHandledDate: '2026-06-05' }),
+      row({ id: 'skipped', username: 'skipped', trackingStatus: 'Skipped Today', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01' }),
+      row({ id: 'pause', username: 'pause', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', notes: '不要每天催，等她恢复' }),
+      row({ id: 'future', username: 'future', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', nextFollowUpDate: '2026-06-08' }),
+      row({ id: 'due', username: 'due', currentStatus: 'Invited', nextFollowUpDate: '2026-06-05' }),
+    ], today, 2);
+
+    expect(tasks.find((task) => task.id === 'processed')).toMatchObject({ priority: 'Low', triggerReason: '今日已处理，默认不再进入待处理队列。' });
+    expect(tasks.find((task) => task.id === 'skipped')?.priority).toBe('Low');
+    expect(tasks.find((task) => task.id === 'pause')).toMatchObject({ priority: 'Low', triggerReason: '备注显示暂不催，已降低优先级。' });
+    expect(tasks.find((task) => task.id === 'future')).toMatchObject({ priority: 'Low', triggerReason: '下次跟进日期未到，暂不进入今日高优先级。' });
+    expect(tasks.find((task) => task.id === 'due')).toMatchObject({ priority: 'High', triggerReason: '下次跟进日期已到或逾期，今天应处理。' });
+  });
+
+  it('sorts by collaboration stage before urgency label', () => {
+    const tasks = analyzeCreators([
+      row({ id: 'completed', username: 'completed', currentStatus: 'Completed', videoProgress: '2/2' }),
+      row({ id: 'invited', username: 'invited', currentStatus: 'Invited', lastContactDate: '2026-06-01' }),
+      row({ id: 'remaining', username: 'remaining', videoProgress: '1/2', firstVideoPostedDate: '2026-06-04' }),
+      row({ id: 'transit', username: 'transit', sampleShippingStatus: 'In Transit' }),
+      row({ id: 'delivered', username: 'delivered', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-04' }),
+      row({ id: 'reply', username: 'reply', trackingStatus: 'Reply Pending', lastCreatorResponse: 'Can you confirm?' }),
+    ], today, 2);
+
+    expect(tasks.map((task) => task.id)).toEqual(['reply', 'delivered', 'remaining', 'transit', 'invited', 'completed']);
+    expect(tasks.find((task) => task.id === 'remaining')?.priority).toBe('Highest');
+    expect(tasks.find((task) => task.id === 'completed')?.priority).toBe('Low');
   });
 
   it('suggests failed candidates without changing status', () => {
