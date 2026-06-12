@@ -82,3 +82,13 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
   font-size: .78rem;
   font-weight: 900;
 }
+.spreadsheet-wrap { border-radius: 10px; max-height: calc(100vh - 260px); }
+.spreadsheet-table { min-width: 1900px; border-collapse: collapse; border-spacing: 0; }
+.spreadsheet-table th, .spreadsheet-table td { padding: 5px 7px; vertical-align: middle; }
+.spreadsheet-table th { white-space: nowrap; font-size: .7rem; }
+.spreadsheet-table td { font-size: .8rem; }
+.spreadsheet-table td input, .spreadsheet-table td select, .spreadsheet-table td textarea { min-width: 112px; width: 100%; border-radius: 7px; padding: 5px 6px; font-size: .8rem; background: #fff; }
+.spreadsheet-table td textarea { min-height: 31px; resize: vertical; }
+.spreadsheet-table td:first-child input, .spreadsheet-table th:first-child input { min-width: auto; width: auto; }
+.spreadsheet-table .row-actions { min-width: 160px; white-space: nowrap; }
+.compact-button { padding: 6px 8px; border-radius: 9px; font-size: .76rem; }

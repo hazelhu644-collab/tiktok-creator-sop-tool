@@ -83,11 +83,11 @@ type WorkbenchFilterKey =
   | "follow_up_today"
   | "processed_today"
   | "delivered_waiting_video"
-  | "content_review_pending"
+  | "remaining_video"
   | "posted_this_week"
-  | "sample_shipped"
-  | "sample_pending"
-  | "initial_outreach";
+  | "completed"
+  | "failed"
+  | "sample_shipped";
 type DeepSeekTranslateResult = { chineseTranslation: string };
 type DeepSeekGenerateResult = {
   englishMessage: string;
@@ -278,6 +278,36 @@ function hasAny(value: string, terms: string[]) {
   return terms.some((term) => normalized.includes(term));
 }
 
+function isCurrentWeek(dateValue: string) {
+  if (!dateValue) return false;
+  const date = new Date(`${dateValue}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = today.getUTCDay() || 7;
+  const weekStart = new Date(today);
+  weekStart.setUTCDate(today.getUTCDate() - day + 1);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+  return date >= weekStart && date < weekEnd;
+}
+
+function videoProgressCounts(row: Pick<CreatorRow, "videoProgress">, requiredVideos: number) {
+  const progress = normalizeVideoProgress(row.videoProgress, requiredVideos);
+  return {
+    posted: progress.postedCount ?? 0,
+    required: progress.requiredVideos ?? requiredVideos,
+  };
+}
+
+function isSampleDeliveredForVideo(row: CreatorRow, requiredVideos: number) {
+  return ["Delivered", "Waiting Video"].includes(inferStatus(row, requiredVideos));
+}
+
+function isSampleInTransitForDaily(row: CreatorRow, requiredVideos: number) {
+  return inferStatus(row, requiredVideos) === "Sample Shipped";
+}
+
 function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
   const status = safeLower(row.currentStatus);
   const shipping = safeLower(row.sampleShippingStatus);
@@ -287,12 +317,12 @@ function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
 
   if (
     hasAny(status, ["lost", "failed", "cancel", "失败"]) ||
-    tracking === "failed"
+    hasAny(tracking, ["failed", "失败"])
   )
     return "Lost";
   if (
-    hasAny(status, ["completed", "complete", "已完成"]) ||
-    tracking === "completed"
+    hasAny(status, ["completed", "complete", "已完成", "合作完成", "完成"]) ||
+    hasAny(tracking, ["completed", "合作完成", "完成"])
   )
     return "Completed";
   if (hasAny(status, ["spark"])) return "Spark Ads Requested";
@@ -612,24 +642,22 @@ function App() {
     const taskMeta = tasksById.get(task.id);
     const progress = normalizeVideoProgress(task.videoProgress, requiredVideos);
     switch (key) {
-      case "initial_outreach":
-        return status === "Not Contacted";
       case "follow_up_today":
-        return Boolean(taskMeta?.needsFollowUp || task.needsFollowUp);
+        return Boolean(taskMeta?.needsFollowUp || task.needsFollowUp) && !isHandledToday(task);
       case "processed_today":
         return isHandledToday(task);
-      case "sample_pending":
-        return ["Sample Requested", "Sample Approved"].includes(status);
       case "sample_shipped":
-        return status === "Sample Shipped";
+        return isSampleInTransitForDaily(task, requiredVideos);
       case "delivered_waiting_video":
-        return ["Delivered", "Waiting Video"].includes(status);
+        return isSampleDeliveredForVideo(task, requiredVideos) && (progress.postedCount ?? 0) === 0;
+      case "remaining_video":
+        return (progress.postedCount ?? 0) > 0 && (progress.postedCount ?? 0) < (progress.requiredVideos ?? requiredVideos);
       case "posted_this_week":
-        return status === "Posted";
-      case "content_review_pending":
-        return ["Posted", "Need Revision", "Product Tag Missing"].includes(
-          status,
-        );
+        return isCurrentWeek(task.firstVideoPostedDate) || isCurrentWeek(task.latestVideoPostedDate ?? "");
+      case "completed":
+        return status === "Completed";
+      case "failed":
+        return status === "Lost";
       default:
         return true;
     }
@@ -640,6 +668,8 @@ function App() {
       "Message Sent",
       "No Reply",
       "Skipped Today",
+      "Creator Replied",
+      "Video Posted",
       "Completed",
       "Failed",
     ];
@@ -952,6 +982,23 @@ function App() {
     (task) => task.needsFollowUp && !isHandledToday(task),
   ).length;
 
+  const deliveredWaitingVideoCount = enrichedRows.filter((entry) => {
+    const { posted } = videoProgressCounts(entry.row, requiredVideos);
+    return isSampleDeliveredForVideo(entry.row, requiredVideos) && posted === 0;
+  }).length;
+  const remainingVideoCount = enrichedRows.filter((entry) => {
+    const { posted, required } = videoProgressCounts(entry.row, requiredVideos);
+    return posted > 0 && posted < required;
+  }).length;
+  const postedThisWeekCount = enrichedRows.reduce((count, entry) => {
+    const dateSet = new Set(
+      [entry.row.firstVideoPostedDate, entry.row.latestVideoPostedDate ?? ""].filter(
+        (date) => date && isCurrentWeek(date),
+      ),
+    );
+    return count + dateSet.size;
+  }, 0);
+
   const dashboardCards: Array<{
     label: string;
     value: number;
@@ -969,45 +1016,38 @@ function App() {
     },
     {
       label: "已签收待发视频数量",
-      value: enrichedRows.filter((entry) =>
-        ["Delivered", "Waiting Video"].includes(entry.status),
-      ).length,
+      value: deliveredWaitingVideoCount,
       filterKey: "delivered_waiting_video",
     },
     {
-      label: "待验收视频数量",
-      value: enrichedRows.filter((entry) =>
-        ["Posted", "Need Revision", "Product Tag Missing"].includes(
-          entry.status,
-        ),
-      ).length,
-      filterKey: "content_review_pending",
+      label: "剩余视频待履约数量",
+      value: remainingVideoCount,
+      filterKey: "remaining_video",
     },
     {
       label: "本周已发布视频数量",
-      value: enrichedRows.filter((entry) => entry.status === "Posted").length,
+      value: postedThisWeekCount,
       filterKey: "posted_this_week",
     },
     {
-      label: "已寄样待签收数量",
-      value: enrichedRows.filter((entry) => entry.status === "Sample Shipped")
-        .length,
+      label: "合作完成数量",
+      value: enrichedRows.filter((entry) => entry.status === "Completed").length,
+      filterKey: "completed",
+    },
+    {
+      label: "合作失败数量",
+      value: enrichedRows.filter((entry) => entry.status === "Lost").length,
+      filterKey: "failed",
+    },
+    {
+      label: "样品运输中数量",
+      value: enrichedRows.filter((entry) =>
+        isSampleInTransitForDaily(entry.row, requiredVideos),
+      ).length,
       filterKey: "sample_shipped",
     },
-    {
-      label: "待寄样达人数量",
-      value: enrichedRows.filter((entry) =>
-        ["Sample Requested", "Sample Approved"].includes(entry.status),
-      ).length,
-      filterKey: "sample_pending",
-    },
-    {
-      label: "今日待邀约达人数量",
-      value: enrichedRows.filter((entry) => entry.status === "Not Contacted")
-        .length,
-      filterKey: "initial_outreach",
-    },
   ];
+
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -1420,10 +1460,7 @@ function App() {
       message.english,
       channel,
     );
-    setTrackingStatus("已记录处理结果。");
-    setLastProcessingResult("已记录处理结果。");
-    setShowNextCreatorPrompt(true);
-    setToast({ tone: "success", text: "已记录处理结果。" });
+    finishProcessing("已记录处理结果。");
   }
 
   function markCreatorNoReply() {
@@ -1450,10 +1487,7 @@ function App() {
           : row,
       ),
     );
-    setTrackingStatus("已记录处理结果。");
-    setLastProcessingResult("已记录处理结果。");
-    setShowNextCreatorPrompt(true);
-    setToast({ tone: "success", text: "已记录达人未回复。" });
+    finishProcessing("已记录处理结果。");
   }
 
   function markCreatorSkippedToday() {
@@ -1476,10 +1510,86 @@ function App() {
           : row,
       ),
     );
-    setTrackingStatus("已记录处理结果。");
-    setLastProcessingResult("已记录处理结果。");
+    finishProcessing("已记录今日暂不跟进。");
+  }
+
+  function finishProcessing(messageText: string) {
+    setTrackingStatus(messageText);
+    setLastProcessingResult(messageText);
     setShowNextCreatorPrompt(true);
-    setToast({ tone: "success", text: "已记录今日暂不跟进。" });
+    setToast({ tone: "success", text: messageText });
+  }
+
+  function markVideoProgress(postedCount: 1 | 2) {
+    if (!selectedTask) return;
+    const today = todayString();
+    const isComplete = postedCount >= 2;
+    setRows((currentRows) =>
+      currentRows.map((row) => {
+        if (row.id !== selectedTask.id) return row;
+        return {
+          ...row,
+          currentStatus: isComplete ? "合作完成" : "已发布 1 条 / 待补第 2 条",
+          trackingStatus: isComplete ? "合作完成" : "已发布部分视频",
+          videoProgress: isComplete ? "2 of 2" : "1 of 2",
+          videoProgressWarning: undefined,
+          firstVideoPostedDate: row.firstVideoPostedDate || today,
+          latestVideoPostedDate: today,
+          lastHandledDate: today,
+          nextFollowUpDate: isComplete ? "" : addDays(2),
+          followUpHistory: [
+            ...(row.followUpHistory ?? []),
+            {
+              date: today,
+              action: isComplete ? "Completed" : "Video Posted",
+              note: isComplete
+                ? "已记录达人完成 2 条视频。"
+                : "已记录达人发布 1 条视频。",
+            },
+          ],
+        };
+      }),
+    );
+    finishProcessing(isComplete ? "已记录达人完成 2 条视频。" : "已记录达人发布 1 条视频。");
+  }
+
+  function handleManualVideoProgressUpdate() {
+    if (!selectedTask) return;
+    const progress = window.prompt(
+      "视频进度：可填 0/2、1/2、2/2 或自定义",
+      selectedTask.videoProgress || "0/2",
+    );
+    if (progress === null) return;
+    const firstDate = window.prompt(
+      "首条视频发布日期（YYYY-MM-DD，可留空）",
+      selectedTask.firstVideoPostedDate || "",
+    );
+    if (firstDate === null) return;
+    const latestDate = window.prompt(
+      "最近视频发布日期（YYYY-MM-DD，可留空）",
+      selectedTask.latestVideoPostedDate || firstDate || "",
+    );
+    if (latestDate === null) return;
+    const note = window.prompt("视频进度备注（可留空）", "手动更新视频进度。") ?? "";
+    const today = todayString();
+    setRows((currentRows) =>
+      currentRows.map((row) => {
+        if (row.id !== selectedTask.id) return row;
+        const updated = updateCreatorField(row, "videoProgress", progress, requiredVideos);
+        return {
+          ...updated,
+          firstVideoPostedDate: firstDate,
+          latestVideoPostedDate: latestDate,
+          lastHandledDate: today,
+          nextFollowUpDate: normalizeVideoProgress(progress, requiredVideos).postedCount === 2 ? "" : row.nextFollowUpDate,
+          followUpHistory: [
+            ...(row.followUpHistory ?? []),
+            { date: today, action: "Video Posted", note: note || `手动更新视频进度为 ${progress}。` },
+          ],
+        };
+      }),
+    );
+    finishProcessing("已手动更新视频进度。");
   }
 
   function markCreatorOutcome(outcome: "Completed" | "Failed") {
@@ -1531,6 +1641,8 @@ function App() {
               trackingStatus: "达人回复待处理",
               lastContactDate: today,
               lastCreatorResponse: note,
+              lastHandledDate: today,
+              nextFollowUpDate: addDays(1),
               followUpHistory: [
                 ...(row.followUpHistory ?? []),
                 { date: today, action: "Creator Replied", note },
@@ -1539,8 +1651,7 @@ function App() {
           : row,
       ),
     );
-    setTrackingStatus("已记录达人回复，并同步更新数据表格。");
-    setToast({ tone: "success", text: "已记录达人回复。" });
+    finishProcessing("已记录达人回复。");
   }
 
   function handleSaveFilmingRequirements() {
@@ -2390,6 +2501,27 @@ function App() {
                         <button
                           type="button"
                           className="secondary"
+                          onClick={() => markVideoProgress(1)}
+                        >
+                          标记已发布 1 条
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => markVideoProgress(2)}
+                        >
+                          标记已发布 2 条 / 合作完成
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={handleManualVideoProgressUpdate}
+                        >
+                          手动更新视频进度
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
                           onClick={() => markCreatorOutcome("Completed")}
                         >
                           标记合作完成
@@ -2572,8 +2704,8 @@ function App() {
               <span>下一步：清空筛选、导入 CSV / Excel，或点击 新增达人。</span>
             </div>
           ) : (
-            <div className="table-wrap">
-              <table className="ops-table">
+            <div className="table-wrap spreadsheet-wrap">
+              <table className="ops-table spreadsheet-table">
                 <thead>
                   <tr>
                     <th>
@@ -2584,17 +2716,22 @@ function App() {
                         onChange={toggleSelectAll}
                       />
                     </th>
-                    <th>达人名称</th>
-                    <th>TikTok 账号</th>
-                    <th>粉丝量级</th>
-                    <th>平均播放</th>
-                    <th>GMV 区间</th>
-                    <th>达人类型</th>
-                    <th>合作状态</th>
+                    <th>达人账号</th>
+                    <th>主页链接</th>
+                    <th>联系渠道</th>
                     <th>产品</th>
-                    <th>样品物流</th>
+                    <th>合作状态</th>
+                    <th>样品物流状态</th>
+                    <th>样品到货日期</th>
+                    <th>视频进度</th>
+                    <th>首条视频发布日期</th>
                     <th>最近联系日期</th>
+                    <th>跟进次数</th>
+                    <th>跟进状态</th>
+                    <th>最近沟通动作</th>
+                    <th>最近沟通渠道</th>
                     <th>下次跟进日期</th>
+                    <th>达人回复</th>
                     <th>达人备注</th>
                     <th>操作</th>
                   </tr>
@@ -2612,85 +2749,85 @@ function App() {
                       </td>
                       <td>
                         <input
-                          aria-label="达人名称"
+                          aria-label="达人账号"
                           value={entry.row.username}
                           onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "username",
-                              event.target.value,
-                            )
+                            updateRow(entry.row.id, "username", event.target.value)
                           }
                         />
                       </td>
                       <td>
                         <input
-                          aria-label="TikTok 账号"
+                          aria-label="主页链接"
                           value={entry.row.profileLink}
                           onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "profileLink",
-                              event.target.value,
-                            )
+                            updateRow(entry.row.id, "profileLink", event.target.value)
                           }
                           placeholder="@账号或主页链接"
                         />
                       </td>
-                      <td>{entry.followers}</td>
-                      <td>{entry.avgViews}</td>
-                      <td>{entry.gmv}</td>
-                      <td>{entry.creatorType}</td>
                       <td>
-                        <select
-                          aria-label="合作状态"
-                          value={entry.status}
-                          onChange={(event) =>
-                            applyStatusToRows(
-                              [entry.row.id],
-                              event.target.value as CreatorStatus,
-                            )
-                          }
-                        >
-                          {creatorStatuses.map((status) => (
-                            <option key={status} value={status}>
-                              {displayStatus(status)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <span
-                          className={
-                            entry.row.product.trim()
-                              ? "product-badge"
-                              : "product-warning"
-                          }
-                        >
-                          {entry.row.product.trim() || "缺少产品名称"}
-                        </span>
                         <input
-                          aria-label="产品名称"
-                          value={entry.row.product}
+                          aria-label="联系渠道"
+                          value={entry.row.contactMethod}
                           onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "product",
-                              event.target.value,
-                            )
+                            updateRow(entry.row.id, "contactMethod", event.target.value)
                           }
                         />
                       </td>
                       <td>
                         <input
-                          aria-label="样品物流"
+                          aria-label="产品名称"
+                          value={entry.row.product}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "product", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="合作状态"
+                          value={entry.row.currentStatus}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "currentStatus", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="样品物流状态"
                           value={entry.row.sampleShippingStatus}
                           onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "sampleShippingStatus",
-                              event.target.value,
-                            )
+                            updateRow(entry.row.id, "sampleShippingStatus", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="样品到货日期"
+                          type="date"
+                          value={entry.row.sampleDeliveredDate}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "sampleDeliveredDate", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="视频进度"
+                          value={entry.row.videoProgress}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "videoProgress", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="首条视频发布日期"
+                          type="date"
+                          value={entry.row.firstVideoPostedDate}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "firstVideoPostedDate", event.target.value)
                           }
                         />
                       </td>
@@ -2700,11 +2837,45 @@ function App() {
                           type="date"
                           value={entry.row.lastContactDate}
                           onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "lastContactDate",
-                              event.target.value,
-                            )
+                            updateRow(entry.row.id, "lastContactDate", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="跟进次数"
+                          type="number"
+                          min="0"
+                          value={entry.row.lastFollowUpCount}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "lastFollowUpCount", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="跟进状态"
+                          value={entry.row.trackingStatus ?? ""}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "trackingStatus", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="最近沟通动作"
+                          value={entry.row.lastMessageScenario ?? ""}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "lastMessageScenario", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label="最近沟通渠道"
+                          value={entry.row.lastMessageChannel ?? ""}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "lastMessageChannel", event.target.value)
                           }
                         />
                       </td>
@@ -2714,12 +2885,18 @@ function App() {
                           type="date"
                           value={entry.row.nextFollowUpDate ?? ""}
                           onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "nextFollowUpDate",
-                              event.target.value,
-                            )
+                            updateRow(entry.row.id, "nextFollowUpDate", event.target.value)
                           }
+                        />
+                      </td>
+                      <td>
+                        <textarea
+                          aria-label="达人回复"
+                          value={entry.row.lastCreatorResponse ?? ""}
+                          onChange={(event) =>
+                            updateRow(entry.row.id, "lastCreatorResponse", event.target.value)
+                          }
+                          rows={1}
                         />
                       </td>
                       <td>
@@ -2729,25 +2906,22 @@ function App() {
                           onChange={(event) =>
                             updateRow(entry.row.id, "notes", event.target.value)
                           }
-                          rows={2}
+                          rows={1}
                         />
                       </td>
                       <td className="row-actions">
                         <button
                           type="button"
-                          className="secondary"
+                          className="secondary compact-button"
                           onClick={() =>
-                            void copyText(
-                              buildOutreachForRow(entry.row),
-                              "已复制邀约话术。",
-                            )
+                            void copyText(buildOutreachForRow(entry.row), "已复制邀约话术。")
                           }
                         >
                           复制英文话术
                         </button>
                         <button
                           type="button"
-                          className="danger secondary"
+                          className="danger secondary compact-button"
                           onClick={() =>
                             setRows((currentRows) =>
                               deleteCreatorRow(currentRows, entry.row.id),

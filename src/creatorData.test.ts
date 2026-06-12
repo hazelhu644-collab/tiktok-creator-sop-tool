@@ -84,8 +84,8 @@ describe('editable creator data helpers', () => {
     ]);
 
     expect(csv.startsWith('\ufeff')).toBe(true);
-    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复/下一步备注,最近处理日期,跟进记录,达人备注');
-    expect(csv).toContain('2 条记录');
+    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,样品物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复,达人备注');
+    expect(csv).not.toContain('2 条记录');
     expect(csv).not.toContain('{"date"');
     expect(csv).toContain('"creator, one"');
     expect(csv).toContain('"Line 1\nLine 2"');
@@ -116,7 +116,7 @@ describe('editable creator data helpers', () => {
       '联系渠道': 'Email',
       '产品': '中文产品',
       '合作状态': '已完成',
-      '物流状态': 'Delivered',
+      '样品物流状态': 'Delivered',
       '样品到货日期': '2026-06-01',
       '视频进度': '2 of 2',
       '首条视频发布日期': '2026-06-03',
@@ -126,8 +126,8 @@ describe('editable creator data helpers', () => {
       '最近沟通动作': '合作完成维护',
       '最近沟通渠道': 'TikTok DM',
       '下次跟进日期': '2026-06-06',
-      '达人回复/下一步备注': '继续维护',
-      '备注': 'general note',
+      '达人回复': '继续维护',
+      '达人备注': 'general note',
     }, 1);
 
     expect(imported).toMatchObject({

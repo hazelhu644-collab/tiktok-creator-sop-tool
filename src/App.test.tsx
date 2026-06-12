@@ -181,18 +181,26 @@ describe("operations workbench navigation and dashboard", () => {
       "今日待跟进达人数量",
       "今日已处理达人人数",
       "已签收待发视频数量",
-      "待验收视频数量",
+      "剩余视频待履约数量",
       "本周已发布视频数量",
-      "已寄样待签收数量",
-      "待寄样达人数量",
-      "今日待邀约达人数量",
+      "合作完成数量",
+      "合作失败数量",
+      "样品运输中数量",
     ];
     expectedCardOrder.forEach((label) =>
       expect(
         screen.getByRole("button", { name: new RegExp(label) }),
       ).toBeInTheDocument(),
     );
-    expect(screen.queryByText("可投流素材数量")).not.toBeInTheDocument();
+    [
+      "今日待邀约达人数量",
+      "待寄样达人数量",
+      "已寄样待签收数量",
+      "待验收视频数量",
+      "可投流素材数量",
+    ].forEach((label) =>
+      expect(screen.queryByRole("button", { name: new RegExp(label) })).not.toBeInTheDocument(),
+    );
     const cardLabels = screen
       .getAllByRole("button")
       .map((button) => button.textContent ?? "")
@@ -421,7 +429,7 @@ describe("operations workbench navigation and dashboard", () => {
 
     render(<App />);
     await user.click(
-      screen.getByRole("button", { name: /今日待邀约达人数量/ }),
+      screen.getByRole("button", { name: /已签收待发视频数量/ }),
     );
 
     expect(
@@ -431,13 +439,13 @@ describe("operations workbench navigation and dashboard", () => {
       screen.queryByRole("heading", { name: "达人数据库" }),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("creator-queue")).toHaveTextContent(
-      "invite_creator",
-    );
-    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
       "delivered_creator",
     );
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
       "invite_creator",
+    );
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "delivered_creator",
     );
   });
 
@@ -452,6 +460,35 @@ describe("operations workbench navigation and dashboard", () => {
 });
 
 describe("creator database redesigned table", () => {
+  it("uses the requested 1.0-style dense Chinese column order", async () => {
+    seedCreators([creatorRow({ id: "columns", username: "columns_creator" })]);
+    render(<App />);
+    const user = userEvent.setup();
+    await goTo(user, /达人数据库/);
+
+    const headers = within(screen.getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent ?? "");
+    expect(headers.slice(1, 18)).toEqual([
+      "达人账号",
+      "主页链接",
+      "联系渠道",
+      "产品",
+      "合作状态",
+      "样品物流状态",
+      "样品到货日期",
+      "视频进度",
+      "首条视频发布日期",
+      "最近联系日期",
+      "跟进次数",
+      "跟进状态",
+      "最近沟通动作",
+      "最近沟通渠道",
+      "下次跟进日期",
+      "达人回复",
+      "达人备注",
+    ]);
+    expect(screen.getByRole("table")).toHaveClass("spreadsheet-table");
+  });
+
   it("supports search, status filtering, and editable table fields", async () => {
     const user = userEvent.setup();
     seedCreators([
@@ -571,7 +608,7 @@ describe("creator database redesigned table", () => {
     await goTo(user, /达人数据库/);
     await user.click(screen.getByRole("button", { name: "新增达人" }));
 
-    expect(screen.getAllByLabelText("达人名称")).toHaveLength(2);
+    expect(screen.getAllByLabelText("达人账号")).toHaveLength(2);
 
     await user.click(screen.getAllByRole("button", { name: "删除达人" })[0]);
     await waitFor(() => {
@@ -691,6 +728,9 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       "标记为已发送",
       "标记达人已回复",
       "标记未回复",
+      "标记已发布 1 条",
+      "标记已发布 2 条 / 合作完成",
+      "手动更新视频进度",
       "标记合作完成",
       "标记合作失败",
       "今日暂不跟进",
@@ -698,6 +738,72 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       expect(screen.getByRole("button", { name })).toBeInTheDocument(),
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("updates video progress from the workbench quick actions and refreshes counts", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({
+        id: "video-one",
+        username: "video_one_creator",
+        sampleDeliveredDate: "2026-06-01",
+        videoProgress: "0 of 2",
+      }),
+      creatorRow({
+        id: "video-two",
+        username: "video_two_creator",
+        sampleDeliveredDate: "2026-06-01",
+        videoProgress: "1 of 2",
+        firstVideoPostedDate: "2026-06-09",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    expect(screen.getByRole("button", { name: /今日待跟进达人数量2/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "标记已发布 1 条" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "video-one");
+    await user.click(screen.getByRole("button", { name: "标记已发布 1 条" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      const updated = saved.find((row) => row.id === "video-one");
+      expect(updated?.videoProgress).toBe("1 of 2");
+      expect(updated?.currentStatus).toBe("已发布 1 条 / 待补第 2 条");
+      expect(updated?.trackingStatus).toBe("已发布部分视频");
+      expect(updated?.firstVideoPostedDate).toBe("2026-06-11");
+      expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
+        action: "Video Posted",
+        note: "已记录达人发布 1 条视频。",
+      });
+    });
+    expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain("video_one_creator");
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "video-two");
+    const localEnglish = (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value;
+    expect(localEnglish).toContain("There is still 1 remaining video");
+    expect(localEnglish).toContain("post the second video");
+
+    await user.click(screen.getByRole("button", { name: "标记已发布 2 条 / 合作完成" }));
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      const updated = saved.find((row) => row.id === "video-two");
+      expect(updated?.videoProgress).toBe("2 of 2");
+      expect(updated?.currentStatus).toBe("合作完成");
+      expect(updated?.trackingStatus).toBe("合作完成");
+      expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
+        action: "Completed",
+        note: "已记录达人完成 2 条视频。",
+      });
+    });
+    expect(screen.getByRole("button", { name: /今日已处理达人人数2/ })).toBeInTheDocument();
   });
 
   it("processes local-message tracking actions without calling DeepSeek", async () => {
