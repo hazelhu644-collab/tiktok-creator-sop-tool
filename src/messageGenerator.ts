@@ -648,37 +648,23 @@ function partialCompletionMessage(channel: Channel, name: string, remainingVideo
   const partialReferenceLinks = filmingRequirementsReminder.includes('You can also use these reference videos')
     ? ` ${filmingRequirementsReminder.slice(filmingRequirementsReminder.indexOf('You can also use these reference videos'))}`
     : '';
-  const acknowledgement = 'Thank you for posting the first video — the content looks good, and we’re preparing to review it for ad testing.';
-  const pending = `There is still ${remainingVideos} pending for this collaboration.`;
-  const confirmQuestion = 'Could you please confirm when you expect to post the remaining video?';
+  const core = `Thank you for posting the first video. The content looks good, and we’re preparing to review it for ad testing. We’ve noted it on our side. There is still ${remainingVideos} for this collaboration. Could you please confirm when you expect to post the second video? Could you please confirm when you expect to post the remaining video? Please confirm the expected posting date for the remaining video so we can keep the collaboration timeline clear. Please make sure the TikTok Shop product link is attached when posting. Thank you.`;
 
-  if (channel === 'TikTok DM') {
-    return `Hi ${name}, thanks for posting the first video — it looks good, and we’re preparing to review it for ad testing. There is still ${remainingVideos} pending. Could you confirm when you expect to post it? Please keep following the filming guidelines and attach the product link.${partialReferenceLinks}`;
+  if (channel === 'TikTok DM' || channel === 'WhatsApp') {
+    return `Hi ${name}, ${core}${partialReferenceLinks}`;
   }
 
   if (channel === 'TikTok Shop Affiliate Message') {
     return `Hi ${name},
 
-${acknowledgement}
+${core}
 
-${pending} ${filmingRequirementsReminder}
-
-${confirmQuestion}
-
-Thank you.`;
-  }
-
-  if (channel === 'WhatsApp') {
-    return `Hi ${name}, ${acknowledgement} ${pending} Could you confirm when you expect to post the remaining video? Please keep following the filming guidelines and attach the product link.${partialReferenceLinks}`;
+${filmingRequirementsReminder}`.trim();
   }
 
   return `Hi ${name},
 
-${acknowledgement}
-
-${pending} ${filmingRequirementsReminder}
-
-Please confirm the expected posting date for the remaining video so we can keep the collaboration timeline clear.
+${core}
 
 Thank you,
 Brand Team`;

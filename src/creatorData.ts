@@ -9,7 +9,7 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: '联系渠道', key: 'contactMethod' },
   { header: '产品', key: 'product' },
   { header: '合作状态', key: 'currentStatus' },
-  { header: '物流状态', key: 'sampleShippingStatus' },
+  { header: '样品物流状态', key: 'sampleShippingStatus' },
   { header: '样品到货日期', key: 'sampleDeliveredDate' },
   { header: '视频进度', key: 'videoProgress' },
   { header: '首条视频发布日期', key: 'firstVideoPostedDate' },
@@ -19,9 +19,7 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: '最近沟通动作', key: 'lastMessageScenario' },
   { header: '最近沟通渠道', key: 'lastMessageChannel' },
   { header: '下次跟进日期', key: 'nextFollowUpDate' },
-  { header: '达人回复/下一步备注', key: 'lastCreatorResponse' },
-  { header: '最近处理日期', key: 'lastHandledDate' },
-  { header: '跟进记录', key: 'followUpHistory' },
+  { header: '达人回复', key: 'lastCreatorResponse' },
   { header: '达人备注', key: 'notes' },
 ];
 
@@ -35,6 +33,7 @@ export type EditableCreatorField =
   | 'sampleDeliveredDate'
   | 'videoProgress'
   | 'firstVideoPostedDate'
+  | 'latestVideoPostedDate'
   | 'lastContactDate'
   | 'lastFollowUpCount'
   | 'notes'
@@ -100,6 +99,7 @@ export function createBlankCreatorRow(productName = '', requiredVideos = 2): Cre
     sampleDeliveredDate: '',
     videoProgress: `0 of ${safeRequiredVideos}`,
     firstVideoPostedDate: '',
+    latestVideoPostedDate: '',
     lastContactDate: '',
     lastFollowUpCount: 0,
     notes: '',
@@ -141,9 +141,21 @@ export function updateCreatorField(row: CreatorRow, field: EditableCreatorField,
 
   if (field === 'videoProgress') {
     const progressResult = normalizeVideoProgress(rawValue, requiredVideos);
+    const normalized = progressResult.warning && !progressResult.isOverRequired ? rawValue : progressResult.normalized;
+    const postedCount = progressResult.postedCount;
+    const statusPatch = typeof postedCount !== 'number'
+      ? {}
+      : postedCount >= requiredVideos
+        ? { currentStatus: '合作完成', trackingStatus: '合作完成', nextFollowUpDate: '' }
+        : postedCount > 0
+          ? { currentStatus: `已发布 ${postedCount} 条 / 待补第 ${postedCount + 1} 条`, trackingStatus: '已发布部分视频' }
+          : row.currentStatus.trim()
+            ? {}
+            : { currentStatus: 'Waiting Video' };
     return {
       ...row,
-      videoProgress: progressResult.warning && !progressResult.isOverRequired ? rawValue : progressResult.normalized,
+      ...statusPatch,
+      videoProgress: normalized,
       videoProgressWarning: progressResult.warning,
     };
   }
