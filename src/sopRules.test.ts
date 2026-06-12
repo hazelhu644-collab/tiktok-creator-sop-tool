@@ -164,13 +164,13 @@ describe('MVP SOP rules', () => {
     expect(tasks[0].id).toBe('highest');
   });
 
-  it('uses sample delivered date as delivered evidence even when shipping status is stale', () => {
+  it('treats sample arrival date as ETA until logistics status is delivered', () => {
     const [task] = analyzeCreators([
       row({ currentStatus: 'To Contact', sampleShippingStatus: '', sampleDeliveredDate: '2026-06-02', videoProgress: '0 of 2' }),
     ], today, 2);
 
-    expect(task.priority).toBe('Highest');
-    expect(task.triggerReason).toContain('样品已签收但仍未发布视频');
+    expect(task.priority).toBe('Medium');
+    expect(task.triggerReason).toContain('初次邀约阶段');
     expect(task.currentStatus).toBe('To Contact');
   });
 
@@ -180,7 +180,7 @@ describe('MVP SOP rules', () => {
     ], today, 2);
 
     expect(task.priority).toBe('Medium');
-    expect(task.triggerReason).toBe('样品仍在运输中，仅需轻提醒。');
+    expect(task.triggerReason).toContain('提前沟通拍摄要求');
   });
 
 
@@ -195,7 +195,7 @@ describe('MVP SOP rules', () => {
     expect(tasks.map((task) => task.id)).toEqual(['reply', 'delivered', 'transit', 'invited']);
     expect(tasks.find((task) => task.id === 'reply')).toMatchObject({ priority: 'Highest', triggerReason: '达人已回复，需先处理对话。' });
     expect(tasks.find((task) => task.id === 'delivered')).toMatchObject({ priority: 'Highest' });
-    expect(tasks.find((task) => task.id === 'transit')).toMatchObject({ priority: 'High' });
+    expect(tasks.find((task) => task.id === 'transit')).toMatchObject({ priority: 'Medium' });
     expect(tasks.find((task) => task.id === 'invited')).toMatchObject({ priority: 'Medium' });
   });
 

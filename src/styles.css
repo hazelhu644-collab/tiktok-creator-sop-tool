@@ -97,3 +97,30 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
 .spreadsheet-table td:first-child input, .spreadsheet-table th:first-child input { min-width: auto; width: auto; }
 .spreadsheet-table .row-actions { min-width: 160px; white-space: nowrap; }
 .compact-button { padding: 6px 8px; border-radius: 9px; font-size: .76rem; }
+
+.inline-warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.warning-text {
+  color: #b45309;
+  font-size: 0.82rem;
+}
+
+.mini-badge {
+  display: inline-flex;
+  margin-top: 0.25rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 700;
+}

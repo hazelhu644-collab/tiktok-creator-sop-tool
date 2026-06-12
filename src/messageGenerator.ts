@@ -1,4 +1,4 @@
-import { normalizeVideoProgress, parseRequiredVideos } from './sopRules';
+import { arrivalDateDeltaDays, isDeliveredLogisticsStatus, isInTransitLogisticsStatus, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
 import type { Channel, CommunicationAction, FollowUpHistoryEntry, GeneratedMessage, Task, UrgencyLevel } from './types';
 
 export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message', 'Email', 'WhatsApp'];
@@ -83,18 +83,14 @@ function statusIncludes(task: Task, terms: string[]): boolean {
   return terms.some((term) => status.includes(term));
 }
 
-function shippingMatches(task: Task, terms: string[]): boolean {
-  const shippingStatus = normalizeForScenario(task.sampleShippingStatus);
-  return terms.some((term) => shippingStatus === term);
-}
-
 function hasSampleInTransitEvidence(task: Task): boolean {
-  return (statusIncludes(task, ['sample shipped']) || shippingMatches(task, ['shipped', 'in transit']))
+  return (isInTransitLogisticsStatus(task.sampleShippingStatus) || isInTransitLogisticsStatus(task.currentStatus))
     && !hasSampleDeliveredEvidence(task);
 }
 
 function hasSampleDeliveredEvidence(task: Task): boolean {
-  return shippingMatches(task, ['delivered']) || Boolean(task.sampleDeliveredDate.trim());
+  return isDeliveredLogisticsStatus(task.sampleShippingStatus)
+    || /delivered|waiting video|已签收|已到货|签收|到货|等待视频/i.test(task.currentStatus);
 }
 
 function progressForTask(task: Task, configuredRequiredVideos?: number) {
@@ -118,7 +114,7 @@ function isCompletedTask(task: Task, configuredRequiredVideos: number): boolean 
 }
 
 function clearlyMeetsFinalFailedCandidateConditions(task: Task, configuredRequiredVideos: number): boolean {
-  if (isCompletedTask(task, configuredRequiredVideos) || statusIncludes(task, ['failed']) || !hasSampleDeliveredEvidence(task)) return false;
+  if (hasSampleInTransitEvidence(task) || isCompletedTask(task, configuredRequiredVideos) || statusIncludes(task, ['failed']) || !hasSampleDeliveredEvidence(task)) return false;
 
   const warningText = task.failedWarnings.join(' ');
   const deliveredDate = task.sampleDeliveredDate.trim();
@@ -181,19 +177,38 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
   }
 
   if (hasInTransitEvidence && !hasDeliveredEvidence) {
-    if (hasLogisticsExceptionRisk) {
+    const arrivalDelta = arrivalDateDeltaDays(task.sampleDeliveredDate, new Date());
+    if (hasLogisticsExceptionRisk || (arrivalDelta !== null && arrivalDelta < 0)) {
       return {
-        urgencyLevel: task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0 ? '极高' : '高',
-        communicationAction: '物流异常确认',
-        reason: `原因：样品已发出但尚未确认送达，且流程已延迟或已多次跟进，需要优先确认物流状态。样品仍处于运输中，暂不能催促视频履约。当前优先确认物流和收货情况。`,
+        urgencyLevel: '高',
+        communicationAction: '确认物流 / 是否签收',
+        reason: `原因：样品已发出但尚未确认送达，需要优先确认物流 / 是否签收。样品仍处于运输中，不能催促视频履约或做最后确认。`,
         highRisk: true,
+      };
+    }
+
+    if (arrivalDelta === 0) {
+      return {
+        urgencyLevel: '高',
+        communicationAction: '确认样品是否收到',
+        reason: `样品到货日期为今天，在运输中语境下按预计到货日期处理，应确认样品是否收到并提醒拍摄计划。`,
+        highRisk: false,
+      };
+    }
+
+    if (arrivalDelta === 1) {
+      return {
+        urgencyLevel: task.priority === 'High' ? '高' : '中',
+        communicationAction: '提醒达人注意签收并准备拍摄',
+        reason: `样品预计明天到货，应提醒达人注意签收并提前准备拍摄内容。`,
+        highRisk: false,
       };
     }
 
     return {
       urgencyLevel: task.priority === 'High' || task.priority === 'Highest' ? '高' : '中',
-      communicationAction: '样品运输中建联',
-      reason: `物流状态为 ${sampleShippingStatus} 或 Current status 为 ${currentStatus}，物流状态已发货/运输中，达人已进入样品合作流程，应提醒收货和后续拍摄安排。样品仍处于运输中，暂不能催促视频履约。当前优先确认物流和收货情况。`,
+      communicationAction: '样品运输中，提前沟通拍摄要求',
+      reason: `物流状态为 ${sampleShippingStatus} 或 Current status 为 ${currentStatus}，样品到货日期在运输中语境下按预计到货日期处理。物流状态已发货/运输中，当前应提前沟通拍摄要求、内容结构、视频长度数量和挂链要求，不能催促视频履约。`,
       highRisk: false,
     };
   }
@@ -304,8 +319,8 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
   if (classification.communicationAction === '最后确认') return withClassification('Final Follow-up Before Failed Candidate');
   if (classification.communicationAction === '剩余视频履约') return withClassification('Partial Video Completion Follow-up');
   if (classification.communicationAction === '样品到货催拍') return withClassification('Sample Delivered Follow-up');
-  if (classification.communicationAction === '物流异常确认') return withClassification('Logistics Exception Confirmation');
-  if (classification.communicationAction === '样品运输中建联') return withClassification('Sample In Transit Reminder');
+  if (classification.communicationAction === '物流异常确认' || classification.communicationAction === '确认物流 / 是否签收') return withClassification('Logistics Exception Confirmation');
+  if (['样品运输中，提前沟通拍摄要求', '样品在路上，提醒达人提前规划拍摄内容', '提醒达人注意签收并准备拍摄', '确认样品是否收到'].includes(classification.communicationAction)) return withClassification('Sample In Transit Reminder');
 
   if (statusIncludes(task, ['to contact'])) {
     return withClassification('First Outreach', `当前状态为 ${currentStatus}，还未正式建联，因此生成首次合作介绍话术。`, false);
@@ -566,34 +581,17 @@ function sampleRequestConfirmationMessage(channel: Channel, name: string, produc
 
 function sampleInTransitMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
   const reminder = filmingRequirementsReminder.trim();
+  const compactRequest = `Hi ${name}, the ${product} sample is on the way. While it is in transit, we wanted to share the key filming requirements so you can plan the content in advance. Please show the product in a real pet-care scene, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. Once the sample arrives, please let us know when you expect to start filming after receiving the sample and share your expected posting schedule. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
 
-  if (channel === 'TikTok DM') {
-    return `Hi ${name}, the ${product} sample has been shipped and the sample is on the way. Please keep an eye on the delivery updates. No posting is needed before the sample is delivered. Once it arrives, please test it in a real pet-care scene and share your posting plan. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
-  }
-
-  if (channel === 'TikTok Shop Affiliate Message') {
-    return `Hi ${name},
-
-The sample for the ${product} collaboration has been shipped and is currently on the way. The sample is on the way, so please keep an eye on the delivery updates.
-
-Once it arrives, please plan the content based on the filming guidelines we shared and make sure the TikTok Shop product link is attached. No posting is needed before the sample is delivered. ${reminder}
-
-Could you please confirm when you expect to start filming after receiving the sample?
-
-Thank you.`;
-  }
-
-  if (channel === 'WhatsApp') {
-    return `Hi ${name}, the ${product} sample has been shipped and the sample is on the way. Please keep an eye on the delivery updates. No posting is needed before the sample is delivered. Once it arrives, please test it in a real pet-care scene and share your posting plan. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
-  }
+  if (channel === 'TikTok DM' || channel === 'WhatsApp') return compactRequest;
 
   return `Hi ${name},
 
-The sample for the ${product} collaboration has been shipped and is currently on the way. The sample is on the way, so please keep an eye on the delivery updates so you know when it arrives.
+The sample for the ${product} collaboration has been shipped and is currently on the way. While it is in transit, we wanted to share the key filming requirements so you can plan the content in advance.
 
-After delivery, please plan the content based on the filming guidelines we shared and make sure the TikTok Shop product link is attached. ${reminder}
+Please show the product in a real pet-care scene, include the desired usage scenes/content structure, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. ${reminder}
 
-Could you please confirm when you expect to start filming after receiving the sample?
+Once the sample arrives, please let us know when you expect to start filming after receiving the sample and share your expected posting schedule.
 
 Thank you.`;
 }
