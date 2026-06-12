@@ -202,6 +202,90 @@ export function getFailureWarnings(row: CreatorRow, today = new Date(), required
   return warnings;
 }
 
+function isSameDate(dateValue: string | undefined, today: Date): boolean {
+  const date = parseDate(dateValue ?? '');
+  if (!date) return false;
+  return date.getFullYear() === today.getFullYear()
+    && date.getMonth() === today.getMonth()
+    && date.getDate() === today.getDate();
+}
+
+function isFutureDate(dateValue: string | undefined, today: Date): boolean {
+  const date = parseDate(dateValue ?? '');
+  if (!date) return false;
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return dateStart > todayStart;
+}
+
+function isTodayOrOverdue(dateValue: string | undefined, today: Date): boolean {
+  const date = parseDate(dateValue ?? '');
+  if (!date) return false;
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return dateStart <= todayStart;
+}
+
+function isHandledToday(row: CreatorRow, today: Date): boolean {
+  const handledActions = ['Message Sent', 'No Reply', 'Skipped Today', 'Video Posted', 'Completed', 'Failed'];
+  return isSameDate(row.lastHandledDate, today)
+    || isSameDate(row.lastMessageSentAt, today)
+    || Boolean(row.followUpHistory?.some((entry) => isSameDate(entry.date, today) && handledActions.includes(entry.action)));
+}
+
+function hasPauseNote(row: CreatorRow): boolean {
+  return includesAny(normalizeText(row.notes), [
+    '不要每天催',
+    '周五后再跟进',
+    '等她恢复',
+    '生病',
+    '受伤',
+    '搬家',
+    '今天不催',
+    '等剪辑',
+    '已沟通等待',
+    'sick',
+    'injured',
+    'moving',
+    'wait until friday',
+    'do not follow up daily',
+    'wait for editing',
+  ]);
+}
+
+function isShippedOrInTransit(row: CreatorRow): boolean {
+  return includesAny(normalizeText(row.sampleShippingStatus), ['shipped', 'in transit', '运输', '已寄', '已发货'])
+    || includesAny(normalizeText(row.currentStatus), ['sample shipped', 'in transit', '运输中', '已寄样']);
+}
+
+function isInvitedOnly(row: CreatorRow): boolean {
+  const status = normalizeText(row.currentStatus);
+  const shipping = normalizeText(row.sampleShippingStatus);
+  return includesAny(status, ['invited', 'to contact', 'not contacted', 'contacted', '初次邀约', '还未建立关系'])
+    && !hasDeliveredEvidence(row)
+    && !isShippedOrInTransit(row)
+    && isNoSampleSent(shipping);
+}
+
+function hasFailedStatus(row: CreatorRow): boolean {
+  return includesAny(normalizeText(row.currentStatus), ['failed', 'lost', '失败', '归档'])
+    || includesAny(normalizeText(row.trackingStatus), ['failed', '失败', '归档']);
+}
+
+function stageRank(row: CreatorRow, priority: Priority, today: Date, requiredVideos: number): number {
+  const progress = videoProgress(row, requiredVideos);
+  const trackingStatus = normalizeText(row.trackingStatus).toLowerCase();
+  if (isHandledToday(row, today) || trackingStatus === 'skipped today' || trackingStatus === '今日已跳过') return 7;
+  if (isCompleted(row, requiredVideos) || hasFailedStatus(row)) return 8;
+  if (['replied', 'reply pending', '达人已回复', '达人回复待处理'].includes(trackingStatus)) return 1;
+  if (hasDeliveredEvidence(row) && (progress.postedCount ?? 0) === 0) return 2;
+  if (typeof progress.postedCount === 'number' && progress.postedCount > 0 && progress.postedCount < requiredVideos) return 3;
+  if (priority === 'Highest' && row.lastFollowUpCount >= 2) return 4;
+  if (isShippedOrInTransit(row)) return 5;
+  if (isInvitedOnly(row)) return 6;
+  return 6;
+}
+
 export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVideos = DEFAULT_REQUIRED_VIDEOS): Task {
   const deliveredDays = daysSince(row.sampleDeliveredDate, today);
   const lastContactDays = daysSince(row.lastContactDate, today);
@@ -211,58 +295,106 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
   const isIncomplete = missingVideos === null || missingVideos > 0;
   const trackingStatus = normalizeText(row.trackingStatus).toLowerCase();
   const hasPendingCreatorReply = ['replied', 'reply pending', '达人已回复', '达人回复待处理'].includes(trackingStatus)
-    && Boolean(normalizeText(row.lastCreatorResponse))
     && !isCompleted(row, requiredVideos)
-    && !includesAny(normalizeText(row.currentStatus).toLowerCase(), ['failed', '失败']);
-  let priority: Priority = 'None';
-  let triggerReason = '根据当前 MVP 规则，今天暂无必须跟进的任务。';
+    && !hasFailedStatus(row);
+  const handledToday = isHandledToday(row, today) || trackingStatus === 'skipped today' || trackingStatus === '今日已跳过';
+  const pauseNote = hasPauseNote(row);
+  const futureFollowUp = isFutureDate(row.nextFollowUpDate, today);
+  const dueFollowUp = isTodayOrOverdue(row.nextFollowUpDate, today);
+  const deliveredOrDeliverable = hasDeliveredEvidence(row) || hasPostedAnyVideo;
+  const statusText = normalizeText(row.currentStatus);
+  const hasAnyWorkflowSignal = [row.username, row.currentStatus, row.sampleShippingStatus, row.sampleDeliveredDate, row.firstVideoPostedDate, row.lastContactDate, row.notes, row.trackingStatus ?? '', row.nextFollowUpDate ?? '']
+    .some((value) => normalizeText(value));
+  let priority: Priority = hasAnyWorkflowSignal ? 'Low' : 'None';
+  let triggerReason = '今天不是必须高频跟进，可稍后复查。';
   let suggestedAction = '稍后复查。';
 
-  if (hasPendingCreatorReply) {
-    priority = 'High';
-    triggerReason = '达人已经回复，需要处理回复内容并继续推进沟通。';
-    suggestedAction = '生成「回复达人消息」话术，基于达人回复内容给出下一步回应。';
-  } else if (hasDeliveredEvidence(row) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 2) {
-    priority = 'Highest';
-    triggerReason = `样品已到货 ${deliveredDays} 天，但达人还没有发布视频。`;
-    suggestedAction = `发送第一次拍摄跟进，提醒达人按照达人拍摄要求完成 ${requiredVideos} 条视频。`;
-  } else if (hasPostedAnyVideo && isIncomplete && normalizeText(row.firstVideoPostedDate)) {
-    priority = 'High';
-    triggerReason = `达人已发布 ${progress.postedCount} 条视频，但本次合作要求 ${requiredVideos} 条视频。`;
-    suggestedAction = missingVideos === null
-      ? '提醒达人确认剩余视频发布计划。'
-      : `提醒达人继续发布剩余 ${missingVideos} 条视频。`;
-  } else if (normalizeText(row.currentStatus).toLowerCase() === 'followed up' && lastContactDays !== null && lastContactDays >= 1 && isIncomplete) {
-    priority = 'Medium';
-    triggerReason = `已在 ${lastContactDays} 天前跟进过达人，但合作仍未完成。`;
-    suggestedAction = missingVideos === null
-      ? '发送第二次跟进，请达人给出明确进展。'
-      : `发送第二次跟进，请达人给出剩余 ${missingVideos} 条视频的明确进展。`;
-  } else if (normalizeText(row.currentStatus).toLowerCase() === 'contacted' && lastContactDays !== null && lastContactDays >= 2 && isNoSampleSent(row.sampleShippingStatus)) {
+  if (!normalizeText(row.username) || !hasAnyWorkflowSignal) {
+    priority = 'None';
+    triggerReason = '缺少达人状态信息，今天暂无必须跟进的任务。';
+    suggestedAction = '补充达人资料后再判断。';
+  } else if (handledToday) {
     priority = 'Low';
-    triggerReason = `已在 ${lastContactDays} 天前联系达人，但样品还未寄出。`;
+    triggerReason = '今日已处理，默认不再进入待处理队列。';
+    suggestedAction = '今日已处理，明日或按下次跟进日期复查。';
+  } else if (isCompleted(row, requiredVideos)) {
+    priority = 'Low';
+    triggerReason = '合作已完成，无需进入今日高优先级队列。';
+    suggestedAction = '合作完成维护。';
+  } else if (hasFailedStatus(row)) {
+    priority = 'Low';
+    triggerReason = '合作已失败或归档，默认低优先级复盘。';
+    suggestedAction = '合作失败归档。';
+  } else if ((pauseNote || futureFollowUp) && !dueFollowUp) {
+    priority = 'Low';
+    triggerReason = pauseNote ? '备注显示暂不催，已降低优先级。' : '下次跟进日期未到，暂不进入今日高优先级。';
+    suggestedAction = '按备注或下次跟进日期复查。';
+  } else if (hasPendingCreatorReply) {
+    priority = 'Highest';
+    triggerReason = '达人已回复，需先处理对话。';
+    suggestedAction = '生成「回复达人消息」话术，基于达人回复内容给出下一步回应。';
+  } else if (hasPostedAnyVideo && isIncomplete) {
+    priority = 'Highest';
+    triggerReason = `已发布 ${progress.postedCount} 条，剩余 ${missingVideos ?? 1} 条待履约。`;
+    suggestedAction = missingVideos === null ? '提醒达人确认剩余视频发布计划。' : `提醒达人继续发布剩余 ${missingVideos} 条视频。`;
+  } else if (hasDeliveredEvidence(row) && progress.postedCount === 0) {
+    if (deliveredDays !== null && deliveredDays >= 3) {
+      priority = 'Highest';
+      triggerReason = '样品已签收但仍未发布视频。';
+      suggestedAction = `发送拍摄跟进，提醒达人按照达人拍摄要求完成 ${requiredVideos} 条视频。`;
+    } else {
+      priority = 'High';
+      triggerReason = '样品近期签收，需确认拍摄计划。';
+      suggestedAction = '轻提醒达人确认收货和预计发布时间。';
+    }
+  } else if (row.lastFollowUpCount >= 2 && deliveredOrDeliverable && isIncomplete) {
+    priority = 'Highest';
+    triggerReason = '已多次跟进且交付未完成，存在合作失败风险。';
+    suggestedAction = '发送最后确认，请达人明确发布时间或是否继续合作。';
+  } else if (dueFollowUp) {
+    priority = 'High';
+    triggerReason = '下次跟进日期已到或逾期，今天应处理。';
+    suggestedAction = '按约定节点跟进达人。';
+  } else if (isShippedOrInTransit(row)) {
+    priority = row.lastFollowUpCount >= 2 || includesAny(statusText, ['logistics', '物流异常']) ? 'High' : 'Medium';
+    triggerReason = priority === 'High' ? '样品运输中，有物流提醒或异常需要确认。' : '样品仍在运输中，仅需轻提醒。';
+    suggestedAction = '轻量确认物流进度，避免提前催内容。';
+  } else if (lastContactDays !== null && lastContactDays >= 2 && isIncomplete) {
+    priority = isInvitedOnly(row) ? 'Medium' : 'High';
+    triggerReason = isInvitedOnly(row) ? '初次邀约后可轻跟进，但不应高于已寄样达人。' : '已联系但暂无回复，今天可跟进确认下一步。';
     suggestedAction = '发送轻量跟进，确认达人是否仍有合作兴趣。';
+  } else if (isInvitedOnly(row)) {
+    priority = 'Medium';
+    triggerReason = '初次邀约阶段，未进入交付风险。';
+    suggestedAction = '可轻量跟进合作兴趣。';
   }
 
   const failedWarnings = getFailureWarnings(row, today, requiredVideos);
+  const rank = PRIORITY_RANK[priority];
 
   return {
     ...row,
     videoProgress: progress.normalized,
     videoProgressWarning: progress.warning,
     priority,
-    priorityRank: PRIORITY_RANK[priority],
+    priorityRank: rank,
+    stageRank: stageRank(row, priority, today, requiredVideos),
     triggerReason,
     suggestedAction,
     failedWarnings,
-    needsFollowUp: priority !== 'None',
+    needsFollowUp: priority !== 'None' && (priority !== 'Low' || (!handledToday && !isCompleted(row, requiredVideos) && !hasFailedStatus(row) && !pauseNote && !futureFollowUp)),
   };
 }
 
 export function analyzeCreators(rows: CreatorRow[], today = new Date(), requiredVideos = DEFAULT_REQUIRED_VIDEOS): Task[] {
   return rows
     .map((row) => analyzeCreator(row, today, requiredVideos))
-    .sort((a, b) => a.priorityRank - b.priorityRank || a.username.localeCompare(b.username));
+    .sort((a, b) => a.stageRank - b.stageRank
+      || a.priorityRank - b.priorityRank
+      || (daysSince(b.lastContactDate, today) ?? -1) - (daysSince(a.lastContactDate, today) ?? -1)
+      || b.lastFollowUpCount - a.lastFollowUpCount
+      || (parseDate(a.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY) - (parseDate(b.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
+      || a.username.localeCompare(b.username));
 }
 
 export function buildSummary(tasks: Task[]): Summary {

@@ -54,6 +54,7 @@ export type CreatorRow = {
 export type Task = CreatorRow & {
   priority: Priority;
   priorityRank: number;
+  stageRank: number;
   triggerReason: string;
   suggestedAction: string;
   failedWarnings: string[];
