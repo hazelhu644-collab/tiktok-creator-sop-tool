@@ -1,12 +1,11 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { CREATOR_ROWS_STORAGE_KEY } from "./creatorData";
+import { CAMPAIGNS_STORAGE_KEY } from "./campaignData";
 import type { CreatorRow } from "./types";
-
-const FILMING_REQUIREMENTS_STORAGE_KEY = "tiktokCreatorSop.filmingRequirements";
 
 function creatorRow(overrides: Partial<CreatorRow> = {}): CreatorRow {
   return {
@@ -1556,8 +1555,16 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       productName: "Pet Fountain",
       creatorReply: "I cannot continue this content.",
       userReplyFocus: "好的样品寄回来",
+      requiredScenes: expect.any(String),
+      productSellingPoints: expect.any(String),
+      requiredVideoCount: expect.any(String),
+      requiredVideoLength: expect.any(String),
+      doNotFilmLikeThis: expect.any(String),
+      productLinkRequirement: expect.any(String),
+      referenceVideoLinks: expect.any(String),
     });
-    expect(payload.campaignContext).toContain("Pet Fountain");
+    expect(payload.campaignContext).toContain("产品名称：Pet Fountain");
+    expect(payload.campaignContext).toContain("必须展示内容：");
   });
 
   it("DeepSeek API failure shows a clear error and keeps local fallback message", async () => {
@@ -1650,8 +1657,8 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 
     render(<App />);
     await goTo(user, /内容审核/);
-    expect(screen.getByText("是否 40s+")).toBeInTheDocument();
-    expect(screen.getByText("是否可作为投流素材")).toBeInTheDocument();
+    expect(screen.getByText(/是否展示必须展示内容/)).toBeInTheDocument();
+    expect(screen.getByText(/是否挂 TikTok Shop 产品链接/)).toBeInTheDocument();
     expect(screen.getByDisplayValue("审核通过")).toBeInTheDocument();
 
     await goTo(user, /投流素材库/);
@@ -1668,51 +1675,50 @@ describe("settings and prompt helper", () => {
     const { unmount } = render(<App />);
     await goTo(user, /设置/);
 
-    expect(screen.queryByText("参考视频链接")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("参考视频链接"), {
+      target: {
+        value:
+          " https://tiktok.com/reference-one \n\nhttps://shop.tiktok.com/reference-two ",
+      },
+    });
 
-    await user.click(screen.getByRole("button", { name: "编辑拍摄要求" }));
-    await user.type(
-      screen.getByLabelText("对标视频链接（可选，每行一个）"),
-      " https://tiktok.com/reference-one \n\nhttps://shop.tiktok.com/reference-two ",
-    );
-    await user.click(screen.getByRole("button", { name: "保存拍摄要求" }));
-
-    expect(screen.getByText("参考视频链接")).toBeInTheDocument();
-    expect(
-      screen.getByText("https://tiktok.com/reference-one"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("https://shop.tiktok.com/reference-two"),
-    ).toBeInTheDocument();
-    expect(
-      JSON.parse(
-        window.localStorage.getItem(FILMING_REQUIREMENTS_STORAGE_KEY) ?? "{}",
-      ),
-    ).toMatchObject({
-      referenceLinks: [
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]",
+      );
+      expect(saved[0].referenceLinks).toEqual([
         "https://tiktok.com/reference-one",
         "https://shop.tiktok.com/reference-two",
-      ],
+      ]);
     });
 
     unmount();
     render(<App />);
     await goTo(user, /设置/);
-    expect(
-      screen.getByText("https://tiktok.com/reference-one"),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText("参考视频链接")).toHaveValue(
+      "https://tiktok.com/reference-one\nhttps://shop.tiktok.com/reference-two",
+    );
   });
 
   it("prefills saved reference links in the optional ChatGPT helper form", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
-      FILMING_REQUIREMENTS_STORAGE_KEY,
-      JSON.stringify({
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([{
+        id: "蒸汽梳毛器",
         productName: "蒸汽梳毛器",
+        sellingPoints: "",
         requirements: ["每位达人 2 条视频"],
         keyContentPoints: ["展示雾化功能"],
+        avoidShots: "",
+        videoCount: "每位达人 2 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
         referenceLinks: ["https://tiktok.com/prefill-reference"],
-      }),
+        defaultMessageSetting: "",
+        notes: "",
+      }]),
     );
 
     render(<App />);
@@ -1737,7 +1743,7 @@ describe("settings and prompt helper", () => {
     render(<App />);
     await goTo(user, /设置/);
     await user.click(screen.getByRole("button", { name: "展开辅助生成" }));
-    await user.type(screen.getByLabelText("产品卖点"), "静音循环水");
+    await user.type(screen.getAllByLabelText("产品卖点").slice(-1)[0] as HTMLElement, "静音循环水");
     await user.click(screen.getByRole("button", { name: "生成可复制提示词" }));
 
     const prompt = screen.getByLabelText("ChatGPT 提示词");

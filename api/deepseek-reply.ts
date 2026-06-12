@@ -24,9 +24,11 @@ type DeepSeekReplyRequest = {
   replyGoal?: string;
   acceptableConcession?: string;
   productSellingPoints?: string;
+  requiredScenes?: string;
   filmingRequirements?: string;
   requiredVideoCount?: string;
   requiredVideoLength?: string;
+  doNotFilmLikeThis?: string;
   productLinkRequirement?: string;
   referenceVideoLinks?: string;
   chineseUnderstanding?: string;
@@ -143,9 +145,11 @@ function buildGenerateMessages(
     channel: cleanText(input.channel),
     productName: cleanText(input.productName),
     productSellingPoints: cleanText(input.productSellingPoints),
+    requiredScenes: cleanText(input.requiredScenes),
     filmingRequirements: cleanText(input.filmingRequirements),
     requiredVideoCount: cleanText(input.requiredVideoCount),
     requiredVideoLength: cleanText(input.requiredVideoLength),
+    doNotFilmLikeThis: cleanText(input.doNotFilmLikeThis),
     productLinkRequirement: cleanText(input.productLinkRequirement),
     referenceVideoLinks: cleanText(input.referenceVideoLinks),
     currentStatus: cleanText(input.currentStatus),

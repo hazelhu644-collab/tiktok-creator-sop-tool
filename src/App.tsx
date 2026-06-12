@@ -199,6 +199,8 @@ function loadFilmingRequirements(): CreatorFilmingRequirements {
       savedRequirements,
     ) as Partial<CreatorFilmingRequirements>;
     return {
+      ...defaultCreatorFilmingRequirements,
+      ...parsedRequirements,
       productName:
         typeof parsedRequirements.productName === "string" &&
         parsedRequirements.productName.trim()
@@ -877,18 +879,10 @@ function App() {
       ...form,
       productName: target.productName,
       sellingPoint: target.sellingPoints,
-      requirement: [...target.requirements, ...target.keyContentPoints]
-        .filter(Boolean)
-        .join("; "),
+      requirement: target.keyContentPoints.filter(Boolean).join("; "),
       length: target.videoLength || form.length,
-      videos:
-        target.videoCount ||
-        String(
-          parseRequiredVideos(
-            campaignToFilmingRequirements(target, filmingRequirements),
-          ),
-        ),
-      tagRequirement: target.tagRequirement || form.tagRequirement,
+      videos: target.videoCount || String(parseRequiredVideos(campaignToFilmingRequirements(target, filmingRequirements))),
+      tagRequirement: [target.tagRequirement, target.productLink].filter(Boolean).join("; ") || form.tagRequirement,
     }));
   }, [activeCampaign, mergedCampaigns, filmingRequirements]);
 
@@ -906,19 +900,11 @@ function App() {
       creatorName: selectedTemplateCreator.username || form.creatorName,
       productName:
         selectedTemplateCreator.product || creatorRequirements.productName,
-      sellingPoint: creatorCampaign?.sellingPoints || form.sellingPoint,
-      requirement:
-        [
-          ...creatorRequirements.requirements,
-          ...creatorRequirements.keyContentPoints,
-        ]
-          .filter(Boolean)
-          .join("; ") || form.requirement,
-      length: creatorCampaign?.videoLength || form.length,
-      videos:
-        creatorCampaign?.videoCount ||
-        String(parseRequiredVideos(creatorRequirements)),
-      tagRequirement: creatorCampaign?.tagRequirement || form.tagRequirement,
+      sellingPoint: creatorRequirements.sellingPoints || form.sellingPoint,
+      requirement: creatorRequirements.requiredScenes || form.requirement,
+      length: creatorRequirements.videoLength || form.length,
+      videos: creatorRequirements.videoCount || String(parseRequiredVideos(creatorRequirements)),
+      tagRequirement: creatorRequirements.productLinkRequirement || form.tagRequirement,
       trackingNumber:
         parseNumberFromNotes(selectedTemplateCreator.notes, [
           "tracking",
@@ -1250,9 +1236,7 @@ function App() {
   }
 
   function buildLocalMessageForTask(task: Task): GeneratedMessage {
-    const creatorCampaign = mergedCampaigns.find(
-      (campaign) => campaign.productName === task.product,
-    );
+    const creatorCampaign = campaignForProduct(task.product);
     return generateMessage(
       task,
       channel,
@@ -1337,38 +1321,49 @@ function App() {
     setDeepSeekRecommendedTrackingStatus("");
   }
 
+  function campaignForProduct(product: string): Campaign | undefined {
+    return mergedCampaigns.find((campaign) => campaign.productName === product);
+  }
+
+  function selectedTaskCampaignRequirements(task: Task): CreatorFilmingRequirements {
+    return campaignToFilmingRequirements(campaignForProduct(task.product), activeFilmingRequirements);
+  }
+
+  function campaignRequirementEntries(requirements: CreatorFilmingRequirements): Array<{ label: string; value: string }> {
+    return [
+      { label: "产品名称", value: requirements.productName },
+      { label: "必须展示内容", value: requirements.requiredScenes },
+      { label: "产品卖点", value: requirements.sellingPoints },
+      { label: "视频时长要求", value: requirements.videoLength },
+      { label: "视频数量要求", value: requirements.videoCount },
+      { label: "不希望达人这样拍", value: requirements.avoidShots },
+      { label: "挂车 / TikTok Shop 产品链接要求", value: requirements.productLinkRequirement },
+      { label: "参考视频链接", value: requirements.referenceVideoLinks },
+    ];
+  }
+
   function buildCampaignContext(task: Task): string {
-    const campaign = mergedCampaigns.find(
-      (item) => item.productName === task.product,
-    );
+    const campaign = campaignForProduct(task.product);
     const requirements = campaignToFilmingRequirements(
       campaign,
       activeFilmingRequirements,
     );
     return [
-      `产品：${task.product || requirements.productName}`,
-      campaign?.sellingPoints ? `卖点：${campaign.sellingPoints}` : "",
-      requirements.requirements.length
-        ? `拍摄要求：${requirements.requirements.join("；")}`
-        : "",
-      requirements.keyContentPoints.length
-        ? `内容重点：${requirements.keyContentPoints.join("；")}`
-        : "",
-      campaign?.avoidShots ? `避免事项：${campaign.avoidShots}` : "",
-      campaign?.productLink ? `产品链接：${campaign.productLink}` : "",
-      requirements.referenceLinks?.length
-        ? `参考链接：${requirements.referenceLinks.join("；")}`
-        : "",
-      campaign?.notes ? `项目备注：${campaign.notes}` : "",
+      `产品名称：${task.product || requirements.productName}`,
+      `必须展示内容：${requirements.requiredScenes}`,
+      `产品卖点：${requirements.sellingPoints}`,
+      `视频时长要求：${requirements.videoLength}`,
+      `视频数量要求：${requirements.videoCount}`,
+      `不希望达人这样拍：${requirements.avoidShots}`,
+      `挂车 / TikTok Shop 产品链接要求：${requirements.productLinkRequirement}`,
+      `参考视频链接：${requirements.referenceVideoLinks}`,
     ]
       .filter(Boolean)
       .join("\n");
   }
 
   function buildDeepSeekPayload(task: Task, action: DeepSeekAction) {
-    const campaign = mergedCampaigns.find(
-      (item) => item.productName === task.product,
-    );
+    const campaign = campaignForProduct(task.product);
     const requirements = campaignToFilmingRequirements(
       campaign,
       activeFilmingRequirements,
@@ -1384,24 +1379,14 @@ function App() {
       acceptableConcession: replyConcession,
       channel,
       productName: task.product || requirements.productName,
-      productSellingPoints:
-        campaign?.sellingPoints || requirements.keyContentPoints.join("；"),
-      filmingRequirements: requirements.requirements.join("；"),
-      requiredVideoCount:
-        campaign?.videoCount || String(parseRequiredVideos(requirements)),
-      requiredVideoLength:
-        campaign?.videoLength ||
-        requirements.requirements.find((item) => item.includes("秒")) ||
-        "",
-      productLinkRequirement:
-        campaign?.tagRequirement ||
-        requirements.requirements.find(
-          (item) =>
-            item.includes("链接") ||
-            item.toLowerCase().includes("product link"),
-        ) ||
-        "必须挂 TikTok Shop 产品链接",
-      referenceVideoLinks: requirements.referenceLinks?.join("\n") || "",
+      requiredScenes: requirements.requiredScenes,
+      productSellingPoints: requirements.sellingPoints,
+      filmingRequirements: requirements.requiredScenes,
+      requiredVideoCount: requirements.videoCount,
+      requiredVideoLength: requirements.videoLength,
+      doNotFilmLikeThis: requirements.avoidShots,
+      productLinkRequirement: requirements.productLinkRequirement,
+      referenceVideoLinks: requirements.referenceVideoLinks,
       currentStatus:
         task.currentStatus || displayStatus(inferStatus(task, requiredVideos)),
       campaignContext: buildCampaignContext(task),
@@ -1714,13 +1699,22 @@ function App() {
   }
 
   function handleSaveFilmingRequirements() {
-    const next = {
+    const keyContentPoints = normalizeListText(keyContentPointsDraft);
+    const requirements = normalizeListText(filmingRequirementsDraft);
+    const referenceLinks = normalizeListText(referenceLinksDraft);
+    const next: CreatorFilmingRequirements = {
+      ...defaultCreatorFilmingRequirements,
       productName:
         filmingProductNameDraft.trim() ||
         defaultCreatorFilmingRequirements.productName,
-      requirements: normalizeListText(filmingRequirementsDraft),
-      keyContentPoints: normalizeListText(keyContentPointsDraft),
-      referenceLinks: normalizeListText(referenceLinksDraft),
+      requiredScenes: keyContentPoints.join("；") || defaultCreatorFilmingRequirements.requiredScenes,
+      videoCount: requirements.find((item) => item.includes("条视频")) || defaultCreatorFilmingRequirements.videoCount,
+      videoLength: requirements.find((item) => item.includes("秒")) || defaultCreatorFilmingRequirements.videoLength,
+      productLinkRequirement: requirements.find((item) => item.includes("链接")) || defaultCreatorFilmingRequirements.productLinkRequirement,
+      requirements,
+      keyContentPoints,
+      referenceLinks,
+      referenceVideoLinks: referenceLinks.join("\n"),
     };
     setFilmingRequirements(next);
     setTemplateForm((form) => ({
@@ -1759,14 +1753,15 @@ function App() {
   }
 
   function handleOpenPromptHelper() {
+    const helperRequirements = campaignToFilmingRequirements(activeCampaign ?? mergedCampaigns[0], filmingRequirements);
     setPromptHelperForm({
       sellingPoints: "",
-      videoCount: String(requiredVideos),
+      videoCount: String(parseRequiredVideos(helperRequirements)),
       durationRequirement: "",
       targetPetOrScene: "",
       mustShowShots: "",
       avoidShots: "",
-      referenceLinks: listToText(filmingRequirements.referenceLinks),
+      referenceLinks: helperRequirements.referenceVideoLinks || listToText(helperRequirements.referenceLinks),
     });
     setGeneratedChatGptPrompt("");
     setPromptCopyStatus("");
@@ -2257,6 +2252,16 @@ function App() {
                   <button type="button" className="secondary" onClick={() => setToast({ tone: "success", text: "生成多样品合并提醒：请在一条消息中列出多个产品，并分别确认每个样品的到货、拍摄和发布时间。" })}>生成多样品合并提醒</button>
                 </div>
               )}
+              <details className="more-info-card current-product-brief" data-testid="current-product-filming-requirements">
+                <summary>当前产品拍摄要求</summary>
+                <div className="current-creator-grid secondary-grid">
+                  {campaignRequirementEntries(selectedTaskCampaignRequirements(selectedTask)).map((item) => (
+                    <span key={item.label}>
+                      {item.label}<b>{item.value || "—"}</b>
+                    </span>
+                  ))}
+                </div>
+              </details>
               <details className="more-info-card">
                 <summary>更多信息</summary>
                 <div className="current-creator-grid secondary-grid">
@@ -3278,17 +3283,20 @@ function App() {
     return renderDashboard();
   }
 
-  function renderReview() {
-    const checklist = [
-      "是否 40s+",
-      "是否按要求发布 2 条视频",
-      "是否挂 TikTok Shop 商品卡",
-      "是否展示真实宠物使用场景",
-      "是否有清晰开箱/使用过程",
-      "是否有 CTA",
-      "是否存在违规表述",
-      "是否可作为投流素材",
+  function reviewChecklistForRow(row: CreatorRow) {
+    const requirements = campaignToFilmingRequirements(campaignForProduct(row.product), activeFilmingRequirements);
+    return [
+      `是否展示必须展示内容：${requirements.requiredScenes || "按 Campaign 配置"}`,
+      `是否体现产品卖点：${requirements.sellingPoints || "按 Campaign 配置"}`,
+      `是否满足视频时长要求：${requirements.videoLength || "按 Campaign 配置"}`,
+      `是否满足视频数量要求：${requirements.videoCount || "按 Campaign 配置"}`,
+      `是否避免“不希望达人这样拍”的内容：${requirements.avoidShots || "按 Campaign 配置"}`,
+      `是否挂 TikTok Shop 产品链接：${requirements.productLinkRequirement || "按 Campaign 配置"}`,
+      `是否参考了正确的视频方向：${requirements.referenceVideoLinks || "按 Campaign 配置"}`,
     ];
+  }
+
+  function renderReview() {
     return (
       <>
         {renderPageHeader(
@@ -3304,7 +3312,7 @@ function App() {
                   {displayStatus(inferStatus(row, requiredVideos))}
                 </span>
               </div>
-              {checklist.map((item) => (
+              {reviewChecklistForRow(row).map((item) => (
                 <label key={item} className="check-row">
                   <input type="checkbox" />
                   {item}
@@ -3407,6 +3415,14 @@ function App() {
 
   function renderSettings() {
     const targetCampaign = activeCampaign ?? mergedCampaigns[0];
+    const updateCampaign = (patch: Partial<Campaign>) => {
+      if (!targetCampaign) return;
+      setCampaigns(
+        mergedCampaigns.map((campaign) =>
+          campaign.id === targetCampaign.id ? { ...campaign, ...patch } : campaign,
+        ),
+      );
+    };
     return (
       <>
         {renderPageHeader(
@@ -3418,269 +3434,90 @@ function App() {
             <div>
               <h2>产品项目设置</h2>
               <p className="muted">
-                每个产品项目独立保存卖点、拍摄要求、参考视频和备注。
+                达人拍摄要求是 Campaign 核心配置。每个产品项目独立保存 8 个拍摄要求字段，供工作台、话术、DeepSeek 和内容审核调用。
               </p>
             </div>
-            <button type="button" onClick={handleEditFilmingRequirements}>
-              编辑拍摄要求
-            </button>
           </div>
+          <label className="campaign-picker">
+            选择产品 / Campaign
+            <select
+              value={targetCampaign?.productName ?? ""}
+              onChange={(event) => setSelectedCampaign(event.target.value)}
+            >
+              {mergedCampaigns.map((campaign) => (
+                <option key={campaign.id} value={campaign.productName}>
+                  {campaign.productName}
+                </option>
+              ))}
+            </select>
+          </label>
           {targetCampaign && (
-            <div className="settings-form campaign-settings">
+            <div className="settings-form campaign-settings" data-testid="campaign-settings-form">
               <label>
                 产品名称
                 <input
                   value={targetCampaign.productName}
-                  onChange={(event) =>
-                    setCampaigns((current) =>
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, productName: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
+                  onChange={(event) => updateCampaign({ productName: event.target.value })}
                 />
               </label>
               <label>
-                产品卖点（项目）
+                必须展示内容
                 <textarea
+                  value={listToText(targetCampaign.keyContentPoints)}
+                  onChange={(event) => updateCampaign({ keyContentPoints: normalizeListText(event.target.value) })}
+                  rows={5}
+                />
+              </label>
+              <label>
+                产品卖点
+                <textarea
+                  aria-label="Campaign 产品卖点"
                   value={targetCampaign.sellingPoints}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, sellingPoints: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
+                  onChange={(event) => updateCampaign({ sellingPoints: event.target.value })}
                   rows={3}
                 />
               </label>
               <label>
-                拍摄要求
-                <textarea
-                  value={listToText(targetCampaign.requirements)}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? {
-                              ...campaign,
-                              requirements: normalizeListText(
-                                event.target.value,
-                              ),
-                            }
-                          : campaign,
-                      ),
-                    )
-                  }
-                  rows={5}
+                视频时长要求
+                <input
+                  value={targetCampaign.videoLength}
+                  onChange={(event) => updateCampaign({ videoLength: event.target.value })}
                 />
               </label>
               <label>
-                内容重点
-                <textarea
-                  value={listToText(targetCampaign.keyContentPoints)}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? {
-                              ...campaign,
-                              keyContentPoints: normalizeListText(
-                                event.target.value,
-                              ),
-                            }
-                          : campaign,
-                      ),
-                    )
-                  }
-                  rows={5}
+                视频数量要求
+                <input
+                  value={targetCampaign.videoCount}
+                  onChange={(event) => updateCampaign({ videoCount: event.target.value })}
                 />
               </label>
               <label>
                 不希望达人这样拍
                 <textarea
                   value={targetCampaign.avoidShots}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, avoidShots: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
+                  onChange={(event) => updateCampaign({ avoidShots: event.target.value })}
                   rows={3}
                 />
               </label>
               <label>
-                视频数量
-                <input
-                  value={targetCampaign.videoCount}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, videoCount: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
+                挂车 / TikTok Shop 产品链接要求
+                <textarea
+                  value={[targetCampaign.tagRequirement, targetCampaign.productLink].filter(Boolean).join("\n")}
+                  onChange={(event) => updateCampaign({ tagRequirement: event.target.value, productLink: "" })}
+                  rows={3}
                 />
               </label>
               <label>
-                视频时长
-                <input
-                  value={targetCampaign.videoLength}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, videoLength: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label>
-                挂车 / Tag 要求
-                <input
-                  value={targetCampaign.tagRequirement}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, tagRequirement: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label>
-                TikTok Shop 产品链接
-                <input
-                  value={targetCampaign.productLink}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, productLink: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label>
-                参考视频链接（项目）
+                参考视频链接
                 <textarea
                   value={listToText(targetCampaign.referenceLinks)}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? {
-                              ...campaign,
-                              referenceLinks: normalizeListText(
-                                event.target.value,
-                              ),
-                            }
-                          : campaign,
-                      ),
-                    )
-                  }
-                  rows={3}
-                />
-              </label>
-              <label>
-                产品备注
-                <textarea
-                  value={targetCampaign.notes}
-                  onChange={(event) =>
-                    setCampaigns(
-                      mergedCampaigns.map((campaign) =>
-                        campaign.id === targetCampaign.id
-                          ? { ...campaign, notes: event.target.value }
-                          : campaign,
-                      ),
-                    )
-                  }
+                  onChange={(event) => updateCampaign({ referenceLinks: normalizeListText(event.target.value) })}
                   rows={3}
                 />
               </label>
               <p className="ai-status">
-                产品项目设置会自动保存到 localStorage。
+                产品项目设置会自动保存到 localStorage，并作为当前 Campaign 拍摄要求的唯一配置来源。
               </p>
-              {targetCampaign.referenceLinks.length > 0 && (
-                <div className="collapsed-copy">
-                  <h3>参考视频链接</h3>
-                  <ul>
-                    {targetCampaign.referenceLinks.map((link) => (
-                      <li key={link}>{link}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-          {isEditingFilmingRequirements && (
-            <div className="settings-form">
-              <label>
-                默认产品名称
-                <input
-                  value={filmingProductNameDraft}
-                  onChange={(event) =>
-                    setFilmingProductNameDraft(event.target.value)
-                  }
-                />
-              </label>
-              <label>
-                默认拍摄要求（每行一条）
-                <textarea
-                  value={filmingRequirementsDraft}
-                  onChange={(event) =>
-                    setFilmingRequirementsDraft(event.target.value)
-                  }
-                  rows={5}
-                />
-              </label>
-              <label>
-                默认内容重点（每行一条）
-                <textarea
-                  value={keyContentPointsDraft}
-                  onChange={(event) =>
-                    setKeyContentPointsDraft(event.target.value)
-                  }
-                  rows={5}
-                />
-              </label>
-              <label>
-                对标视频链接（可选，每行一个）
-                <textarea
-                  value={referenceLinksDraft}
-                  onChange={(event) =>
-                    setReferenceLinksDraft(event.target.value)
-                  }
-                  rows={3}
-                />
-              </label>
-              <div className="inline-actions">
-                <button type="button" onClick={handleSaveFilmingRequirements}>
-                  保存拍摄要求
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={handleRestoreDefaultFilmingRequirements}
-                >
-                  恢复默认拍摄要求
-                </button>
-              </div>
             </div>
           )}
         </section>
