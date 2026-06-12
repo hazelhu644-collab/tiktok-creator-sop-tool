@@ -319,8 +319,8 @@ describe('generateMessage status-aware communication center scenarios', () => {
     });
     const message = generateMessage(inTransitTask, 'TikTok Shop Affiliate Message');
 
-    expect(message.communicationAction).toBe('物流异常确认');
-    expect(message.urgencyLevel).toBe('极高');
+    expect(message.communicationAction).toBe('确认物流 / 是否签收');
+    expect(message.urgencyLevel).toBe('高');
     expect(message.scenario).toBe('Logistics Exception Confirmation');
     expect(message.scenario).not.toBe('Final Follow-up Before Failed Candidate');
     expect(message.english).not.toContain('required video(s) are still incomplete');
@@ -339,7 +339,7 @@ describe('generateMessage status-aware communication center scenarios', () => {
       priorityRank: 2,
     }), 'TikTok DM');
 
-    expect(message.communicationAction).toBe('样品运输中建联');
+    expect(message.communicationAction).toBe('样品运输中，提前沟通拍摄要求');
     expect(message.scenario).toBe('Sample In Transit Reminder');
     expect(message.scenario).not.toBe('Partial Video Completion Follow-up');
     expect(message.english).not.toContain('remaining video');
@@ -357,10 +357,10 @@ describe('generateMessage status-aware communication center scenarios', () => {
       failedWarnings: [],
     }), 'Email');
 
-    expect(message.urgencyLevel).toBe('极高');
-    expect(message.communicationAction).toBe('物流异常确认');
+    expect(message.urgencyLevel).toBe('高');
+    expect(message.communicationAction).toBe('确认物流 / 是否签收');
     expect(message.scenario).toBe('Logistics Exception Confirmation');
-    expect(message.scenarioReason).toContain('需要优先确认物流状态');
+    expect(message.scenarioReason).toContain('需要优先确认物流 / 是否签收');
     expect(message.english).toContain('confirm whether you have received it or seen any delivery updates');
     expect(message.english).not.toContain('If you’re no longer able to continue');
     expect(message.english).not.toMatch(chineseCharacterPattern);
@@ -377,9 +377,9 @@ describe('generateMessage status-aware communication center scenarios', () => {
       lastFollowUpCount: 1,
     }));
 
-    expect(classification.urgencyLevel).toBe('极高');
-    expect(classification.communicationAction).toBe('物流异常确认');
-    expect(classification.reason).toContain('样品仍处于运输中，暂不能催促视频履约');
+    expect(classification.urgencyLevel).toBe('高');
+    expect(classification.communicationAction).toBe('确认物流 / 是否签收');
+    expect(classification.reason).toContain('样品仍处于运输中');
   });
 
   it('classifies Delivered + 0/N as sample-delivered filming follow-up without high-risk pressure', () => {
@@ -480,7 +480,7 @@ describe('generateMessage status-aware communication center scenarios', () => {
     expect(message.scenario).toBe('Sample In Transit Reminder');
     expect(message.scenarioReason).toContain('物流状态已发货/运输中');
     expect(message.english).toContain('has been shipped and is currently on the way');
-    expect(message.english).toContain('keep an eye on the delivery updates');
+    expect(message.english).toContain('plan the content in advance');
     expect(message.english).toContain('when you expect to start filming after receiving the sample');
     expect(message.english).toContain('TikTok Shop product link');
     expect(message.english).toContain('https://example.com/ref-1');
@@ -509,7 +509,7 @@ describe('generateMessage status-aware communication center scenarios', () => {
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
 
-  it('lets a present delivered date override stale To Contact status for 0/N video progress', () => {
+  it('does not let a lone arrival date override stale To Contact without delivered logistics status', () => {
     const message = generateMessage(task({
       currentStatus: 'To Contact',
       sampleShippingStatus: '',
@@ -519,10 +519,8 @@ describe('generateMessage status-aware communication center scenarios', () => {
       lastFollowUpCount: 0,
     }), 'Email');
 
-    expect(message.scenario).toBe('Sample Delivered Follow-up');
-    expect(message.scenarioReason).toContain('样品到货日期已填写');
-    expect(message.english).toContain('sample has been delivered');
-    expect(message.english).not.toContain('potential collaboration');
+    expect(message.scenario).toBe('First Outreach');
+    expect(message.english).toContain('potential collaboration');
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
 

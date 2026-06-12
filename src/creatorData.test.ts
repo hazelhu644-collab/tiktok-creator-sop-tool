@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CREATOR_ROWS_STORAGE_KEY, createBlankCreatorRow, creatorRowsToCsv, deleteCreatorRow, loadCreatorRows, saveCreatorRows, updateCreatorField } from './creatorData';
+import { buildDuplicateImportSummary, CREATOR_ROWS_STORAGE_KEY, createBlankCreatorRow, creatorRowsToCsv, deleteCreatorRow, getDuplicateCheck, loadCreatorRows, saveCreatorRows, updateCreatorField } from './creatorData';
 import { normalizeRecord } from './fileParser';
 import type { CreatorRow } from './types';
 
@@ -24,6 +24,7 @@ function row(overrides: Partial<CreatorRow> = {}): CreatorRow {
 
 afterEach(() => {
   window.localStorage.clear();
+
 });
 
 describe('editable creator data helpers', () => {
@@ -84,7 +85,9 @@ describe('editable creator data helpers', () => {
     ]);
 
     expect(csv.startsWith('\ufeff')).toBe(true);
-    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,样品物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复,达人备注');
+    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,样品物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复,达人备注,是否同达人多样品,同达人样品数量');
+    expect(csv).not.toContain('预计到货日期');
+    expect(csv).not.toContain('实际到货日期');
     expect(csv).not.toContain('2 条记录');
     expect(csv).not.toContain('{"date"');
     expect(csv).toContain('"creator, one"');
@@ -147,4 +150,47 @@ describe('editable creator data helpers', () => {
       notes: 'general note',
     });
   });
+
+  it('detects same creator + same product as possible duplicate without blocking row creation', () => {
+    const existing = row({ id: 'a', username: '@creatorA', product: 'Pet Brush' });
+    const duplicate = row({ id: 'b', username: 'creatorA', product: 'Pet Brush' });
+
+    const result = getDuplicateCheck(duplicate, [existing]);
+
+    expect(result.duplicateCreator).toBe(true);
+    expect(result.possibleDuplicate).toBe(true);
+    expect(result.multiSample).toBe(false);
+  });
+
+  it('allows same creator with a different product as valid multi-sample creator', () => {
+    const existing = row({ id: 'a', username: '@creatorA', product: 'Pet Brush' });
+    const secondSample = row({ id: 'b', profileLink: 'https://www.tiktok.com/@creatorA', product: 'Cat Teaser Wand' });
+
+    const result = getDuplicateCheck(secondSample, [existing]);
+
+    expect(result.duplicateCreator).toBe(true);
+    expect(result.possibleDuplicate).toBe(false);
+    expect(result.multiSample).toBe(true);
+  });
+
+  it('summarizes imported possible duplicates and valid multi-sample records without deleting rows', () => {
+    const existing = [row({ id: 'existing', username: '@creatorA', product: 'Pet Brush' })];
+    const incoming = [
+      row({ id: 'same-product', username: 'creatorA', product: 'Pet Brush' }),
+      row({ id: 'different-product', username: 'creatorA', product: 'Cat Teaser Wand' }),
+    ];
+
+    expect(buildDuplicateImportSummary(incoming, existing)).toEqual({
+      possibleDuplicateCount: 1,
+      multiSampleCount: 1,
+      duplicateCreatorCount: 2,
+    });
+    expect([...incoming, ...existing]).toHaveLength(3);
+  });
+
+  it('imports ETA and estimated arrival headers into the single sample arrival date field', () => {
+    expect(normalizeRecord({ 'ETA': '2026-06-12', 'Creator username': 'eta_creator' }, 0).sampleDeliveredDate).toBe('2026-06-12');
+    expect(normalizeRecord({ 'Estimated arrival date': '2026-06-13', 'Creator username': 'arrival_creator' }, 1).sampleDeliveredDate).toBe('2026-06-13');
+  });
+
 });

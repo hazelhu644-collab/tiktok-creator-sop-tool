@@ -143,12 +143,28 @@ function includesAny(value: string, options: string[]): boolean {
   return options.some((option) => normalized.includes(option));
 }
 
-function isDelivered(status: string): boolean {
-  return normalizeText(status).toLowerCase() === 'delivered';
+export function isDeliveredLogisticsStatus(status: string): boolean {
+  return includesAny(normalizeText(status), ['delivered', '已签收', '已到货', '签收', '到货']);
+}
+
+export function isInTransitLogisticsStatus(status: string): boolean {
+  const normalized = normalizeText(status).toLowerCase();
+  if (!normalized || ['not shipped', 'not started', 'pending', '未发货', '未寄样'].includes(normalized)) return false;
+  return includesAny(normalized, ['sample shipped', 'in transit', '运输中', '运输', '已寄', '已发货'])
+    || normalized === 'shipped';
+}
+
+export function arrivalDateDeltaDays(dateValue: string | undefined, today: Date): number | null {
+  const date = parseDate(dateValue ?? '');
+  if (!date) return null;
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return Math.floor((dateStart - todayStart) / DAY_MS);
 }
 
 function hasDeliveredEvidence(row: CreatorRow): boolean {
-  return isDelivered(row.sampleShippingStatus) || parseDate(row.sampleDeliveredDate) !== null;
+  return isDeliveredLogisticsStatus(row.sampleShippingStatus)
+    || includesAny(normalizeText(row.currentStatus), ['delivered', '已签收', '已到货', '签收', '到货', 'waiting video', '等待视频']);
 }
 
 function isNoSampleSent(status: string): boolean {
@@ -254,8 +270,8 @@ function hasPauseNote(row: CreatorRow): boolean {
 }
 
 function isShippedOrInTransit(row: CreatorRow): boolean {
-  return includesAny(normalizeText(row.sampleShippingStatus), ['shipped', 'in transit', '运输', '已寄', '已发货'])
-    || includesAny(normalizeText(row.currentStatus), ['sample shipped', 'in transit', '运输中', '已寄样']);
+  return isInTransitLogisticsStatus(row.sampleShippingStatus)
+    || (isInTransitLogisticsStatus(row.currentStatus) && !hasDeliveredEvidence(row));
 }
 
 function isInvitedOnly(row: CreatorRow): boolean {
@@ -288,6 +304,7 @@ function stageRank(row: CreatorRow, priority: Priority, today: Date, requiredVid
 
 export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVideos = DEFAULT_REQUIRED_VIDEOS): Task {
   const deliveredDays = daysSince(row.sampleDeliveredDate, today);
+  const arrivalDeltaDays = arrivalDateDeltaDays(row.sampleDeliveredDate, today);
   const lastContactDays = daysSince(row.lastContactDate, today);
   const progress = videoProgress(row, requiredVideos);
   const missingVideos = missingVideoCount(progress, requiredVideos);
@@ -325,7 +342,7 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
     priority = 'Low';
     triggerReason = '合作已失败或归档，默认低优先级复盘。';
     suggestedAction = '合作失败归档。';
-  } else if ((pauseNote || futureFollowUp) && !dueFollowUp) {
+  } else if ((pauseNote || futureFollowUp) && !dueFollowUp && !isShippedOrInTransit(row)) {
     priority = 'Low';
     triggerReason = pauseNote ? '备注显示暂不催，已降低优先级。' : '下次跟进日期未到，暂不进入今日高优先级。';
     suggestedAction = '按备注或下次跟进日期复查。';
@@ -356,9 +373,22 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
     triggerReason = '下次跟进日期已到或逾期，今天应处理。';
     suggestedAction = '按约定节点跟进达人。';
   } else if (isShippedOrInTransit(row)) {
-    priority = row.lastFollowUpCount >= 2 || includesAny(statusText, ['logistics', '物流异常']) ? 'High' : 'Medium';
-    triggerReason = priority === 'High' ? '样品运输中，有物流提醒或异常需要确认。' : '样品仍在运输中，仅需轻提醒。';
-    suggestedAction = '轻量确认物流进度，避免提前催内容。';
+    const hasLogisticsException = includesAny(statusText, ['logistics', '物流异常']) || includesAny(row.notes, ['logistics', '物流异常', 'delayed', 'stuck', 'lost']);
+    const isArrivingSoon = arrivalDeltaDays !== null && arrivalDeltaDays <= 1;
+    priority = hasLogisticsException || isArrivingSoon ? 'High' : 'Medium';
+    if (arrivalDeltaDays !== null && arrivalDeltaDays < 0) {
+      triggerReason = '样品到货日期已过，需确认物流 / 是否签收。';
+      suggestedAction = '确认物流 / 是否签收。';
+    } else if (arrivalDeltaDays === 0) {
+      triggerReason = '样品预计今天到货，需确认样品是否收到。';
+      suggestedAction = '确认样品是否收到。';
+    } else if (arrivalDeltaDays === 1) {
+      triggerReason = '样品预计明天到货，提醒达人注意签收并准备拍摄。';
+      suggestedAction = '提醒达人注意签收并准备拍摄。';
+    } else {
+      triggerReason = '样品运输中，需提前沟通拍摄要求，帮助达人到货前规划内容。';
+      suggestedAction = '样品运输中，提前沟通拍摄要求。';
+    }
   } else if (lastContactDays !== null && lastContactDays >= 2 && isIncomplete) {
     priority = isInvitedOnly(row) ? 'Medium' : 'High';
     triggerReason = isInvitedOnly(row) ? '初次邀约后可轻跟进，但不应高于已寄样达人。' : '已联系但暂无回复，今天可跟进确认下一步。';
@@ -391,6 +421,7 @@ export function analyzeCreators(rows: CreatorRow[], today = new Date(), required
     .map((row) => analyzeCreator(row, today, requiredVideos))
     .sort((a, b) => a.stageRank - b.stageRank
       || a.priorityRank - b.priorityRank
+      || (a.stageRank === 5 && b.stageRank === 5 ? (arrivalDateDeltaDays(a.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY) - (arrivalDateDeltaDays(b.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY) : 0)
       || (daysSince(b.lastContactDate, today) ?? -1) - (daysSince(a.lastContactDate, today) ?? -1)
       || b.lastFollowUpCount - a.lastFollowUpCount
       || (parseDate(a.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY) - (parseDate(b.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)

@@ -603,6 +603,7 @@ describe("creator database redesigned table", () => {
   it("adds and deletes creators from the redesigned database page", async () => {
     const user = userEvent.setup();
     seedCreators([creatorRow({ id: "alpha", username: "alpha_creator" })]);
+    vi.spyOn(window, "prompt").mockReturnValueOnce("").mockReturnValueOnce("智能宠物饮水机");
 
     render(<App />);
     await goTo(user, /达人数据库/);
@@ -617,6 +618,47 @@ describe("creator database redesigned table", () => {
       ) as CreatorRow[];
       expect(saved).toHaveLength(1);
     });
+  });
+
+  it("shows duplicate options when manually adding an existing creator", async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: "alpha", username: "alpha_creator", product: "Pet Brush" })]);
+    const prompt = vi.spyOn(window, "prompt");
+    prompt.mockReturnValueOnce("alpha_creator").mockReturnValueOnce("Cat Teaser Wand");
+
+    render(<App />);
+    await goTo(user, /达人数据库/);
+    await user.click(screen.getByRole("button", { name: "新增达人" }));
+
+    expect(screen.getByText("该达人已存在。你可以选择：")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续新增为不同样品" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制已有达人基础信息" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消新增" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "复制已有达人基础信息" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      expect(saved).toHaveLength(2);
+      expect(saved.map((row) => row.product)).toContain("Cat Teaser Wand");
+    });
+  });
+
+  it("keeps multi-sample creator rows separate in the workbench and current panel", () => {
+    seedCreators([
+      creatorRow({ id: "brush", username: "multi_creator", product: "Pet Brush", sampleShippingStatus: "In Transit", currentStatus: "Sample Shipped", sampleDeliveredDate: "2026-06-08" }),
+      creatorRow({ id: "wand", username: "multi_creator", product: "Cat Teaser Wand", sampleShippingStatus: "Delivered", currentStatus: "Delivered", sampleDeliveredDate: "2026-06-01" }),
+    ]);
+
+    render(<App />);
+
+    const queue = screen.getByTestId("creator-queue");
+    expect(within(queue).getByText(/Pet Brush/)).toBeInTheDocument();
+    expect(within(queue).getByText(/Cat Teaser Wand/)).toBeInTheDocument();
+    expect(screen.getAllByText("同达人多样品").length).toBeGreaterThan(0);
+    expect(screen.getByText(/该达人还有 1 个其他样品合作/)).toBeInTheDocument();
   });
 });
 
@@ -1712,6 +1754,7 @@ describe("settings and prompt helper", () => {
   it("clears local creator data from Settings", async () => {
     const user = userEvent.setup();
     seedCreators([creatorRow({ id: "alpha", username: "alpha_creator" })]);
+    vi.spyOn(window, "prompt").mockReturnValueOnce("").mockReturnValueOnce("智能宠物饮水机");
 
     render(<App />);
     await goTo(user, /设置/);

@@ -23,6 +23,113 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: '达人备注', key: 'notes' },
 ];
 
+
+export type DuplicateCheckResult = {
+  duplicateCreator: boolean;
+  possibleDuplicate: boolean;
+  multiSample: boolean;
+  matchingRows: CreatorRow[];
+  sameProductRows: CreatorRow[];
+  differentProductRows: CreatorRow[];
+};
+
+export type ImportDuplicateSummary = {
+  possibleDuplicateCount: number;
+  multiSampleCount: number;
+  duplicateCreatorCount: number;
+};
+
+const EXTRA_EXPORT_COLUMNS = [
+  { header: '是否同达人多样品', key: 'isMultiSample' },
+  { header: '同达人样品数量', key: 'multiSampleCount' },
+] as const;
+
+function normalizeCreatorAccount(value: string): string {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/^@+/, '')
+    .replace(/^https?:\/\/(www\.)?tiktok\.com\/@?/i, '')
+    .replace(/[/?#].*$/, '')
+    .trim();
+}
+
+function normalizeProfileLink(value: string): string {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/\/$/, '')
+    .trim();
+}
+
+function normalizeProductKey(value: string): string {
+  return normalizeText(value).toLowerCase();
+}
+
+export function creatorIdentityKeys(row: Pick<CreatorRow, 'username' | 'profileLink'>): string[] {
+  return [
+    normalizeCreatorAccount(row.username),
+    normalizeCreatorAccount(row.profileLink),
+    normalizeProfileLink(row.profileLink),
+  ].filter(Boolean);
+}
+
+export function isSameCreator(a: Pick<CreatorRow, 'username' | 'profileLink'>, b: Pick<CreatorRow, 'username' | 'profileLink'>): boolean {
+  const aKeys = new Set(creatorIdentityKeys(a));
+  return creatorIdentityKeys(b).some((key) => aKeys.has(key));
+}
+
+export function getDuplicateCheck(row: CreatorRow, rows: CreatorRow[]): DuplicateCheckResult {
+  const matchingRows = rows.filter((candidate) => candidate.id !== row.id && isSameCreator(row, candidate));
+  const productKey = normalizeProductKey(row.product);
+  const sameProductRows = matchingRows.filter((candidate) => normalizeProductKey(candidate.product) === productKey && productKey);
+  const differentProductRows = matchingRows.filter((candidate) => normalizeProductKey(candidate.product) !== productKey || !productKey);
+
+  return {
+    duplicateCreator: matchingRows.length > 0,
+    possibleDuplicate: sameProductRows.length > 0,
+    multiSample: differentProductRows.length > 0,
+    matchingRows,
+    sameProductRows,
+    differentProductRows,
+  };
+}
+
+export function countActiveCreatorSamples(row: CreatorRow, rows: CreatorRow[]): number {
+  return rows.filter((candidate) => isSameCreator(row, candidate)
+    && !/completed|failed|lost|归档|失败|合作完成|已完成/i.test(`${candidate.currentStatus} ${candidate.trackingStatus ?? ''}`)
+  ).length;
+}
+
+export function buildDuplicateImportSummary(incomingRows: CreatorRow[], existingRows: CreatorRow[] = []): ImportDuplicateSummary {
+  const allRows: CreatorRow[] = [...existingRows];
+  const seenPossible = new Set<string>();
+  const seenMulti = new Set<string>();
+  let duplicateCreatorCount = 0;
+
+  incomingRows.forEach((incoming) => {
+    const result = getDuplicateCheck(incoming, allRows);
+    if (result.duplicateCreator) duplicateCreatorCount += 1;
+    if (result.possibleDuplicate) seenPossible.add(incoming.id);
+    if (result.multiSample) seenMulti.add(incoming.id);
+    allRows.push(incoming);
+  });
+
+  return {
+    possibleDuplicateCount: seenPossible.size,
+    multiSampleCount: seenMulti.size,
+    duplicateCreatorCount,
+  };
+}
+
+export function copyCreatorBaseFields(target: CreatorRow, source: CreatorRow): CreatorRow {
+  return {
+    ...target,
+    username: source.username || target.username,
+    profileLink: source.profileLink || target.profileLink,
+    contactMethod: source.contactMethod || target.contactMethod,
+    notes: source.notes || target.notes,
+  };
+}
+
 export type EditableCreatorField =
   | 'username'
   | 'profileLink'
@@ -179,10 +286,16 @@ function escapeCsvValue(value: unknown): string {
 }
 
 export function creatorRowsToCsv(rows: CreatorRow[]): string {
-  const header = CREATOR_TEMPLATE_COLUMNS.map((column) => escapeCsvValue(column.header)).join(',');
-  const body = rows.map((row) => (
-    CREATOR_TEMPLATE_COLUMNS.map((column) => escapeCsvValue(exportValue(row, column.key))).join(',')
-  ));
+  const exportColumns = [...CREATOR_TEMPLATE_COLUMNS, ...EXTRA_EXPORT_COLUMNS];
+  const header = exportColumns.map((column) => escapeCsvValue(column.header)).join(',');
+  const body = rows.map((row) => {
+    const activeSampleCount = countActiveCreatorSamples(row, rows);
+    return exportColumns.map((column) => {
+      if (column.key === 'isMultiSample') return escapeCsvValue(activeSampleCount > 1 ? '是' : '否');
+      if (column.key === 'multiSampleCount') return escapeCsvValue(activeSampleCount);
+      return escapeCsvValue(exportValue(row, column.key));
+    }).join(',');
+  });
 
   return `\ufeff${[header, ...body].join('\n')}`;
 }

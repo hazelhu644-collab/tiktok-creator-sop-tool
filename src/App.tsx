@@ -7,10 +7,14 @@ import {
   type ReactNode,
 } from "react";
 import {
+  buildDuplicateImportSummary,
   clearSavedCreatorRows,
+  copyCreatorBaseFields,
+  countActiveCreatorSamples,
   createBlankCreatorRow,
   deleteCreatorRow,
   downloadCreatorRowsCsv,
+  getDuplicateCheck,
   loadCreatorRows,
   saveCreatorRows,
   updateCreatorField,
@@ -20,6 +24,8 @@ import { parseCreatorFile } from "./fileParser";
 import {
   analyzeCreators,
   daysSince,
+  isDeliveredLogisticsStatus,
+  isInTransitLogisticsStatus,
   normalizeVideoProgress,
   parseRequiredVideos,
 } from "./sopRules";
@@ -79,6 +85,7 @@ type ModuleKey =
 type Toast = { tone: "success" | "warning"; text: string } | null;
 type DeepSeekAction = "translate_creator_reply" | "generate_personalized_reply";
 type MessageSource = "local" | "deepseek";
+type PendingDuplicateAdd = { draft: CreatorRow; existing: CreatorRow } | null;
 type WorkbenchFilterKey =
   | "follow_up_today"
   | "processed_today"
@@ -361,14 +368,13 @@ function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
   if (hasAny(status, ["waiting video", "waiting for video"]))
     return "Waiting Video";
   if (
-    shipping === "delivered" ||
-    Boolean(row.sampleDeliveredDate.trim()) ||
-    hasAny(status, ["delivered"])
+    isDeliveredLogisticsStatus(row.sampleShippingStatus) ||
+    hasAny(status, ["delivered", "已签收", "已到货", "waiting video", "等待视频"])
   )
     return "Delivered";
   if (
-    hasAny(shipping, ["shipped", "in transit"]) ||
-    hasAny(status, ["sample shipped", "in transit"])
+    isInTransitLogisticsStatus(row.sampleShippingStatus) ||
+    hasAny(status, ["sample shipped", "in transit", "运输中", "已发货"])
   )
     return "Sample Shipped";
   if (hasAny(status, ["approved"])) return "Sample Approved";
@@ -534,6 +540,8 @@ function App() {
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [toast, setToast] = useState<Toast>(null);
+  const [importSummary, setImportSummary] = useState("");
+  const [pendingDuplicateAdd, setPendingDuplicateAdd] = useState<PendingDuplicateAdd>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CreatorStatus | "All">(
@@ -655,6 +663,10 @@ function App() {
   const tasksById = useMemo(
     () => new Map(tasks.map((task) => [task.id, task])),
     [tasks],
+  );
+  const activeSampleCounts = useMemo(
+    () => new Map(rows.map((row) => [row.id, countActiveCreatorSamples(row, rows)])),
+    [rows],
   );
   const matchesWorkbenchFilter = (task: Task, key: WorkbenchFilterKey) => {
     const status = inferStatus(task, requiredVideos);
@@ -1073,10 +1085,13 @@ function App() {
     try {
       setError("");
       const parsedRows = await parseCreatorFile(file, requiredVideos);
-      setRows(parsedRows);
+      const summary = buildDuplicateImportSummary(parsedRows, rows);
+      const summaryText = `检测到 ${summary.possibleDuplicateCount} 个可能重复达人；检测到 ${summary.multiSampleCount} 个同达人多样品记录。`;
+      setRows((currentRows) => [...parsedRows, ...currentRows]);
+      setImportSummary(summaryText);
       setFileName(file.name);
       setSelectedIds([]);
-      setToast({ tone: "success", text: "导入成功，已刷新工作台数据。" });
+      setToast({ tone: "success", text: `导入成功，已追加 ${parsedRows.length} 条记录。${summaryText}` });
       if (parsedRows.length === 0)
         setError("没有找到达人数据。请检查表头和表格内容。");
     } catch (err) {
@@ -1090,11 +1105,19 @@ function App() {
     value: string,
   ) {
     setRows((currentRows) =>
-      currentRows.map((row) =>
-        row.id === rowId
-          ? updateCreatorField(row, field, value, requiredVideos)
-          : row,
-      ),
+      currentRows.map((row) => {
+        if (row.id !== rowId) return row;
+        const updated = updateCreatorField(row, field, value, requiredVideos);
+        if (field === "username" || field === "profileLink" || field === "product") {
+          const duplicate = getDuplicateCheck(updated, currentRows);
+          if (duplicate.possibleDuplicate) {
+            setToast({ tone: "warning", text: "该达人在同一产品项目下可能已重复录入，建议检查是否需要合并。" });
+          } else if (duplicate.duplicateCreator) {
+            setToast({ tone: "warning", text: "检测到该达人已存在。请确认这是重复录入，还是同一达人申请了不同样品。" });
+          }
+        }
+        return updated;
+      }),
     );
     setMessage(null);
     setMessageSource("local");
@@ -1118,9 +1141,29 @@ function App() {
     scrollToQueue();
   }
 
+  function ensureCampaign(productName: string) {
+    if (!mergedCampaigns.some((campaign) => campaign.productName === productName)) {
+      setCampaigns((current) => [
+        ...current,
+        createCampaignFromName(productName, filmingRequirements),
+      ]);
+    }
+  }
+
+  function addCreatorDraft(draft: CreatorRow, copyBaseFrom?: CreatorRow) {
+    const newRow = copyBaseFrom ? copyCreatorBaseFields(draft, copyBaseFrom) : draft;
+    ensureCampaign(newRow.product);
+    setRows((currentRows) => [newRow, ...currentRows]);
+    setSelectedCreatorId(newRow.id);
+    setActiveModule("creators");
+    setPendingDuplicateAdd(null);
+    setToast({ tone: "success", text: "已新增达人，可直接编辑表格字段。" });
+  }
+
   function handleAddCreator() {
+    const creatorName = window.prompt("达人账号（可留空后在表格中填写）：", "")?.trim() ?? "";
     const choice = window.prompt(
-      "所属产品（输入现有产品名称，或输入新产品项目名称）：",
+      "所属产品（同达人多样品时必须填写不同产品 / 样品项目）：",
       selectedCampaign === "ALL"
         ? (mergedCampaigns[0]?.productName ?? filmingRequirements.productName)
         : selectedCampaign,
@@ -1131,18 +1174,15 @@ function App() {
         ? mergedCampaigns[0]?.productName
         : selectedCampaign) ||
       filmingRequirements.productName;
-    if (
-      !mergedCampaigns.some((campaign) => campaign.productName === productName)
-    )
-      setCampaigns((current) => [
-        ...current,
-        createCampaignFromName(productName, filmingRequirements),
-      ]);
-    const newRow = createBlankCreatorRow(productName, requiredVideos);
-    setRows((currentRows) => [newRow, ...currentRows]);
-    setSelectedCreatorId(newRow.id);
-    setActiveModule("creators");
-    setToast({ tone: "success", text: "已新增达人，可直接编辑表格字段。" });
+    const draft = { ...createBlankCreatorRow(productName, requiredVideos), username: creatorName };
+    const duplicate = getDuplicateCheck(draft, rows);
+    if (creatorName && duplicate.duplicateCreator && duplicate.matchingRows[0]) {
+      setPendingDuplicateAdd({ draft, existing: duplicate.matchingRows[0] });
+      setToast({ tone: "warning", text: "检测到该达人已存在。请确认这是重复录入，还是同一达人申请了不同样品。" });
+      setActiveModule("creators");
+      return;
+    }
+    addCreatorDraft(draft);
   }
 
   function toggleSelected(rowId: string) {
@@ -1943,6 +1983,16 @@ function App() {
           </div>
         </div>
         {fileName && <p className="muted">已加载：{fileName}</p>}
+        {importSummary && <p className="warning-text">{importSummary}</p>}
+        {pendingDuplicateAdd && (
+          <div className="inline-warning duplicate-warning">
+            <strong>该达人已存在。你可以选择：</strong>
+            <span>检测到该达人已存在。请确认这是重复录入，还是同一达人申请了不同样品。</span>
+            <button type="button" onClick={() => addCreatorDraft(pendingDuplicateAdd.draft, pendingDuplicateAdd.existing)}>继续新增为不同样品</button>
+            <button type="button" className="secondary" onClick={() => addCreatorDraft(pendingDuplicateAdd.draft, pendingDuplicateAdd.existing)}>复制已有达人基础信息</button>
+            <button type="button" className="secondary" onClick={() => setPendingDuplicateAdd(null)}>取消新增</button>
+          </div>
+        )}
         {error && <p className="error">{error}</p>}
       </section>
     );
@@ -2119,10 +2169,11 @@ function App() {
                       <span className="queue-badges">
                         <em>{priorityLabel(task)}</em>
                         <em>{queueStatusLabel(task)}</em>
+                        {(activeSampleCounts.get(task.id) ?? 0) > 1 && <em>同达人多样品</em>}
                       </span>
                     </span>
                     <span className="queue-sub-line">
-                      {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}
+                      {task.product || "缺少产品名称"} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}
                     </span>
                   </button>
                 ))
@@ -2194,6 +2245,18 @@ function App() {
                   处理备注 / 达人备注<b>{selectedTask.notes.trim() || "—"}</b>
                 </span>
               </div>
+              {(activeSampleCounts.get(selectedTask.id) ?? 0) > 1 && (
+                <div className="inline-warning duplicate-warning">
+                  <strong>同达人多样品</strong>
+                  <span>该达人还有 {(activeSampleCounts.get(selectedTask.id) ?? 1) - 1} 个其他样品合作。该达人存在多个样品合作，请确认是否需要合并沟通。</span>
+                  <button type="button" className="secondary" onClick={() => {
+                    setFollowupSearch(displayName(selectedTask));
+                    setOnlyCurrentCreator(false);
+                    setIsQueueExpanded(true);
+                  }}>查看其他样品记录</button>
+                  <button type="button" className="secondary" onClick={() => setToast({ tone: "success", text: "生成多样品合并提醒：请在一条消息中列出多个产品，并分别确认每个样品的到货、拍摄和发布时间。" })}>生成多样品合并提醒</button>
+                </div>
+              )}
               <details className="more-info-card">
                 <summary>更多信息</summary>
                 <div className="current-creator-grid secondary-grid">
@@ -2207,7 +2270,7 @@ function App() {
                     样品状态<b>{selectedTask.sampleShippingStatus || "—"}</b>
                   </span>
                   <span>
-                    样品到货时间<b>{selectedTask.sampleDeliveredDate || "—"}</b>
+                    样品到货日期<b>{selectedTask.sampleDeliveredDate || "—"}</b>
                   </span>
                   <span>
                     视频进度<b>{selectedTask.videoProgress || "—"}</b>
@@ -2780,6 +2843,8 @@ function App() {
                             updateRow(entry.row.id, "username", event.target.value)
                           }
                         />
+                        {(activeSampleCounts.get(entry.row.id) ?? 0) > 1 && <span className="mini-badge">同达人多样品</span>}
+                        {getDuplicateCheck(entry.row, rows).possibleDuplicate && <small className="warning-text">该达人在同一产品项目下可能已重复录入，建议检查是否需要合并。</small>}
                       </td>
                       <td>
                         <input

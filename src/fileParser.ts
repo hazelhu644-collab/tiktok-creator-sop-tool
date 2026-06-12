@@ -8,7 +8,7 @@ const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' |
   product: ['product', 'product name', 'product Name', '产品', '产品名称', '所属产品', '产品项目'],
   currentStatus: ['current status', 'status', 'creator status', '合作状态', '当前状态'],
   sampleShippingStatus: ['sample shipping status', 'shipping status', 'sample status', '物流状态', '样品物流状态'],
-  sampleDeliveredDate: ['sample delivered date', 'delivered date', 'delivery date', '样品到货日期', '样品到货时间'],
+  sampleDeliveredDate: ['sample delivered date', 'sample arrival date', 'estimated arrival date', 'estimated delivery date', 'expected delivery date', 'eta', 'delivered date', 'delivery date', '样品到货日期', '样品到货时间', '预计到货日期'],
   videoProgress: ['video progress', 'videos', 'progress', '视频进度'],
   firstVideoPostedDate: ['first video posted date', 'first video date', 'video 1 date', '首条视频发布日期', '首条视频发布时间'],
   latestVideoPostedDate: ['latest video posted date', 'last video posted date', '最近视频发布日期'],
