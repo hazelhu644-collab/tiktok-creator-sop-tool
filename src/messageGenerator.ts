@@ -5,6 +5,13 @@ export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message'
 
 export type CreatorFilmingRequirements = {
   productName: string;
+  requiredScenes: string;
+  sellingPoints: string;
+  videoLength: string;
+  videoCount: string;
+  avoidShots: string;
+  productLinkRequirement: string;
+  referenceVideoLinks: string;
   requirements: string[];
   keyContentPoints: string[];
   referenceLinks?: string[];
@@ -21,6 +28,13 @@ export type CreatorReplyPersonalization = {
 
 export const defaultCreatorFilmingRequirements: CreatorFilmingRequirements = {
   productName: '蒸汽梳毛器',
+  requiredScenes: '展示雾化功能；展示梳下来的浮毛；展示宠物真实反应；展示自然的日常宠物护理场景；展示清理过程',
+  sellingPoints: '蒸汽软化浮毛，梳毛同时收集毛发，适合日常宠物护理场景。',
+  videoLength: '每条视频 60 秒以上',
+  videoCount: '每位达人 2 条视频',
+  avoidShots: '',
+  productLinkRequirement: '必须挂 TikTok Shop 产品链接，并按 campaign 要求 tag 品牌账号。',
+  referenceVideoLinks: '',
   requirements: [
     '每位达人 2 条视频',
     '每条视频 60 秒以上',
@@ -455,27 +469,48 @@ function remainingVideoPhrase(count: number | null): string {
   return `${count} remaining ${count === 1 ? 'video' : 'videos'}`;
 }
 
-function partialCompletionGuidelinesLine(hasReferenceLinks: boolean): string {
-  const referenceDirection = hasReferenceLinks ? ' and reference direction' : '';
-  return `For the remaining video, please keep following the filming guidelines${referenceDirection} we shared, and make sure the TikTok Shop product link is attached.`;
+function partialCompletionGuidelinesLine(filmingRequirements: CreatorFilmingRequirements, hasReferenceLinks: boolean): string {
+  return `For the remaining video, please keep following the filming guidelines we shared${hasReferenceLinks ? ' and reference direction' : ''}, and ${(englishOnly(filmingRequirements.productLinkRequirement) || 'make sure the TikTok Shop product link is attached').replace(/^please\s+/i, '')}.`;
 }
 
-function filmingGuidelinesLine(task: Task, filmingRequirements: CreatorFilmingRequirements): string {
-  if (!matchesFilmingRequirementsProduct(task, filmingRequirements)) return 'Please follow the filming guidelines we shared and make sure the TikTok Shop product link and required tag are included.';
+function englishOnly(value: string): string {
+  return hasChineseCharacters(value) ? '' : value.trim();
+}
 
-  const contentPoints = filmingRequirements.keyContentPoints.map(toEnglishContentPoint).filter(Boolean).slice(0, 3);
-  const requirements = filmingRequirements.requirements.map(toEnglishRequirement).filter(Boolean);
-  const practicalRequirements = requirements.filter((item) => !item.startsWith('complete ')).slice(0, 3);
-  const contentPointText = joinEnglishList(contentPoints);
-  const requirementText = joinEnglishList(practicalRequirements);
+function shortFilmingReminder(filmingRequirements: CreatorFilmingRequirements, hasReferenceLinks = false): string {
+  const linkRequirement = englishOnly(filmingRequirements.productLinkRequirement) || 'make sure the TikTok Shop product link is attached';
+  const referenceDirection = hasReferenceLinks ? ' and the reference direction' : '';
+  return `Please follow the filming requirements we shared${referenceDirection}, and ${linkRequirement.replace(/^please\s+/i, '')}.`;
+}
 
-  if (!contentPointText && !requirementText) return 'Please follow the filming guidelines we shared.';
+function fullFilmingBriefLine(task: Task, filmingRequirements: CreatorFilmingRequirements): string {
+  const contentSource = filmingRequirements.requiredScenes && filmingRequirements.requiredScenes !== defaultCreatorFilmingRequirements.requiredScenes
+    ? filmingRequirements.requiredScenes.split(/[；;\n]/)
+    : filmingRequirements.keyContentPoints;
+  const contentPoints = contentSource
+    .map((item) => englishOnly(item) || toEnglishContentPoint(item))
+    .filter(Boolean)
+    .slice(0, 4);
+  const sellingPoints = englishOnly(filmingRequirements.sellingPoints);
+  const videoLength = englishOnly(filmingRequirements.videoLength) || filmingRequirements.requirements.map(toEnglishRequirement).find((item) => item.includes('seconds')) || '';
+  const videoCount = englishOnly(filmingRequirements.videoCount) || filmingRequirements.requirements.map(toEnglishRequirement).find((item) => item.startsWith('complete ')) || '';
+  const avoidShots = englishOnly(filmingRequirements.avoidShots);
+  const linkRequirement = englishOnly(filmingRequirements.productLinkRequirement) || 'include the TikTok Shop product link when posting';
+  const pieces = ['Please follow the filming guidelines we shared in this product-specific filming brief'];
 
-  const parts = ['Please follow the filming guidelines we shared'];
-  if (contentPointText) parts.push(`show the main product use case clearly, including ${contentPointText}`);
-  if (requirementText) parts.push(requirementText);
+  if (contentPoints.length) pieces.push(`show the main product use case clearly, including ${joinEnglishList(contentPoints)}`);
+  if (sellingPoints) pieces.push(`highlight ${sellingPoints}`);
+  if (videoLength) pieces.push(`video length: ${videoLength}`);
+  if (videoCount) pieces.push(`video quantity: ${videoCount}`);
+  if (avoidShots) pieces.push(`avoid: ${avoidShots}`);
+  if (linkRequirement) pieces.push(linkRequirement);
 
-  return `${parts.join('; ')}.`;
+  return `${pieces.join('; ')}.`;
+}
+
+function filmingGuidelinesLine(task: Task, filmingRequirements: CreatorFilmingRequirements, mode: 'short' | 'full', hasReferenceLinks = false): string {
+  if (mode === 'short') return shortFilmingReminder(filmingRequirements, hasReferenceLinks);
+  return fullFilmingBriefLine(task, filmingRequirements);
 }
 
 function creatorGreeting(username: string): string {
@@ -499,13 +534,13 @@ export function generateMessage(
   const cleanReferenceLinks = (filmingRequirements.referenceLinks ?? []).map((link) => link.trim()).filter((link) => link && !hasChineseCharacters(link));
   const hasReferenceLinks = cleanReferenceLinks.length > 0;
   const guidelineLine = scenario === 'Creator Reply Follow-up'
-    ? filmingGuidelinesLine(task, filmingRequirements)
+    ? filmingGuidelinesLine(task, filmingRequirements, /what to film|film|requirements|brief|拍什么|要求|brief/i.test(`${userReplyFocus} ${task.lastCreatorResponse ?? ''} ${task.notes}`) ? 'full' : 'short', hasReferenceLinks)
     : scenario === 'Partial Video Completion Follow-up'
-    ? partialCompletionGuidelinesLine(hasReferenceLinks)
+    ? partialCompletionGuidelinesLine(filmingRequirements, hasReferenceLinks)
     : scenario === 'Final Follow-up Before Failed Candidate' || scenario === 'Second Follow-up'
       ? ''
       : isGuidelineScenario(scenario)
-        ? filmingGuidelinesLine(task, filmingRequirements)
+        ? filmingGuidelinesLine(task, filmingRequirements, scenario === 'Sample In Transit Reminder' || scenario === 'Sample Delivered Follow-up' ? 'full' : 'short', hasReferenceLinks)
         : '';
   const filmingRequirementsReminder = [guidelineLine, referenceLinksLine(scenario, { ...filmingRequirements, referenceLinks: cleanReferenceLinks })]
     .filter(Boolean)
@@ -581,7 +616,7 @@ function sampleRequestConfirmationMessage(channel: Channel, name: string, produc
 
 function sampleInTransitMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
   const reminder = filmingRequirementsReminder.trim();
-  const compactRequest = `Hi ${name}, the ${product} sample is on the way. While it is in transit, we wanted to share the key filming requirements so you can plan the content in advance. Please show the product in a real pet-care scene, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. Once the sample arrives, please let us know when you expect to start filming after receiving the sample and share your expected posting schedule. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
+  const compactRequest = `Hi ${name}, the ${product} sample is on the way. While it is in transit, we wanted to share the key filming requirements so you can plan the content in advance. Please review this product-specific brief, prepare the required scenes and selling points, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. Once the sample arrives, please let us know when you expect to start filming after receiving the sample and share your expected posting schedule. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
 
   if (channel === 'TikTok DM' || channel === 'WhatsApp') return compactRequest;
 
@@ -589,7 +624,7 @@ function sampleInTransitMessage(channel: Channel, name: string, product: string,
 
 The sample for the ${product} collaboration has been shipped and is currently on the way. While it is in transit, we wanted to share the key filming requirements so you can plan the content in advance.
 
-Please show the product in a real pet-care scene, include the desired usage scenes/content structure, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. ${reminder}
+Please review this product-specific brief, prepare the required scenes and selling points, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. ${reminder}
 
 Once the sample arrives, please let us know when you expect to start filming after receiving the sample and share your expected posting schedule.
 

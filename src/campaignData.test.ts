@@ -49,4 +49,40 @@ describe('campaign data helpers', () => {
     expect(requirements.keyContentPoints).toContain('展示逗猫棒弹性');
     expect(requirements.referenceLinks).toEqual(['https://example.com/cat']);
   });
+  it('keeps the eight campaign filming fields independent per product', () => {
+    const petBrush = createCampaignFromName('Pet Brush', defaultCreatorFilmingRequirements);
+    const catWand = createCampaignFromName('Cat Wand', defaultCreatorFilmingRequirements);
+    petBrush.keyContentPoints = ['show brushing scene'];
+    petBrush.sellingPoints = 'removes loose fur';
+    petBrush.videoLength = '45 seconds+';
+    petBrush.videoCount = '2 videos';
+    petBrush.avoidShots = 'do not show unsafe use';
+    petBrush.tagRequirement = 'attach product link';
+    petBrush.referenceLinks = ['https://example.com/brush'];
+    catWand.keyContentPoints = ['show cat jumping'];
+    catWand.sellingPoints = 'interactive play';
+    catWand.videoLength = '30 seconds+';
+    catWand.videoCount = '1 video';
+    catWand.avoidShots = 'do not force the cat';
+    catWand.tagRequirement = 'attach wand product link';
+    catWand.referenceLinks = ['https://example.com/wand'];
+
+    const brushRequirements = campaignToFilmingRequirements(petBrush, defaultCreatorFilmingRequirements);
+    const wandRequirements = campaignToFilmingRequirements(catWand, defaultCreatorFilmingRequirements);
+
+    expect(brushRequirements).toMatchObject({
+      productName: 'Pet Brush',
+      requiredScenes: 'show brushing scene',
+      sellingPoints: 'removes loose fur',
+      videoLength: '45 seconds+',
+      videoCount: '2 videos',
+      avoidShots: 'do not show unsafe use',
+      productLinkRequirement: 'attach product link',
+      referenceVideoLinks: 'https://example.com/brush',
+    });
+    expect(wandRequirements.requiredScenes).toBe('show cat jumping');
+    expect(wandRequirements.productLinkRequirement).toBe('attach wand product link');
+    expect(wandRequirements.requiredScenes).not.toBe(brushRequirements.requiredScenes);
+  });
+
 });
