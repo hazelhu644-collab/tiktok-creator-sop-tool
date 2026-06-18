@@ -1889,6 +1889,92 @@ describe("settings and prompt helper", () => {
     expect(screen.getByText("已归档合作：1")).toBeInTheDocument();
   });
 
+
+  it("syncs immediately edited campaign video count 1 instead of stale fallback 2", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "cat-patches",
+        productName: "Cat Scratching Patches",
+        sellingPoints: "",
+        requirements: ["每位达人 2 条视频"],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "每位达人 2 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      creatorRow({ id: "safe", username: "safe_creator", product: "Cat Scratching Patches", videoProgress: "0/2" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /设置/);
+    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "Cat Scratching Patches");
+    const videoCountInput = screen.getByLabelText("视频数量要求");
+    await user.clear(videoCountInput);
+    await user.type(videoCountInput, "1");
+    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.id === "safe")?.videoProgress).toBe("0/1");
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("目标视频数量：1");
+    expect(screen.getByRole("status")).not.toHaveTextContent("2 条视频要求");
+
+    await goTo(user, /达人数据库/);
+    expect(screen.getByDisplayValue("0/1")).toBeInTheDocument();
+  });
+
+  it("matches sync rows by campaignId before product fallback and warns on invalid published counts", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "cat-patches-stable",
+        productName: "Cat Scratching Patches",
+        sellingPoints: "",
+        requirements: [],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "1",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      { ...creatorRow({ id: "stable-match", username: "stable_creator", product: "Old Display Name", videoProgress: "0/2" }), campaignId: "cat-patches-stable" } as CreatorRow,
+      creatorRow({ id: "preserve", username: "preserve_creator", product: "Cat Scratching Patches", videoProgress: "1/2" }),
+      creatorRow({ id: "invalid", username: "invalid_creator", product: "Cat Scratching Patches", videoProgress: "2/2" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /设置/);
+    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "Cat Scratching Patches");
+    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.id === "stable-match")?.videoProgress).toBe("0/1");
+      expect(saved.find((row) => row.id === "preserve")?.videoProgress).toBe("1/1");
+      expect(saved.find((row) => row.id === "invalid")?.videoProgress).toBe("2/2");
+      expect(saved.find((row) => row.id === "invalid")?.videoProgressWarning).toContain("请手动检查");
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("目标视频数量：1");
+    expect(screen.getByRole("status")).toHaveTextContent("已同步 2 条达人记录");
+    expect(screen.getByRole("status")).toHaveTextContent("保留 1 条已有发布进度");
+    expect(screen.getByRole("status")).toHaveTextContent("跳过 1 条需要手动检查");
+  });
+
   it("keeps completed and failed collaborations in the Creator Database, hides them from today queue, and searches archived rows", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();

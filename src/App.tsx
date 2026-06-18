@@ -298,6 +298,34 @@ function safeLower(value: string | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
+function parseRequiredVideoCountText(value: string | undefined): number | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+  const parsed = parseRequiredVideos(trimmed);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function campaignRequiredVideoCount(campaign: Campaign, fallback: CreatorFilmingRequirements): number {
+  return (
+    parseRequiredVideoCountText(campaign.videoCount) ??
+    parseRequiredVideos(campaignToFilmingRequirements(campaign, fallback))
+  );
+}
+
+function normalizedProductKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function rowMatchesCampaign(row: CreatorRow, campaign: Campaign): boolean {
+  const rowCampaignId = (row as CreatorRow & { campaignId?: string }).campaignId;
+  if (rowCampaignId && rowCampaignId === campaign.id) return true;
+  return normalizedProductKey(row.product) === normalizedProductKey(campaign.productName);
+}
+
 function hasAny(value: string, terms: string[]) {
   const normalized = safeLower(value);
   return terms.some((term) => normalized.includes(term));
@@ -3527,20 +3555,30 @@ function App() {
         ),
       );
     };
-    const linkedRowsCount = (campaign: Campaign) => rows.filter((row) => row.product === campaign.productName).length;
+    const linkedRowsCount = (campaign: Campaign) => rows.filter((row) => rowMatchesCampaign(row, campaign)).length;
     const syncCampaignVideoCount = (campaign: Campaign) => {
-      const targetRequiredVideos = parseRequiredVideos(campaignToFilmingRequirements(campaign, activeFilmingRequirements));
+      const latestCampaign =
+        mergedCampaigns.find((item) => item.id === campaign.id) ?? campaign;
+      const targetRequiredVideos = campaignRequiredVideoCount(
+        latestCampaign,
+        activeFilmingRequirements,
+      );
       let updatedCount = 0;
       let preservedPublishedCount = 0;
       let skippedCount = 0;
       const nextRows = rows.map((row) => {
-        if (row.product !== campaign.productName) return row;
+        if (!rowMatchesCampaign(row, latestCampaign)) return row;
         const progress = normalizeVideoProgress(row.videoProgress, targetRequiredVideos);
         const postedFromText = row.videoProgress.match(/^\s*(\d+)\s*(?:\/|of)\s*\d+/i)?.[1];
         const postedCount = typeof progress.postedCount === "number" ? progress.postedCount : postedFromText ? Number.parseInt(postedFromText, 10) : undefined;
-        if (typeof postedCount !== "number" || !Number.isFinite(postedCount)) {
+        if (typeof postedCount !== "number" || !Number.isFinite(postedCount) || postedCount > targetRequiredVideos) {
           skippedCount += 1;
-          return row;
+          return {
+            ...row,
+            videoProgressWarning: postedCount && postedCount > targetRequiredVideos
+              ? `已发布 ${postedCount} 条超过目标 ${targetRequiredVideos} 条，请手动检查。`
+              : row.videoProgressWarning,
+          };
         }
         if (postedCount > 0) preservedPublishedCount += 1;
         const nextProgress = `${postedCount}/${targetRequiredVideos}`;
@@ -3552,7 +3590,7 @@ function App() {
       setRows(nextRows);
       setToast({
         tone: skippedCount > 0 ? "warning" : "success",
-        text: `已同步 ${updatedCount} 条达人记录到 ${targetRequiredVideos} 条视频要求；保留 ${preservedPublishedCount} 条已有发布进度；跳过 ${skippedCount} 条无法识别进度。`,
+        text: `目标视频数量：${targetRequiredVideos}；已同步 ${updatedCount} 条达人记录；保留 ${preservedPublishedCount} 条已有发布进度；跳过 ${skippedCount} 条需要手动检查。`,
       });
     };
     const duplicateCampaign = (campaign: Campaign) => {
