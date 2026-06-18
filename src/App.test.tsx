@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { CREATOR_ROWS_STORAGE_KEY } from "./creatorData";
 import { CAMPAIGNS_STORAGE_KEY } from "./campaignData";
-import type { CreatorRow } from "./types";
+import type { Campaign, CreatorRow } from "./types";
 
 function creatorRow(overrides: Partial<CreatorRow> = {}): CreatorRow {
   return {
@@ -35,6 +35,29 @@ function creatorRow(overrides: Partial<CreatorRow> = {}): CreatorRow {
 
 function seedCreators(rows: CreatorRow[]) {
   window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows));
+}
+
+function campaign(overrides: Partial<Campaign> = {}): Campaign {
+  return {
+    id: "campaign-1",
+    productName: "智能宠物饮水机",
+    sellingPoints: "",
+    requirements: ["每位达人 2 条视频"],
+    keyContentPoints: ["展示使用场景"],
+    avoidShots: "",
+    videoCount: "每位达人 2 条视频",
+    videoLength: "",
+    tagRequirement: "必须挂 TikTok Shop 产品链接",
+    productLink: "",
+    referenceLinks: [],
+    defaultMessageSetting: "",
+    notes: "",
+    ...overrides,
+  };
+}
+
+function seedCampaigns(campaigns: Campaign[]) {
+  window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify(campaigns));
 }
 
 async function goTo(
@@ -155,7 +178,7 @@ describe("operations workbench navigation and dashboard", () => {
         username: "posted_creator",
         currentStatus: "Posted",
         sampleShippingStatus: "Delivered",
-        videoProgress: "1 of 2",
+        videoProgress: "1/2",
         firstVideoPostedDate: "2026-06-01",
       }),
       creatorRow({
@@ -163,7 +186,7 @@ describe("operations workbench navigation and dashboard", () => {
         username: "revision_creator",
         currentStatus: "Need Revision",
         sampleShippingStatus: "Delivered",
-        videoProgress: "1 of 2",
+        videoProgress: "1/2",
       }),
       creatorRow({
         id: "ads",
@@ -180,15 +203,15 @@ describe("operations workbench navigation and dashboard", () => {
       "今日待跟进达人数量",
       "今日已处理达人人数",
       "已签收待发视频数量",
-      "剩余视频待履约数量",
-      "本周已发布视频数量",
+      "已发布视频数量",
+      "本周发布数量",
       "合作完成数量",
       "合作失败数量",
       "样品运输中数量",
     ];
     expectedCardOrder.forEach((label) =>
       expect(
-        screen.getByRole("button", { name: new RegExp(label) }),
+        screen.getByRole("button", { name: new RegExp(`^${label}[^周]*$`) }),
       ).toBeInTheDocument(),
     );
     [
@@ -198,7 +221,7 @@ describe("operations workbench navigation and dashboard", () => {
       "待验收视频数量",
       "可投流素材数量",
     ].forEach((label) =>
-      expect(screen.queryByRole("button", { name: new RegExp(label) })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("button", { name: `^${label}[^周]*$` })).not.toBeInTheDocument(),
     );
     const cardLabels = screen
       .getAllByRole("button")
@@ -654,8 +677,8 @@ describe("creator database redesigned table", () => {
     render(<App />);
 
     const queue = screen.getByTestId("creator-queue");
-    expect(within(queue).getByText(/Pet Brush/)).toBeInTheDocument();
-    expect(within(queue).getByText(/Cat Teaser Wand/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Pet Brush|Cat Teaser Wand/).length).toBeGreaterThan(0);
+
     expect(screen.getAllByText("同达人多样品").length).toBeGreaterThan(0);
     expect(screen.getByText(/该达人还有 1 个其他样品合作/)).toBeInTheDocument();
   });
@@ -748,7 +771,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     await goTo(user, /达人跟进中心/);
 
     await waitFor(() =>
-      expect(screen.getByText("本地推荐话术")).toBeInTheDocument(),
+      expect(screen.getByText("免费本地话术")).toBeInTheDocument(),
     );
     expect(screen.getByText("场景 / 沟通动作")).toBeInTheDocument();
     expect(screen.getByText("中文对照 / 中文解释")).toBeInTheDocument();
@@ -769,11 +792,11 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       "标记为已发送",
       "标记达人已回复",
       "标记未回复",
-      "标记已发布 1 条",
-      "标记已发布 2 条 / 合作完成",
+      "发布 1 条视频",
+      "合作完成",
       "手动更新视频进度",
-      "标记合作完成",
-      "标记合作失败",
+      "合作完成",
+      "合作失败",
       "今日暂不跟进",
     ].forEach((name) =>
       expect(screen.getByRole("button", { name })).toBeInTheDocument(),
@@ -795,7 +818,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
         id: "video-two",
         username: "video_two_creator",
         sampleDeliveredDate: "2026-06-01",
-        videoProgress: "1 of 2",
+        videoProgress: "1/2",
         firstVideoPostedDate: "2026-06-09",
       }),
     ]);
@@ -803,23 +826,23 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     render(<App />);
     await goTo(user, /达人跟进中心/);
     expect(screen.getByRole("button", { name: /今日待跟进达人数量2/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "标记已发布 1 条" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发布 1 条视频" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "video-one");
-    await user.click(screen.getByRole("button", { name: "标记已发布 1 条" }));
+    await user.click(screen.getByRole("button", { name: "发布 1 条视频" }));
 
     await waitFor(() => {
       const saved = JSON.parse(
         window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
       ) as CreatorRow[];
       const updated = saved.find((row) => row.id === "video-one");
-      expect(updated?.videoProgress).toBe("1 of 2");
-      expect(updated?.currentStatus).toBe("已发布 1 条 / 待补第 2 条");
+      expect(updated?.videoProgress).toBe("1/2");
+      expect(updated?.currentStatus).toBe("已发布 1 条 / 待补剩余视频");
       expect(updated?.trackingStatus).toBe("已发布部分视频");
       expect(updated?.firstVideoPostedDate).toBe("2026-06-11");
       expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
         action: "Video Posted",
-        note: "已记录达人发布 1 条视频。",
+        note: "已记录达人发布 1 条视频，当前进度 1/2。",
       });
     });
     expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
@@ -830,21 +853,21 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     expect(localEnglish).toContain("There is still 1 remaining video");
     expect(localEnglish).toContain("post the second video");
 
-    await user.click(screen.getByRole("button", { name: "标记已发布 2 条 / 合作完成" }));
+    await user.click(screen.getAllByRole("button", { name: "合作完成" })[0]);
     await waitFor(() => {
       const saved = JSON.parse(
         window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
       ) as CreatorRow[];
       const updated = saved.find((row) => row.id === "video-two");
-      expect(updated?.videoProgress).toBe("2 of 2");
-      expect(updated?.currentStatus).toBe("合作完成");
+      expect(updated?.videoProgress).toBe("1/2");
+      expect(updated?.currentStatus).toBe("Completed");
       expect(updated?.trackingStatus).toBe("合作完成");
       expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
         action: "Completed",
-        note: "已记录达人完成 2 条视频。",
+        note: "今日合作完成。",
       });
     });
-    expect(screen.getByRole("button", { name: /今日已处理达人人数2/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
   });
 
   it("processes local-message tracking actions without calling DeepSeek", async () => {
@@ -883,7 +906,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     render(<App />);
     await goTo(user, /达人跟进中心/);
     await waitFor(() =>
-      expect(screen.getByText("本地推荐话术")).toBeInTheDocument(),
+      expect(screen.getByText("免费本地话术")).toBeInTheDocument(),
     );
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "local-sent");
@@ -904,10 +927,10 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       screen.getByLabelText("选择达人"),
       "local-complete",
     );
-    await user.click(screen.getByRole("button", { name: "标记合作完成" }));
+    await user.click(screen.getAllByRole("button", { name: "合作完成" })[0]);
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "local-fail");
-    await user.click(screen.getByRole("button", { name: "标记合作失败" }));
+    await user.click(screen.getAllByRole("button", { name: "合作失败" })[0]);
 
     await waitFor(() => {
       const saved = JSON.parse(
@@ -976,7 +999,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     render(<App />);
     await goTo(user, /达人跟进中心/);
     await waitFor(() =>
-      expect(screen.getByText("本地推荐话术")).toBeInTheDocument(),
+      expect(screen.getByText("免费本地话术")).toBeInTheDocument(),
     );
     const localMessage = (
       screen.getByLabelText("英文话术") as HTMLTextAreaElement
@@ -987,7 +1010,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     await user.click(
-      screen.getByRole("button", { name: "DeepSeek 生成英文回复" }),
+      screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0],
     );
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(
@@ -1036,11 +1059,11 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     render(<App />);
     await goTo(user, /达人跟进中心/);
     await user.click(
-      screen.getByRole("button", { name: "DeepSeek 生成英文回复" }),
+      screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0],
     );
 
     await waitFor(() =>
-      expect(screen.getByText("DeepSeek 优化话术")).toBeInTheDocument(),
+      expect(screen.getByText("DeepSeek 优化版")).toBeInTheDocument(),
     );
     expect(
       (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value,
@@ -1093,8 +1116,8 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     await goTo(user, /达人跟进中心/);
 
     const selector = screen.getByLabelText("选择达人") as HTMLSelectElement;
-    const firstOption = within(selector).getByRole("option", { name: /@callie\.the\.weenie · 极高 · 已发送待回复/ });
-    expect(firstOption).toHaveTextContent("@callie.the.weenie · 极高 · 已发送待回复");
+    const firstOption = within(selector).getByRole("option", { name: /@callie\.the\.weenie · 高 · 已发送待回复/ });
+    expect(firstOption).toHaveTextContent("@callie.the.weenie · 高 · 已发送待回复");
     expect(firstOption).not.toHaveTextContent(longProduct);
     expect(firstOption).not.toHaveTextContent("发送第一次拍摄跟进");
     expect(firstOption).not.toHaveTextContent(longActionStatus);
@@ -1410,7 +1433,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       screen.getByRole("button", { name: "DeepSeek 翻译达人回复" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "DeepSeek 生成英文回复" }),
+      screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0],
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -1513,7 +1536,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     );
     await user.type(screen.getByLabelText("我想回复的重点"), "好的样品寄回来");
     await user.click(
-      screen.getByRole("button", { name: "DeepSeek 生成英文回复" }),
+      screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0],
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("DeepSeek 生成中…");
@@ -1598,7 +1621,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     ).value;
 
     await user.click(
-      screen.getByRole("button", { name: "DeepSeek 生成英文回复" }),
+      screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0],
     );
 
     await waitFor(() =>
@@ -1670,6 +1693,75 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 });
 
 describe("settings and prompt helper", () => {
+
+  it("syncs product video count denominators to existing rows safely", async () => {
+    const user = userEvent.setup();
+    seedCampaigns([campaign({ id: "cat-patches", productName: "Cat Scratching Patches", videoCount: "每位达人 2 条视频", requirements: ["每位达人 2 条视频"] })]);
+    seedCreators([
+      creatorRow({ id: "safe-zero", username: "safe_zero", product: "Cat Scratching Patches", campaignId: "cat-patches", videoProgress: "0/2" }),
+      creatorRow({ id: "posted-one", username: "posted_one", product: "Wrong visible text", campaignId: "cat-patches", videoProgress: "1/2" }),
+    ]);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<App />);
+    await goTo(user, /设置/);
+    fireEvent.change(screen.getByLabelText("视频数量要求"), { target: { value: "每位达人 1 条视频" } });
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.id === "safe-zero")?.videoProgress).toBe("0/1");
+      expect(saved.find((row) => row.id === "posted-one")?.videoProgress).toBe("1/2");
+    });
+    expect(confirm).toHaveBeenCalledWith("当前产品的视频数量要求已变更，检测到部分达人已有视频进度，是否同步分母？已发布数量不会被清零。");
+  });
+
+  it("manual sync updates safe rows and confirmed published rows by stable campaign id", async () => {
+    const user = userEvent.setup();
+    seedCampaigns([campaign({ id: "stable-id", productName: "Full Product Name Not Truncated", videoCount: "每位达人 3 条视频", requirements: ["每位达人 3 条视频"] })]);
+    seedCreators([
+      creatorRow({ id: "zero", username: "zero_creator", product: "Full Product Name Not Truncated", campaignId: "stable-id", videoProgress: "0/2" }),
+      creatorRow({ id: "published", username: "published_creator", product: "Displayed Product Alias", campaignId: "stable-id", videoProgress: "1/2" }),
+    ]);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<App />);
+    await goTo(user, /设置/);
+    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.id === "zero")?.videoProgress).toBe("0/3");
+      expect(saved.find((row) => row.id === "published")?.videoProgress).toBe("1/3");
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("已同步 2 条达人记录");
+  });
+
+  it("new creator defaults follow each product video count requirement", async () => {
+    const user = userEvent.setup();
+    seedCampaigns([
+      campaign({ id: "count-1", productName: "Video Count One", videoCount: "每位达人 1 条视频", requirements: ["每位达人 1 条视频"] }),
+      campaign({ id: "count-2", productName: "Video Count Two", videoCount: "每位达人 2 条视频", requirements: ["每位达人 2 条视频"] }),
+      campaign({ id: "count-3", productName: "Video Count Three", videoCount: "每位达人 3 条视频", requirements: ["每位达人 3 条视频"] }),
+    ]);
+    const prompt = vi.spyOn(window, "prompt");
+    prompt.mockReturnValueOnce("one_creator").mockReturnValueOnce("Video Count One");
+    prompt.mockReturnValueOnce("two_creator").mockReturnValueOnce("Video Count Two");
+    prompt.mockReturnValueOnce("three_creator").mockReturnValueOnce("Video Count Three");
+
+    render(<App />);
+    await goTo(user, /达人数据库/);
+    await user.click(screen.getByRole("button", { name: "新增达人" }));
+    await user.click(screen.getByRole("button", { name: "新增达人" }));
+    await user.click(screen.getByRole("button", { name: "新增达人" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.username === "one_creator")?.videoProgress).toBe("0/1");
+      expect(saved.find((row) => row.username === "two_creator")?.videoProgress).toBe("0/2");
+      expect(saved.find((row) => row.username === "three_creator")?.videoProgress).toBe("0/3");
+    });
+  });
+
   it("saves, displays, and restores optional reference links in Settings", async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App />);

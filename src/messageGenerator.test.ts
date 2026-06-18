@@ -19,7 +19,7 @@ function task(overrides: Partial<Task> = {}): Task {
     lastContactDate: '2026-06-01',
     lastFollowUpCount: 0,
     notes: '',
-    priority: 'Highest',
+    priority: 'High',
     priorityRank: 1,
     stageRank: 2,
     triggerReason: '样品已到货 3 天但未发视频',
@@ -79,7 +79,7 @@ describe('generateMessage high-risk and final follow-up style', () => {
   it('does not paste full filming requirements in final follow-up messages', () => {
     const message = generateMessage(task({
       failedWarnings: ['达人已被跟进 2 次以上，但合作仍未完成。'],
-      priority: 'Highest',
+      priority: 'High',
       lastFollowUpCount: 2,
     }), 'TikTok Shop Affiliate Message', requirements({
       requirements: ['每位达人 3 条视频', '每条视频 60 秒以上', '必须 tag 品牌账号', '必须挂 TikTok Shop 产品链接'],
@@ -313,7 +313,7 @@ describe('generateMessage status-aware communication center scenarios', () => {
       sampleShippingStatus: 'In Transit',
       sampleDeliveredDate: '',
       videoProgress: '0 of 2',
-      priority: 'Highest',
+      priority: 'High',
       lastFollowUpCount: 3,
       failedWarnings: ['达人已被跟进 2 次以上，但合作仍未完成。'],
     });
@@ -372,14 +372,14 @@ describe('generateMessage status-aware communication center scenarios', () => {
       sampleShippingStatus: 'In Transit',
       sampleDeliveredDate: '',
       videoProgress: '0/2',
-      priority: 'Highest',
+      priority: 'High',
       priorityRank: 1,
       lastFollowUpCount: 1,
     }));
 
     expect(classification.urgencyLevel).toBe('高');
-    expect(classification.communicationAction).toBe('确认物流 / 是否签收');
-    expect(classification.reason).toContain('样品仍处于运输中');
+    expect(classification.communicationAction).toBe('样品运输中，提前沟通拍摄要求');
+    expect(classification.reason).toContain('提前沟通拍摄要求');
   });
 
   it('classifies Delivered + 0/N as sample-delivered filming follow-up without high-risk pressure', () => {

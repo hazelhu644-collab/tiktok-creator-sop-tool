@@ -135,6 +135,7 @@ export type EditableCreatorField =
   | 'profileLink'
   | 'contactMethod'
   | 'product'
+  | 'campaignId'
   | 'currentStatus'
   | 'sampleShippingStatus'
   | 'sampleDeliveredDate'
@@ -192,8 +193,8 @@ export function loadCreatorRows(): CreatorRow[] {
   }
 }
 
-export function createBlankCreatorRow(productName = '', requiredVideos = 2): CreatorRow {
-  const safeRequiredVideos = Number.isFinite(requiredVideos) && requiredVideos > 0 ? Math.floor(requiredVideos) : 2;
+export function createBlankCreatorRow(productName = '', requiredVideos = 1): CreatorRow {
+  const safeRequiredVideos = Number.isFinite(requiredVideos) && requiredVideos > 0 ? Math.floor(requiredVideos) : 1;
 
   return {
     id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -204,7 +205,7 @@ export function createBlankCreatorRow(productName = '', requiredVideos = 2): Cre
     currentStatus: 'To Contact',
     sampleShippingStatus: 'Not Shipped',
     sampleDeliveredDate: '',
-    videoProgress: `0 of ${safeRequiredVideos}`,
+    videoProgress: `0/${safeRequiredVideos}`,
     firstVideoPostedDate: '',
     latestVideoPostedDate: '',
     lastContactDate: '',
@@ -240,7 +241,7 @@ export function clearSavedCreatorRows(): void {
   getBrowserStorage()?.removeItem(CREATOR_ROWS_STORAGE_KEY);
 }
 
-export function updateCreatorField(row: CreatorRow, field: EditableCreatorField, rawValue: string, requiredVideos = 2): CreatorRow {
+export function updateCreatorField(row: CreatorRow, field: EditableCreatorField, rawValue: string, requiredVideos = 1): CreatorRow {
   if (field === 'lastFollowUpCount') {
     const parsed = Number.parseInt(rawValue, 10);
     return { ...row, lastFollowUpCount: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) };

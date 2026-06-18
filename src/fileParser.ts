@@ -1,7 +1,7 @@
 import type { CreatorRow } from './types';
 import { normalizeText, normalizeVideoProgress } from './sopRules';
 
-const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory'>, string[]> = {
+const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory' | 'archivedAt' | 'archiveReason' | 'campaignId'>, string[]> = {
   username: ['creator username', 'username', 'creator', 'creator handle', '达人账号'],
   profileLink: ['creator profile link', 'profile link', 'creator link', 'profile', '主页链接'],
   contactMethod: ['contact method', 'contact', 'channel', '联系渠道'],
@@ -23,6 +23,8 @@ const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' |
   lastCreatorResponse: ['last creator response', '达人回复/下一步备注', '达人回复', '下一步备注'],
 };
 
+const CAMPAIGN_ID_ALIASES = ['campaign id', 'product id', 'campaignId', '产品ID', 'Campaign ID'];
+
 const FOLLOW_UP_ALIASES = ['last follow-up count', 'last follow up count', 'follow-up count', 'follow up count', 'followups', '跟进次数'];
 
 function normalizeHeader(header: string): string {
@@ -35,7 +37,7 @@ function pickValue(record: Record<string, unknown>, aliases: string[]): string {
   return normalizeText(found?.[1]);
 }
 
-export function normalizeRecord(record: Record<string, unknown>, index: number, requiredVideos = 2): CreatorRow {
+export function normalizeRecord(record: Record<string, unknown>, index: number, requiredVideos = 1): CreatorRow {
   const lastFollowUpValue = pickValue(record, FOLLOW_UP_ALIASES);
   const followUpCount = Number.parseInt(lastFollowUpValue || '0', 10);
   const progressResult = normalizeVideoProgress(pickValue(record, COLUMN_ALIASES.videoProgress), requiredVideos);
@@ -48,6 +50,7 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
     profileLink: pickValue(record, COLUMN_ALIASES.profileLink),
     contactMethod: pickValue(record, COLUMN_ALIASES.contactMethod),
     product: pickValue(record, COLUMN_ALIASES.product),
+    campaignId: pickValue(record, CAMPAIGN_ID_ALIASES),
     currentStatus: pickValue(record, COLUMN_ALIASES.currentStatus),
     sampleShippingStatus: pickValue(record, COLUMN_ALIASES.sampleShippingStatus),
     sampleDeliveredDate: pickValue(record, COLUMN_ALIASES.sampleDeliveredDate),
@@ -69,7 +72,7 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
   };
 }
 
-export async function parseCreatorFile(file: File, requiredVideos = 2): Promise<CreatorRow[]> {
+export async function parseCreatorFile(file: File, requiredVideos: number | ((productName: string, campaignId?: string) => number) = 1): Promise<CreatorRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase();
   const buffer = await file.arrayBuffer();
 
@@ -79,7 +82,7 @@ export async function parseCreatorFile(file: File, requiredVideos = 2): Promise<
     const workbook = XLSX.read(text, { type: 'string' });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map((record, index) => normalizeRecord(record, index, requiredVideos)).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, typeof requiredVideos === 'function' ? requiredVideos(pickValue(record, COLUMN_ALIASES.product), pickValue(record, CAMPAIGN_ID_ALIASES)) : requiredVideos)).filter((row) => row.username);
   }
 
   if (extension === 'xlsx' || extension === 'xls') {
@@ -87,7 +90,7 @@ export async function parseCreatorFile(file: File, requiredVideos = 2): Promise<
     const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map((record, index) => normalizeRecord(record, index, requiredVideos)).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, typeof requiredVideos === 'function' ? requiredVideos(pickValue(record, COLUMN_ALIASES.product), pickValue(record, CAMPAIGN_ID_ALIASES)) : requiredVideos)).filter((row) => row.username);
   }
 
   throw new Error('请上传 CSV、XLS 或 XLSX 文件。');

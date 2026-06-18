@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe('editable creator data helpers', () => {
   it('updates edited creator fields and normalizes safe video progress text for export', () => {
-    const edited = updateCreatorField(row(), 'videoProgress', '2 of 2');
+    const edited = updateCreatorField(row(), 'videoProgress', '2 of 2', 2);
 
     expect(edited.videoProgress).toBe('2/2');
     expect(edited.videoProgressWarning).toBeUndefined();
@@ -48,7 +48,7 @@ describe('editable creator data helpers', () => {
       currentStatus: 'To Contact',
       sampleShippingStatus: 'Not Shipped',
       sampleDeliveredDate: '',
-      videoProgress: '0 of 5',
+      videoProgress: '0/5',
       firstVideoPostedDate: '',
       lastContactDate: '',
       lastFollowUpCount: 0,
