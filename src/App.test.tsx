@@ -565,7 +565,7 @@ describe("creator database redesigned table", () => {
 
     await user.click(screen.getByLabelText("选择 alpha_creator"));
     await user.click(screen.getByLabelText("选择 beta_creator"));
-    expect(screen.getByText("已选择 2 位达人")).toBeInTheDocument();
+    expect(screen.getByText("已选择：2")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "批量复制邀约话术" }));
     expect(writeText).toHaveBeenCalledWith(
@@ -578,7 +578,7 @@ describe("creator database redesigned table", () => {
     await user.selectOptions(
       within(
         screen
-          .getByText("已选择 2 位达人")
+          .getByText("已选择：2")
           .closest(".sticky-action-bar") as HTMLElement,
       ).getByRole("combobox"),
       "Sample Approved",
@@ -658,6 +658,77 @@ describe("creator database redesigned table", () => {
 
     expect(screen.getAllByText("同达人多样品").length).toBeGreaterThan(0);
     expect(screen.getByText(/该达人还有 1 个其他样品合作/)).toBeInTheDocument();
+  });
+
+  it("keeps completed and failed rows in the database ledger while hiding them from the daily queue", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: "complete-me", username: "complete_creator", product: "Pet Fountain", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({ id: "fail-me", username: "fail_creator", product: "Pet Fountain", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({ id: "active", username: "active_creator", product: "Pet Fountain", sampleDeliveredDate: "2026-06-01" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.selectOptions(screen.getByLabelText("选择达人"), "complete-me");
+    await user.click(screen.getAllByRole("button", { name: "合作完成" })[0]);
+    await user.selectOptions(screen.getByLabelText("选择达人"), "fail-me");
+    await user.click(screen.getAllByRole("button", { name: "合作失败" })[0]);
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved).toHaveLength(3);
+      expect(saved.find((row) => row.id === "complete-me")).toMatchObject({ currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-11" });
+      expect(saved.find((row) => row.id === "fail-me")).toMatchObject({ currentStatus: "Lost", trackingStatus: "合作失败", archivedAt: "2026-06-11" });
+    });
+
+    const expandQueueButton = screen.queryByRole("button", { name: "展开达人队列" });
+    if (expandQueueButton) await user.click(expandQueueButton);
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("complete_creator");
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("fail_creator");
+
+    await goTo(user, /达人数据库/);
+    await user.selectOptions(screen.getAllByLabelText("当前产品项目")[0], "Pet Fountain");
+    expect(screen.getByText("当前产品总记录：3")).toBeInTheDocument();
+    expect(screen.getByText("当前显示：1")).toBeInTheDocument();
+    expect(screen.getByText("已归档合作：2")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("complete_creator")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("搜索"), "complete_creator");
+    expect(screen.getByText("该达人存在于已归档合作中，可开启显示已归档合作查看。")).toBeInTheDocument();
+    await user.click(screen.getAllByLabelText("显示已归档合作")[screen.getAllByLabelText("显示已归档合作").length - 1]);
+    expect(screen.getAllByDisplayValue("complete_creator").length).toBeGreaterThan(1);
+  });
+
+  it("reconciles product card totals with database total and keeps selected count separate", async () => {
+    const user = userEvent.setup();
+    seedCreators([
+      ...Array.from({ length: 20 }, (_, index) => creatorRow({ id: `active-${index}`, username: `active_${index}`, product: "Count Product" })),
+      ...Array.from({ length: 11 }, (_, index) => creatorRow({ id: `archived-${index}`, username: `archived_${index}`, product: "Count Product", currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-01" })),
+    ]);
+
+    render(<App />);
+    expect(screen.getByRole("button", { name: /Count Product总合作记录 \/ 总达人数：31 位达人/ })).toBeInTheDocument();
+    await user.selectOptions(screen.getAllByLabelText("当前产品项目")[0], "Count Product");
+    await goTo(user, /达人数据库/);
+    expect(screen.getByText("当前产品总记录：31")).toBeInTheDocument();
+    expect(screen.getByText("当前显示：20")).toBeInTheDocument();
+    expect(screen.getByText("已归档合作：11")).toBeInTheDocument();
+    expect(screen.getByText("已选择：0")).toBeInTheDocument();
+    expect(screen.queryByText(/已选择 20 位达人/)).not.toBeInTheDocument();
+  });
+
+  it("exports completed failed and archived rows without silently dropping history", () => {
+    const csv = creatorRowsToCsv([
+      creatorRow({ id: "active", username: "active_export" }),
+      creatorRow({ id: "complete", username: "complete_export", currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-11" }),
+      creatorRow({ id: "failed", username: "failed_export", currentStatus: "Lost", trackingStatus: "合作失败", archivedAt: "2026-06-11" }),
+    ]);
+
+    expect(csv).toContain("active_export");
+    expect(csv).toContain("complete_export");
+    expect(csv).toContain("failed_export");
   });
 });
 

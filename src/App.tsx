@@ -397,6 +397,27 @@ function statusTone(status: CreatorStatus) {
   return `status-pill status-${status.toLowerCase().replace(/\s+/g, "-")}`;
 }
 
+function isArchivedCollaboration(row: Pick<CreatorRow, "archivedAt" | "currentStatus" | "trackingStatus">): boolean {
+  return Boolean(
+    row.archivedAt ||
+      hasAny(`${row.currentStatus} ${row.trackingStatus ?? ""}`, [
+        "completed",
+        "complete",
+        "已完成",
+        "合作完成",
+        "failed",
+        "lost",
+        "失败",
+        "归档",
+      ]),
+  );
+}
+
+function isActiveDailyCollaboration(row: CreatorRow, requiredVideos: number): boolean {
+  const status = inferStatus(row, requiredVideos);
+  return !isArchivedCollaboration(row) && status !== "Completed" && status !== "Lost";
+}
+
 function parseNumberFromNotes(notes: string, keys: string[]): string {
   for (const key of keys) {
     const expression = new RegExp(`${key}\\s*[:：]\\s*([^,;\\n]+)`, "i");
@@ -655,13 +676,17 @@ function App() {
   const visibleRows = useMemo(
     () =>
       selectedCampaign === "ALL"
-        ? rows.filter((row) => (showArchivedCollaborations || !row.archivedAt) && (showArchivedProducts || !campaignForProduct(row.product)?.archivedAt))
-        : rows.filter((row) => row.product.trim() === selectedCampaign && (showArchivedCollaborations || !row.archivedAt)),
+        ? rows.filter((row) => (showArchivedCollaborations || !isArchivedCollaboration(row)) && (showArchivedProducts || !campaignForProduct(row.product)?.archivedAt))
+        : rows.filter((row) => row.product.trim() === selectedCampaign && (showArchivedCollaborations || !isArchivedCollaboration(row))),
     [rows, selectedCampaign, showArchivedCollaborations, showArchivedProducts, mergedCampaigns],
   );
+  const dailyQueueRows = useMemo(
+    () => visibleRows.filter((row) => isActiveDailyCollaboration(row, requiredVideosForProduct(row.product))),
+    [visibleRows, mergedCampaigns, activeFilmingRequirements],
+  );
   const tasks = useMemo(
-    () => analyzeCreators(visibleRows, undefined, requiredVideos),
-    [visibleRows, requiredVideos],
+    () => analyzeCreators(dailyQueueRows, undefined, requiredVideos),
+    [dailyQueueRows, requiredVideos],
   );
   const tasksById = useMemo(
     () => new Map(tasks.map((task) => [task.id, task])),
@@ -960,9 +985,9 @@ function App() {
     [rows, selectedCampaign, showArchivedProducts, mergedCampaigns],
   );
   const productTotalCount = databaseRows.length;
-  const archivedProductCount = databaseRows.filter((row) => row.archivedAt).length;
+  const archivedProductCount = databaseRows.filter(isArchivedCollaboration).length;
   const databaseVisibleRows = useMemo(
-    () => databaseRows.filter((row) => showArchivedCollaborations || !row.archivedAt),
+    () => databaseRows.filter((row) => showArchivedCollaborations || !isArchivedCollaboration(row)),
     [databaseRows, showArchivedCollaborations],
   );
 
@@ -984,7 +1009,7 @@ function App() {
     const normalized = search.trim().toLowerCase();
     if (!normalized || showArchivedCollaborations) return [];
     return databaseRows.filter((row) => {
-      if (!row.archivedAt) return false;
+      if (!isArchivedCollaboration(row)) return false;
       return [row.username, row.profileLink, row.product, row.currentStatus, row.sampleShippingStatus, row.notes, row.trackingStatus ?? ""]
         .join(" ")
         .toLowerCase()
@@ -1052,12 +1077,14 @@ function App() {
     (task) => task.needsFollowUp && !isHandledToday(task),
   ).length;
 
-  const deliveredWaitingVideoCount = enrichedRows.filter((entry) => {
+  const activeEnrichedRows = enrichedRows.filter((entry) => isActiveDailyCollaboration(entry.row, requiredVideosForProduct(entry.row.product)));
+
+  const deliveredWaitingVideoCount = activeEnrichedRows.filter((entry) => {
     const { posted } = videoProgressCounts(entry.row, requiredVideos);
     return isSampleDeliveredForVideo(entry.row, requiredVideos) && posted === 0;
   }).length;
-  const postedVideoCount = enrichedRows.reduce((sum, entry) => sum + videoProgressCounts(entry.row, requiredVideos).posted, 0);
-  const postedThisWeekCount = enrichedRows.reduce((count, entry) => {
+  const postedVideoCount = activeEnrichedRows.reduce((sum, entry) => sum + videoProgressCounts(entry.row, requiredVideos).posted, 0);
+  const postedThisWeekCount = activeEnrichedRows.reduce((count, entry) => {
     const dateSet = new Set(
       [entry.row.firstVideoPostedDate, entry.row.latestVideoPostedDate ?? ""].filter(
         (date) => date && isCurrentWeek(date),
@@ -1098,17 +1125,17 @@ function App() {
     },
     {
       label: "合作完成数量",
-      value: enrichedRows.filter((entry) => entry.status === "Completed").length,
+      value: databaseRows.filter((row) => inferStatus(row, requiredVideosForProduct(row.product)) === "Completed").length,
       filterKey: "completed",
     },
     {
       label: "合作失败数量",
-      value: enrichedRows.filter((entry) => entry.status === "Lost").length,
+      value: databaseRows.filter((row) => inferStatus(row, requiredVideosForProduct(row.product)) === "Lost").length,
       filterKey: "failed",
     },
     {
       label: "样品运输中数量",
-      value: enrichedRows.filter((entry) =>
+      value: activeEnrichedRows.filter((entry) =>
         isSampleInTransitForDaily(entry.row, requiredVideos),
       ).length,
       filterKey: "sample_shipped",
@@ -1900,8 +1927,9 @@ function App() {
       filmingRequirements,
     );
     const campaignRequiredVideos = parseRequiredVideos(campaignRequirements);
+    const activeCampaignRows = campaignRows.filter((row) => isActiveDailyCollaboration(row, campaignRequiredVideos));
     const campaignTasks = analyzeCreators(
-      campaignRows,
+      activeCampaignRows,
       undefined,
       campaignRequiredVideos,
     );
@@ -1910,14 +1938,15 @@ function App() {
     );
     return {
       creatorCount: campaignRows.length,
+      activeCount: activeCampaignRows.length,
       todayFollowUp: campaignTasks.filter(
         (task) => task.needsFollowUp && !isHandledToday(task),
       ).length,
       highPriority: campaignTasks.filter((task) => task.priority === "High").length,
-      inTransit: campaignRows.filter(
+      inTransit: activeCampaignRows.filter(
         (row) => inferStatus(row, campaignRequiredVideos) === "Sample Shipped",
       ).length,
-      deliveredPending: campaignRows.filter((row) =>
+      deliveredPending: activeCampaignRows.filter((row) =>
         ["Delivered", "Waiting Video"].includes(
           inferStatus(row, campaignRequiredVideos),
         ),
@@ -1958,8 +1987,11 @@ function App() {
                 onClick={() => setSelectedCampaign(campaign.productName)}
               >
                 <span className="product-badge">{campaign.productName}</span>
-                <strong>{stats.creatorCount} 位达人</strong>
+                <strong>总合作记录 / 总达人数：{stats.creatorCount} 位达人</strong>
                 <div className="campaign-metrics">
+                  <span>
+                    进行中 <b>{stats.activeCount}</b>
+                  </span>
                   <span>
                     今日需跟进 <b>{stats.todayFollowUp}</b>
                   </span>
@@ -2828,13 +2860,12 @@ function App() {
             显示已归档合作
           </label>
           {!showArchivedCollaborations && archivedProductCount > 0 && (
-            <p className="ai-status">已隐藏 {archivedProductCount} 条已归档合作；开启“显示已归档合作”可查看、搜索和导出这些历史记录。</p>
+            <p className="ai-status">当前显示 active records，已隐藏 {archivedProductCount} 条已归档合作；开启“显示已归档合作”可查看和搜索这些历史记录。默认 CSV 导出包含所有历史记录。</p>
           )}
           <div className="sticky-action-bar">
             <span>当前产品总记录：{productTotalCount}</span>
             <span>当前显示：{filteredRows.length}</span>
             <span>已选择：{selectedIds.length}</span>
-            <span>已选择 {selectedIds.length} 位达人</span>
             <span>已归档合作：{archivedProductCount}</span>
             <button
               type="button"
