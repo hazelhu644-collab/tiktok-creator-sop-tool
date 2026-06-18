@@ -709,7 +709,7 @@ describe("creator database redesigned table", () => {
     ]);
 
     render(<App />);
-    expect(screen.getByRole("button", { name: /Count Product总合作记录 \/ 总达人数：31 位达人/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Count Product31 位达人/ })).toBeInTheDocument();
     await user.selectOptions(screen.getAllByLabelText("当前产品项目")[0], "Count Product");
     await goTo(user, /达人数据库/);
     expect(screen.getByText("当前产品总记录：31")).toBeInTheDocument();
