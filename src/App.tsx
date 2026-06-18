@@ -2015,7 +2015,7 @@ function App() {
                 onClick={() => setSelectedCampaign(campaign.productName)}
               >
                 <span className="product-badge">{campaign.productName}</span>
-                <strong>{stats.creatorCount} 位达人</strong>
+                <strong>总合作记录 / 总达人数：{stats.creatorCount} 位达人</strong>
                 <div className="campaign-metrics">
                   <span>
                     进行中 <b>{stats.activeCount}</b>
