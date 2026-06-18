@@ -1382,8 +1382,9 @@ function App() {
 
   function campaignForProduct(product: string, campaignId?: string): Campaign | undefined {
     const normalizedProduct = normalizeProductIdentity(product);
-    if (campaignId) {
-      const byId = mergedCampaigns.find((campaign) => campaign.id === campaignId);
+    const normalizedCampaignId = campaignId?.trim();
+    if (normalizedCampaignId) {
+      const byId = mergedCampaigns.find((campaign) => campaign.id === normalizedCampaignId);
       if (byId) return byId;
     }
     return mergedCampaigns.find((campaign) => normalizeProductIdentity(campaign.productName) === normalizedProduct);

@@ -72,6 +72,15 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
   };
 }
 
+function requiredVideosForRecord(
+  record: Record<string, unknown>,
+  requiredVideos: number | ((productName: string, campaignId?: string) => number),
+): number {
+  if (typeof requiredVideos !== 'function') return requiredVideos;
+
+  return requiredVideos(pickValue(record, COLUMN_ALIASES.product), pickValue(record, CAMPAIGN_ID_ALIASES));
+}
+
 export async function parseCreatorFile(file: File, requiredVideos: number | ((productName: string, campaignId?: string) => number) = 1): Promise<CreatorRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase();
   const buffer = await file.arrayBuffer();
@@ -82,7 +91,7 @@ export async function parseCreatorFile(file: File, requiredVideos: number | ((pr
     const workbook = XLSX.read(text, { type: 'string' });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map((record, index) => normalizeRecord(record, index, typeof requiredVideos === 'function' ? requiredVideos(pickValue(record, COLUMN_ALIASES.product), pickValue(record, CAMPAIGN_ID_ALIASES)) : requiredVideos)).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, requiredVideosForRecord(record, requiredVideos))).filter((row) => row.username);
   }
 
   if (extension === 'xlsx' || extension === 'xls') {
@@ -90,7 +99,7 @@ export async function parseCreatorFile(file: File, requiredVideos: number | ((pr
     const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map((record, index) => normalizeRecord(record, index, typeof requiredVideos === 'function' ? requiredVideos(pickValue(record, COLUMN_ALIASES.product), pickValue(record, CAMPAIGN_ID_ALIASES)) : requiredVideos)).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, requiredVideosForRecord(record, requiredVideos))).filter((row) => row.username);
   }
 
   throw new Error('请上传 CSV、XLS 或 XLSX 文件。');
