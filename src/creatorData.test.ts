@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe('editable creator data helpers', () => {
   it('updates edited creator fields and normalizes safe video progress text for export', () => {
-    const edited = updateCreatorField(row(), 'videoProgress', '2 of 2');
+    const edited = updateCreatorField(row(), 'videoProgress', '2 of 2', 2);
 
     expect(edited.videoProgress).toBe('2/2');
     expect(edited.videoProgressWarning).toBeUndefined();

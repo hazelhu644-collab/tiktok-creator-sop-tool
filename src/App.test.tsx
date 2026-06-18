@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
-import { CREATOR_ROWS_STORAGE_KEY } from "./creatorData";
+import { CREATOR_ROWS_STORAGE_KEY, creatorRowsToCsv } from "./creatorData";
 import { CAMPAIGNS_STORAGE_KEY } from "./campaignData";
 import type { CreatorRow } from "./types";
 
@@ -1773,4 +1773,84 @@ describe("settings and prompt helper", () => {
       "已清空本地达人数据。",
     );
   });
+
+  it("syncs product video count to creator progress and shows database ledger counts", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "cat-patches",
+        productName: "Cat Scratching Patches",
+        sellingPoints: "",
+        requirements: ["每位达人 1 条视频"],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "每位达人 1 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      creatorRow({ id: "safe", username: "safe_creator", product: "Cat Scratching Patches", videoProgress: "0/2" }),
+      creatorRow({ id: "posted", username: "posted_creator", product: "Cat Scratching Patches", videoProgress: "1/2", firstVideoPostedDate: "2026-06-10" }),
+      creatorRow({ id: "done", username: "done_creator", product: "Cat Scratching Patches", videoProgress: "1/1", currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-11", archiveReason: "Completed" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /设置/);
+    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "Cat Scratching Patches");
+    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.id === "safe")?.videoProgress).toBe("0/1");
+      expect(saved.find((row) => row.id === "posted")?.videoProgress).toBe("1/1");
+      expect(saved.find((row) => row.id === "done")?.videoProgress).toBe("1/1");
+    });
+
+    await goTo(user, /达人数据库/);
+    expect(screen.getByText("当前产品总记录：3")).toBeInTheDocument();
+    expect(screen.getByText("当前显示：2")).toBeInTheDocument();
+    expect(screen.getByText("已选择：0")).toBeInTheDocument();
+    expect(screen.getByText("已归档合作：1")).toBeInTheDocument();
+  });
+
+  it("keeps completed and failed collaborations in the Creator Database, hides them from today queue, and searches archived rows", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: "complete", username: "complete_creator", product: "Pet Brush" }),
+      creatorRow({ id: "fail", username: "fail_creator", product: "Pet Brush" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.selectOptions(screen.getByLabelText("选择达人"), "complete");
+    await user.click(screen.getAllByRole("button", { name: "合作完成" })[0]);
+    await user.selectOptions(screen.getByLabelText("选择达人"), "fail");
+    await user.click(screen.getAllByRole("button", { name: "合作失败" })[0]);
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved.find((row) => row.id === "complete")?.trackingStatus).toBe("合作完成");
+      expect(saved.find((row) => row.id === "fail")?.trackingStatus).toBe("合作失败");
+      expect(saved).toHaveLength(2);
+    });
+    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain("complete_creator");
+    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain("fail_creator");
+
+    await goTo(user, /达人数据库/);
+    await user.type(screen.getByLabelText("搜索"), "complete_creator");
+    expect(screen.getByText("该达人存在于已归档合作中，可开启显示已归档合作查看。")).toBeInTheDocument();
+    await user.click(screen.getAllByLabelText("显示已归档合作")[0]);
+    expect(screen.getAllByDisplayValue("complete_creator").length).toBeGreaterThan(1);
+
+    const csv = creatorRowsToCsv(JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[]);
+    expect(csv).toContain("complete_creator");
+    expect(csv).toContain("fail_creator");
+  });
+
 });

@@ -35,7 +35,7 @@ function pickValue(record: Record<string, unknown>, aliases: string[]): string {
   return normalizeText(found?.[1]);
 }
 
-export function normalizeRecord(record: Record<string, unknown>, index: number, requiredVideos = 2): CreatorRow {
+export function normalizeRecord(record: Record<string, unknown>, index: number, requiredVideos = 1): CreatorRow {
   const lastFollowUpValue = pickValue(record, FOLLOW_UP_ALIASES);
   const followUpCount = Number.parseInt(lastFollowUpValue || '0', 10);
   const progressResult = normalizeVideoProgress(pickValue(record, COLUMN_ALIASES.videoProgress), requiredVideos);
@@ -69,7 +69,7 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
   };
 }
 
-export async function parseCreatorFile(file: File, requiredVideos = 2): Promise<CreatorRow[]> {
+export async function parseCreatorFile(file: File, requiredVideos = 1): Promise<CreatorRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase();
   const buffer = await file.arrayBuffer();
 
