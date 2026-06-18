@@ -240,7 +240,7 @@ export function clearSavedCreatorRows(): void {
   getBrowserStorage()?.removeItem(CREATOR_ROWS_STORAGE_KEY);
 }
 
-export function updateCreatorField(row: CreatorRow, field: EditableCreatorField, rawValue: string, requiredVideos = 2): CreatorRow {
+export function updateCreatorField(row: CreatorRow, field: EditableCreatorField, rawValue: string, requiredVideos = 1): CreatorRow {
   if (field === 'lastFollowUpCount') {
     const parsed = Number.parseInt(rawValue, 10);
     return { ...row, lastFollowUpCount: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) };

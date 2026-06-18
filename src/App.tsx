@@ -952,19 +952,45 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const databaseRows = useMemo(
+    () =>
+      selectedCampaign === "ALL"
+        ? rows.filter((row) => showArchivedProducts || !campaignForProduct(row.product)?.archivedAt)
+        : rows.filter((row) => row.product.trim() === selectedCampaign),
+    [rows, selectedCampaign, showArchivedProducts, mergedCampaigns],
+  );
+  const productTotalCount = databaseRows.length;
+  const archivedProductCount = databaseRows.filter((row) => row.archivedAt).length;
+  const databaseVisibleRows = useMemo(
+    () => databaseRows.filter((row) => showArchivedCollaborations || !row.archivedAt),
+    [databaseRows, showArchivedCollaborations],
+  );
+
   const enrichedRows = useMemo(
     () =>
-      visibleRows.map((row) => ({
+      databaseVisibleRows.map((row) => ({
         row,
         task: tasksById.get(row.id),
-        status: inferStatus(row, requiredVideos),
+        status: inferStatus(row, requiredVideosForProduct(row.product)),
         creatorType: creatorType(row),
         followers: followerCount(row),
         avgViews: avgViews(row),
         gmv: gmvRange(row),
       })),
-    [visibleRows, tasksById, requiredVideos],
+    [databaseVisibleRows, tasksById, mergedCampaigns, activeFilmingRequirements],
   );
+
+  const archivedSearchMatches = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized || showArchivedCollaborations) return [];
+    return databaseRows.filter((row) => {
+      if (!row.archivedAt) return false;
+      return [row.username, row.profileLink, row.product, row.currentStatus, row.sampleShippingStatus, row.notes, row.trackingStatus ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized);
+    });
+  }, [databaseRows, search, showArchivedCollaborations]);
 
   const filteredRows = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -1357,6 +1383,10 @@ function App() {
 
   function campaignForProduct(product: string): Campaign | undefined {
     return mergedCampaigns.find((campaign) => campaign.productName === product);
+  }
+
+  function requiredVideosForProduct(product: string): number {
+    return parseRequiredVideos(campaignToFilmingRequirements(campaignForProduct(product), activeFilmingRequirements));
   }
 
   function selectedTaskCampaignRequirements(task: Task): CreatorFilmingRequirements {
@@ -2793,8 +2823,19 @@ function App() {
               </select>
             </label>
           </div>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={showArchivedCollaborations} onChange={(event) => setShowArchivedCollaborations(event.target.checked)} />
+            显示已归档合作
+          </label>
+          {!showArchivedCollaborations && archivedProductCount > 0 && (
+            <p className="ai-status">已隐藏 {archivedProductCount} 条已归档合作；开启“显示已归档合作”可查看、搜索和导出这些历史记录。</p>
+          )}
           <div className="sticky-action-bar">
+            <span>当前产品总记录：{productTotalCount}</span>
+            <span>当前显示：{filteredRows.length}</span>
+            <span>已选择：{selectedIds.length}</span>
             <span>已选择 {selectedIds.length} 位达人</span>
+            <span>已归档合作：{archivedProductCount}</span>
             <button
               type="button"
               className="secondary"
@@ -2825,7 +2866,7 @@ function App() {
           </div>
           {filteredRows.length === 0 ? (
             <div className="empty-state">
-              <strong>没有匹配的达人。</strong>
+              <strong>{archivedSearchMatches.length > 0 ? "该达人存在于已归档合作中，可开启显示已归档合作查看。" : "没有匹配的达人。"}</strong>
               <span>下一步：清空筛选、导入 CSV / Excel，或点击 新增达人。</span>
             </div>
           ) : (
@@ -3456,6 +3497,33 @@ function App() {
       );
     };
     const linkedRowsCount = (campaign: Campaign) => rows.filter((row) => row.product === campaign.productName).length;
+    const syncCampaignVideoCount = (campaign: Campaign) => {
+      const targetRequiredVideos = parseRequiredVideos(campaignToFilmingRequirements(campaign, activeFilmingRequirements));
+      let updatedCount = 0;
+      let preservedPublishedCount = 0;
+      let skippedCount = 0;
+      const nextRows = rows.map((row) => {
+        if (row.product !== campaign.productName) return row;
+        const progress = normalizeVideoProgress(row.videoProgress, targetRequiredVideos);
+        const postedFromText = row.videoProgress.match(/^\s*(\d+)\s*(?:\/|of)\s*\d+/i)?.[1];
+        const postedCount = typeof progress.postedCount === "number" ? progress.postedCount : postedFromText ? Number.parseInt(postedFromText, 10) : undefined;
+        if (typeof postedCount !== "number" || !Number.isFinite(postedCount)) {
+          skippedCount += 1;
+          return row;
+        }
+        if (postedCount > 0) preservedPublishedCount += 1;
+        const nextProgress = `${postedCount}/${targetRequiredVideos}`;
+        if (row.videoProgress === nextProgress && !row.videoProgressWarning) return row;
+        updatedCount += 1;
+        const normalized = normalizeVideoProgress(nextProgress, targetRequiredVideos);
+        return { ...row, videoProgress: normalized.normalized, videoProgressWarning: normalized.warning };
+      });
+      setRows(nextRows);
+      setToast({
+        tone: skippedCount > 0 ? "warning" : "success",
+        text: `已同步 ${updatedCount} 条达人记录到 ${targetRequiredVideos} 条视频要求；保留 ${preservedPublishedCount} 条已有发布进度；跳过 ${skippedCount} 条无法识别进度。`,
+      });
+    };
     const duplicateCampaign = (campaign: Campaign) => {
       const copy = { ...campaign, id: `${campaign.id}-copy-${Date.now()}`, productName: `${campaign.productName} Copy`, archivedAt: undefined };
       setCampaigns([...mergedCampaigns, copy]);
@@ -3556,6 +3624,12 @@ function App() {
                   onChange={(event) => updateCampaign({ videoCount: event.target.value })}
                 />
               </label>
+              <div className="inline-actions">
+                <button type="button" className="secondary" onClick={() => syncCampaignVideoCount(targetCampaign)}>
+                  同步视频数量到达人记录
+                </button>
+                <span className="muted">会更新 0/2 → 0/1 等安全记录，并保留已发布视频数量。</span>
+              </div>
               <label>
                 不希望达人这样拍
                 <textarea
