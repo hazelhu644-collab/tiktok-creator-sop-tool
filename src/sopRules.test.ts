@@ -37,8 +37,8 @@ describe('required video count parsing', () => {
     expect(parseRequiredVideos({ requirements: [`每位达人 ${requiredVideos} 条视频`, '每条视频 60 秒以上'] })).toBe(requiredVideos);
   });
 
-  it('falls back to 2 when no positive video count can be parsed', () => {
-    expect(parseRequiredVideos({ requirements: ['请按脚本拍摄'] })).toBe(2);
+  it('falls back to 1 when no positive video count can be parsed', () => {
+    expect(parseRequiredVideos({ requirements: ['请按脚本拍摄'] })).toBe(1);
   });
 });
 
@@ -95,8 +95,8 @@ describe('MVP SOP rules', () => {
       row({ id: 'high', username: 'high', videoProgress: '1/2', firstVideoPostedDate: '2026-06-04' }),
     ], today, 2);
 
-    expect(tasks.map((task) => task.priority)).toEqual(['Highest', 'Highest', 'Medium', 'Low']);
-    expect(buildSummary(tasks)).toMatchObject({ totalCreators: 4, needsFollowUp: 4, highest: 2, high: 0, medium: 1, low: 1 });
+    expect(tasks.map((task) => task.priority)).toEqual(['High', 'High', 'Medium', 'Low']);
+    expect(buildSummary(tasks)).toMatchObject({ totalCreators: 4, needsFollowUp: 4, highest: 0, high: 2, medium: 1, low: 1 });
   });
 
   it.each([1, 3, 5, 7, 10])('keeps priority and task analysis populated for requiredVideos=%i', (requiredVideos) => {
@@ -108,7 +108,7 @@ describe('MVP SOP rules', () => {
 
     expect(tasks).toHaveLength(3);
     expect(tasks.every((task) => task.triggerReason.length > 0 && task.suggestedAction.length > 0)).toBe(true);
-    expect(tasks.find((task) => task.id === `zero-${requiredVideos}`)?.priority).toBe('Highest');
+    expect(tasks.find((task) => task.id === `zero-${requiredVideos}`)?.priority).toBe('High');
     expect(tasks.find((task) => task.id === `complete-${requiredVideos}`)?.needsFollowUp).toBe(false);
   });
 
@@ -131,7 +131,7 @@ describe('MVP SOP rules', () => {
       row({ videoProgress: '1 of 3', firstVideoPostedDate: '2026-06-04' }),
     ], today, 3);
 
-    expect(task.priority).toBe('Highest');
+    expect(task.priority).toBe('High');
     expect(task.suggestedAction).toContain('剩余 2 条视频');
   });
 
@@ -193,8 +193,8 @@ describe('MVP SOP rules', () => {
     ], today, 2);
 
     expect(tasks.map((task) => task.id)).toEqual(['reply', 'delivered', 'transit', 'invited']);
-    expect(tasks.find((task) => task.id === 'reply')).toMatchObject({ priority: 'Highest', triggerReason: '达人已回复，需先处理对话。' });
-    expect(tasks.find((task) => task.id === 'delivered')).toMatchObject({ priority: 'Highest' });
+    expect(tasks.find((task) => task.id === 'reply')).toMatchObject({ priority: 'High', triggerReason: '达人已回复，需先处理对话。' });
+    expect(tasks.find((task) => task.id === 'delivered')).toMatchObject({ priority: 'High' });
     expect(tasks.find((task) => task.id === 'transit')).toMatchObject({ priority: 'Medium' });
     expect(tasks.find((task) => task.id === 'invited')).toMatchObject({ priority: 'Medium' });
   });
@@ -226,7 +226,7 @@ describe('MVP SOP rules', () => {
     ], today, 2);
 
     expect(tasks.map((task) => task.id)).toEqual(['reply', 'delivered', 'remaining', 'transit', 'invited', 'completed']);
-    expect(tasks.find((task) => task.id === 'remaining')?.priority).toBe('Highest');
+    expect(tasks.find((task) => task.id === 'remaining')?.priority).toBe('High');
     expect(tasks.find((task) => task.id === 'completed')?.priority).toBe('Low');
   });
 
@@ -235,7 +235,7 @@ describe('MVP SOP rules', () => {
       row({ currentStatus: 'Delivered / Waiting for Video', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-05-28', videoProgress: '0/2' }),
     ], today, 2);
 
-    expect(task.priority).toBe('Highest');
+    expect(task.priority).toBe('High');
     expect(task.failedWarnings[0]).toContain('样品已到货 8 天');
     expect(task.currentStatus).toBe('Delivered / Waiting for Video');
   });

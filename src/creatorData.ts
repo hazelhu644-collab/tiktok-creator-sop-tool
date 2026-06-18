@@ -192,8 +192,8 @@ export function loadCreatorRows(): CreatorRow[] {
   }
 }
 
-export function createBlankCreatorRow(productName = '', requiredVideos = 2): CreatorRow {
-  const safeRequiredVideos = Number.isFinite(requiredVideos) && requiredVideos > 0 ? Math.floor(requiredVideos) : 2;
+export function createBlankCreatorRow(productName = '', requiredVideos = 1): CreatorRow {
+  const safeRequiredVideos = Number.isFinite(requiredVideos) && requiredVideos > 0 ? Math.floor(requiredVideos) : 1;
 
   return {
     id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -204,7 +204,7 @@ export function createBlankCreatorRow(productName = '', requiredVideos = 2): Cre
     currentStatus: 'To Contact',
     sampleShippingStatus: 'Not Shipped',
     sampleDeliveredDate: '',
-    videoProgress: `0 of ${safeRequiredVideos}`,
+    videoProgress: `0/${safeRequiredVideos}`,
     firstVideoPostedDate: '',
     latestVideoPostedDate: '',
     lastContactDate: '',
