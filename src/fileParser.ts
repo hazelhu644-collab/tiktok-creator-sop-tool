@@ -1,7 +1,7 @@
 import type { CreatorRow } from './types';
 import { normalizeText, normalizeVideoProgress } from './sopRules';
 
-const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory'>, string[]> = {
+const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory' | 'archivedAt' | 'archiveReason'>, string[]> = {
   username: ['creator username', 'username', 'creator', 'creator handle', '达人账号'],
   profileLink: ['creator profile link', 'profile link', 'creator link', 'profile', '主页链接'],
   contactMethod: ['contact method', 'contact', 'channel', '联系渠道'],

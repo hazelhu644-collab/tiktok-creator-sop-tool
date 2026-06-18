@@ -48,7 +48,7 @@ describe('editable creator data helpers', () => {
       currentStatus: 'To Contact',
       sampleShippingStatus: 'Not Shipped',
       sampleDeliveredDate: '',
-      videoProgress: '0 of 5',
+      videoProgress: '0/5',
       firstVideoPostedDate: '',
       lastContactDate: '',
       lastFollowUpCount: 0,

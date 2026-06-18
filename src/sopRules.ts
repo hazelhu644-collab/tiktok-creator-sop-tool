@@ -2,13 +2,13 @@ import type { CreatorRow, Priority, Summary, Task, VideoProgressNormalization } 
 
 export const PRIORITY_RANK: Record<Priority, number> = {
   Highest: 1,
-  High: 2,
+  High: 1,
   Medium: 3,
   Low: 4,
   None: 99,
 };
 
-export const DEFAULT_REQUIRED_VIDEOS = 2;
+export const DEFAULT_REQUIRED_VIDEOS = 1;
 export const VIDEO_PROGRESS_OVER_REQUIRED_WARNING = '视频进度超过当前达人拍摄要求。请检查已发布视频数量或修改达人拍摄要求。';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -296,7 +296,7 @@ function stageRank(row: CreatorRow, priority: Priority, today: Date, requiredVid
   if (['replied', 'reply pending', '达人已回复', '达人回复待处理'].includes(trackingStatus)) return 1;
   if (hasDeliveredEvidence(row) && (progress.postedCount ?? 0) === 0) return 2;
   if (typeof progress.postedCount === 'number' && progress.postedCount > 0 && progress.postedCount < requiredVideos) return 3;
-  if (priority === 'Highest' && row.lastFollowUpCount >= 2) return 4;
+  if (priority === 'High' && row.lastFollowUpCount >= 2) return 4;
   if (isShippedOrInTransit(row)) return 5;
   if (isInvitedOnly(row)) return 6;
   return 6;
@@ -320,6 +320,10 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
   const dueFollowUp = isTodayOrOverdue(row.nextFollowUpDate, today);
   const deliveredOrDeliverable = hasDeliveredEvidence(row) || hasPostedAnyVideo;
   const statusText = normalizeText(row.currentStatus);
+  if (row.archivedAt) {
+    const progressArchived = videoProgress(row, requiredVideos);
+    return { ...row, videoProgress: progressArchived.normalized, videoProgressWarning: progressArchived.warning, priority: 'Low', priorityRank: PRIORITY_RANK.Low, stageRank: 9, triggerReason: '合作记录已归档，默认不进入今日队列。', suggestedAction: '可在显示已归档合作后查看或恢复。', failedWarnings: [], needsFollowUp: false };
+  }
   const hasAnyWorkflowSignal = [row.username, row.currentStatus, row.sampleShippingStatus, row.sampleDeliveredDate, row.firstVideoPostedDate, row.lastContactDate, row.notes, row.trackingStatus ?? '', row.nextFollowUpDate ?? '']
     .some((value) => normalizeText(value));
   let priority: Priority = hasAnyWorkflowSignal ? 'Low' : 'None';
@@ -347,16 +351,16 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
     triggerReason = pauseNote ? '备注显示暂不催，已降低优先级。' : '下次跟进日期未到，暂不进入今日高优先级。';
     suggestedAction = '按备注或下次跟进日期复查。';
   } else if (hasPendingCreatorReply) {
-    priority = 'Highest';
+    priority = 'High';
     triggerReason = '达人已回复，需先处理对话。';
     suggestedAction = '生成「回复达人消息」话术，基于达人回复内容给出下一步回应。';
   } else if (hasPostedAnyVideo && isIncomplete) {
-    priority = 'Highest';
+    priority = 'High';
     triggerReason = `已发布 ${progress.postedCount} 条，剩余 ${missingVideos ?? 1} 条待履约。`;
     suggestedAction = missingVideos === null ? '提醒达人确认剩余视频发布计划。' : `提醒达人继续发布剩余 ${missingVideos} 条视频。`;
   } else if (hasDeliveredEvidence(row) && progress.postedCount === 0) {
     if (deliveredDays !== null && deliveredDays >= 3) {
-      priority = 'Highest';
+      priority = 'High';
       triggerReason = '样品已签收但仍未发布视频。';
       suggestedAction = `发送拍摄跟进，提醒达人按照达人拍摄要求完成 ${requiredVideos} 条视频。`;
     } else {
@@ -365,7 +369,7 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
       suggestedAction = '轻提醒达人确认收货和预计发布时间。';
     }
   } else if (row.lastFollowUpCount >= 2 && deliveredOrDeliverable && isIncomplete) {
-    priority = 'Highest';
+    priority = 'High';
     triggerReason = '已多次跟进且交付未完成，存在合作失败风险。';
     suggestedAction = '发送最后确认，请达人明确发布时间或是否继续合作。';
   } else if (dueFollowUp) {
@@ -375,7 +379,7 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
   } else if (isShippedOrInTransit(row)) {
     const hasLogisticsException = includesAny(statusText, ['logistics', '物流异常']) || includesAny(row.notes, ['logistics', '物流异常', 'delayed', 'stuck', 'lost']);
     const isArrivingSoon = arrivalDeltaDays !== null && arrivalDeltaDays <= 1;
-    priority = hasLogisticsException || isArrivingSoon ? 'High' : 'Medium';
+    priority = hasLogisticsException ? 'High' : 'Medium';
     if (arrivalDeltaDays !== null && arrivalDeltaDays < 0) {
       triggerReason = '样品到货日期已过，需确认物流 / 是否签收。';
       suggestedAction = '确认物流 / 是否签收。';
@@ -432,7 +436,7 @@ export function buildSummary(tasks: Task[]): Summary {
   return {
     totalCreators: tasks.length,
     needsFollowUp: tasks.filter((task) => task.needsFollowUp).length,
-    highest: tasks.filter((task) => task.priority === 'Highest').length,
+    highest: 0,
     high: tasks.filter((task) => task.priority === 'High').length,
     medium: tasks.filter((task) => task.priority === 'Medium').length,
     low: tasks.filter((task) => task.priority === 'Low').length,

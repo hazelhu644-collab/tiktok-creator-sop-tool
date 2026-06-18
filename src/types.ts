@@ -49,6 +49,8 @@ export type CreatorRow = {
   nextFollowUpDate?: string;
   lastCreatorResponse?: string;
   followUpHistory?: FollowUpHistoryEntry[];
+  archivedAt?: string;
+  archiveReason?: 'Completed' | 'Failed' | string;
 };
 
 export type Task = CreatorRow & {
@@ -113,4 +115,5 @@ export type Campaign = {
   referenceLinks: string[];
   defaultMessageSetting: string;
   notes: string;
+  archivedAt?: string;
 };

@@ -264,10 +264,8 @@ function displayStatus(status: CreatorStatus): string {
 }
 
 function priorityLabel(task: Task): string {
-  return task.priority === "Highest"
-    ? "极高"
-    : task.priority === "High"
-      ? "高"
+  return task.priority === "High"
+    ? "高"
       : task.priority === "Medium"
         ? "中"
         : "低";
@@ -281,7 +279,6 @@ function queueStatusLabelText(task: Task): string {
   if (task.trackingStatus?.trim()) return task.trackingStatus.trim();
   if (task.priority === "Low" && task.triggerReason.includes("今日已处理")) return "今日已处理";
   if (task.priority === "Low" && task.triggerReason.includes("暂不催")) return "暂不催";
-  if (task.priority === "Highest") return "待优先处理";
   if (task.priority === "High") return "待跟进";
   if (task.priority === "Medium") return "轻跟进";
   return "稍后复查";
@@ -562,7 +559,7 @@ function App() {
   const [templateCreatorId, setTemplateCreatorId] = useState("");
   const [followupSearch, setFollowupSearch] = useState("");
   const [followupUrgency, setFollowupUrgency] = useState<
-    "All" | "Highest" | "High" | "Medium" | "Low"
+    "All" | "High" | "Medium" | "Low"
   >("All");
   const [replyFocus, setReplyFocus] = useState("");
   const [replyRelationshipNote, setReplyRelationshipNote] = useState("");
@@ -628,6 +625,9 @@ function App() {
   const [isAdvancedReplyOpen, setIsAdvancedReplyOpen] = useState(false);
   const [showNextCreatorPrompt, setShowNextCreatorPrompt] = useState(false);
   const [showProcessedToday, setShowProcessedToday] = useState(false);
+  const [showArchivedCollaborations, setShowArchivedCollaborations] = useState(false);
+  const [showArchivedProducts, setShowArchivedProducts] = useState(false);
+  const [creatorSearchStatus, setCreatorSearchStatus] = useState("");
   const [lastProcessingResult, setLastProcessingResult] = useState("");
   const queueRef = useRef<HTMLElement | null>(null);
   const currentCreatorRef = useRef<HTMLDivElement | null>(null);
@@ -637,6 +637,7 @@ function App() {
     () => mergeDetectedCampaigns(campaigns, rows, filmingRequirements),
     [campaigns, rows, filmingRequirements],
   );
+  const activeCampaigns = useMemo(() => mergedCampaigns.filter((campaign) => showArchivedProducts || !campaign.archivedAt), [mergedCampaigns, showArchivedProducts]);
   const activeCampaign =
     selectedCampaign === "ALL"
       ? undefined
@@ -654,9 +655,9 @@ function App() {
   const visibleRows = useMemo(
     () =>
       selectedCampaign === "ALL"
-        ? rows
-        : rows.filter((row) => row.product.trim() === selectedCampaign),
-    [rows, selectedCampaign],
+        ? rows.filter((row) => (showArchivedCollaborations || !row.archivedAt) && (showArchivedProducts || !campaignForProduct(row.product)?.archivedAt))
+        : rows.filter((row) => row.product.trim() === selectedCampaign && (showArchivedCollaborations || !row.archivedAt)),
+    [rows, selectedCampaign, showArchivedCollaborations, showArchivedProducts, mergedCampaigns],
   );
   const tasks = useMemo(
     () => analyzeCreators(visibleRows, undefined, requiredVideos),
@@ -742,10 +743,8 @@ function App() {
     return tasks
       .filter((task) => {
         const urgencyLabel =
-          task.priority === "Highest"
-            ? "极高"
-            : task.priority === "High"
-              ? "高"
+          task.priority === "High"
+            ? "高"
               : task.priority === "Medium"
                 ? "中"
                 : "低";
@@ -862,16 +861,44 @@ function App() {
   );
 
   useEffect(() => saveCreatorRows(rows), [rows]);
+
+  useEffect(() => {
+    const today = todayString();
+    const specialStatus = /lost|returned|canceled|failed|completed|合作失败|合作完成|已归档/i;
+    setRows((currentRows) => {
+      let changed = false;
+      const nextRows = currentRows.map((row) => {
+        if (row.archivedAt || specialStatus.test(`${row.currentStatus} ${row.sampleShippingStatus} ${row.trackingStatus ?? ""}`)) return row;
+        if (!isInTransitLogisticsStatus(row.sampleShippingStatus) || !row.sampleDeliveredDate || row.sampleDeliveredDate > today) return row;
+        changed = true;
+        return {
+          ...row,
+          sampleShippingStatus: row.sampleShippingStatus.match(/[㐀-鿿]/) ? "已签收" : "Delivered",
+          currentStatus: "Delivered",
+          trackingStatus: "确认样品是否收到 / 确认拍摄计划",
+          lastMessageScenario: "确认样品是否收到 / 确认拍摄计划",
+          nextFollowUpDate: today,
+          followUpHistory: [
+            ...(row.followUpHistory ?? []),
+            { date: today, action: "Creator Replied" as const, note: "系统根据样品到货日期自动更新为 Delivered。" },
+          ],
+        };
+      });
+      return changed ? nextRows : currentRows;
+    });
+  }, []);
+
+
   useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
   useEffect(() => {
     if (
       selectedCampaign !== "ALL" &&
-      !mergedCampaigns.some(
+      !activeCampaigns.some(
         (campaign) => campaign.productName === selectedCampaign,
       )
     )
       setSelectedCampaign("ALL");
-  }, [mergedCampaigns, selectedCampaign]);
+  }, [activeCampaigns, selectedCampaign]);
   useEffect(() => {
     const target = activeCampaign ?? mergedCampaigns[0];
     if (!target) return;
@@ -1003,10 +1030,7 @@ function App() {
     const { posted } = videoProgressCounts(entry.row, requiredVideos);
     return isSampleDeliveredForVideo(entry.row, requiredVideos) && posted === 0;
   }).length;
-  const remainingVideoCount = enrichedRows.filter((entry) => {
-    const { posted, required } = videoProgressCounts(entry.row, requiredVideos);
-    return posted > 0 && posted < required;
-  }).length;
+  const postedVideoCount = enrichedRows.reduce((sum, entry) => sum + videoProgressCounts(entry.row, requiredVideos).posted, 0);
   const postedThisWeekCount = enrichedRows.reduce((count, entry) => {
     const dateSet = new Set(
       [entry.row.firstVideoPostedDate, entry.row.latestVideoPostedDate ?? ""].filter(
@@ -1037,12 +1061,12 @@ function App() {
       filterKey: "delivered_waiting_video",
     },
     {
-      label: "剩余视频待履约数量",
-      value: remainingVideoCount,
+      label: "已发布视频数量",
+      value: postedVideoCount,
       filterKey: "remaining_video",
     },
     {
-      label: "本周已发布视频数量",
+      label: "本周发布数量",
       value: postedThisWeekCount,
       filterKey: "posted_this_week",
     },
@@ -1093,7 +1117,16 @@ function App() {
     setRows((currentRows) =>
       currentRows.map((row) => {
         if (row.id !== rowId) return row;
-        const updated = updateCreatorField(row, field, value, requiredVideos);
+        let updated = updateCreatorField(row, field, value, requiredVideos);
+        if (field === "product") {
+          const newRequirement = parseRequiredVideos(campaignToFilmingRequirements(mergedCampaigns.find((campaign) => campaign.productName === value), filmingRequirements));
+          const progress = normalizeVideoProgress(row.videoProgress, requiredVideos);
+          if ((progress.postedCount ?? 0) === 0) {
+            updated = { ...updated, videoProgress: `0/${newRequirement}`, videoProgressWarning: undefined };
+          } else if (window.confirm("当前达人已有视频进度，是否根据新产品要求更新视频数量？")) {
+            updated = { ...updated, videoProgress: `${progress.postedCount}/${newRequirement}`, videoProgressWarning: undefined };
+          }
+        }
         if (field === "username" || field === "profileLink" || field === "product") {
           const duplicate = getDuplicateCheck(updated, currentRows);
           if (duplicate.possibleDuplicate) {
@@ -1160,7 +1193,8 @@ function App() {
         ? mergedCampaigns[0]?.productName
         : selectedCampaign) ||
       filmingRequirements.productName;
-    const draft = { ...createBlankCreatorRow(productName, requiredVideos), username: creatorName };
+    const productRequirement = parseRequiredVideos(campaignToFilmingRequirements(mergedCampaigns.find((campaign) => campaign.productName === productName), filmingRequirements));
+    const draft = { ...createBlankCreatorRow(productName, productRequirement), username: creatorName };
     const duplicate = getDuplicateCheck(draft, rows);
     if (creatorName && duplicate.duplicateCreator && duplicate.matchingRows[0]) {
       setPendingDuplicateAdd({ draft, existing: duplicate.matchingRows[0] });
@@ -1564,44 +1598,41 @@ function App() {
     setToast({ tone: "success", text: messageText });
   }
 
-  function markVideoProgress(postedCount: 1 | 2) {
+  function markVideoProgress() {
     if (!selectedTask) return;
     const today = todayString();
-    const isComplete = postedCount >= 2;
+    const selectedRequiredVideos = parseRequiredVideos(selectedTaskCampaignRequirements(selectedTask));
+    const current = normalizeVideoProgress(selectedTask.videoProgress, selectedRequiredVideos);
+    const nextPosted = Math.min((current.postedCount ?? 0) + 1, selectedRequiredVideos);
+    const reachedRequirement = nextPosted >= selectedRequiredVideos;
     setRows((currentRows) =>
       currentRows.map((row) => {
         if (row.id !== selectedTask.id) return row;
         return {
           ...row,
-          currentStatus: isComplete ? "合作完成" : "已发布 1 条 / 待补第 2 条",
-          trackingStatus: isComplete ? "合作完成" : "已发布部分视频",
-          videoProgress: isComplete ? "2 of 2" : "1 of 2",
+          currentStatus: reachedRequirement ? "视频已达要求，待确认合作完成" : `已发布 ${nextPosted} 条 / 待补剩余视频`,
+          trackingStatus: reachedRequirement ? "视频数量已达要求" : "已发布部分视频",
+          videoProgress: `${nextPosted}/${selectedRequiredVideos}`,
           videoProgressWarning: undefined,
           firstVideoPostedDate: row.firstVideoPostedDate || today,
           latestVideoPostedDate: today,
           lastHandledDate: today,
-          nextFollowUpDate: isComplete ? "" : addDays(2),
+          nextFollowUpDate: reachedRequirement ? today : addDays(2),
           followUpHistory: [
             ...(row.followUpHistory ?? []),
-            {
-              date: today,
-              action: isComplete ? "Completed" : "Video Posted",
-              note: isComplete
-                ? "已记录达人完成 2 条视频。"
-                : "已记录达人发布 1 条视频。",
-            },
+            { date: today, action: "Video Posted", note: `已记录达人发布 1 条视频，当前进度 ${nextPosted}/${selectedRequiredVideos}。` },
           ],
         };
       }),
     );
-    finishProcessing(isComplete ? "已记录达人完成 2 条视频。" : "已记录达人发布 1 条视频。");
+    finishProcessing(reachedRequirement ? "已达到产品视频数量要求，请确认是否合作完成。" : "已记录达人发布 1 条视频。");
   }
 
   function handleManualVideoProgressUpdate() {
     if (!selectedTask) return;
     const progress = window.prompt(
-      "视频进度：可填 0/2、1/2、2/2 或自定义",
-      selectedTask.videoProgress || "0/2",
+      "视频进度：可填 0/1、1/1、0/2、1/2 或自定义",
+      selectedTask.videoProgress || `0/${parseRequiredVideos(selectedTaskCampaignRequirements(selectedTask))}`,
     );
     if (progress === null) return;
     const firstDate = window.prompt(
@@ -1648,6 +1679,8 @@ function App() {
               trackingStatus: outcome === "Completed" ? "合作完成" : "合作失败",
               lastHandledDate: today,
               nextFollowUpDate: "",
+              archivedAt: today,
+              archiveReason: outcome,
               followUpHistory: [
                 ...(row.followUpHistory ?? []),
                 {
@@ -1655,8 +1688,8 @@ function App() {
                   action: outcome,
                   note:
                     outcome === "Completed"
-                      ? "今日标记合作完成。"
-                      : "今日标记合作失败。",
+                      ? "今日合作完成。"
+                      : "今日合作失败。",
                 },
               ],
             }
@@ -1668,7 +1701,7 @@ function App() {
     setShowNextCreatorPrompt(true);
     setToast({
       tone: "success",
-      text: outcome === "Completed" ? "已标记合作完成。" : "已标记合作失败。",
+      text: outcome === "Completed" ? "已合作完成。" : "已合作失败。",
     });
   }
 
@@ -1807,9 +1840,9 @@ function App() {
             }}
           >
             <option value="ALL">全部产品</option>
-            {mergedCampaigns.map((campaign) => (
+            {activeCampaigns.map((campaign) => (
               <option key={campaign.id} value={campaign.productName}>
-                {campaign.productName}
+                {campaign.productName}{campaign.archivedAt ? "（已归档）" : ""}
               </option>
             ))}
           </select>
@@ -1850,9 +1883,7 @@ function App() {
       todayFollowUp: campaignTasks.filter(
         (task) => task.needsFollowUp && !isHandledToday(task),
       ).length,
-      highest: campaignTasks.filter((task) => task.priority === "Highest")
-        .length,
-      high: campaignTasks.filter((task) => task.priority === "High").length,
+      highPriority: campaignTasks.filter((task) => task.priority === "High").length,
       inTransit: campaignRows.filter(
         (row) => inferStatus(row, campaignRequiredVideos) === "Sample Shipped",
       ).length,
@@ -1861,20 +1892,7 @@ function App() {
           inferStatus(row, campaignRequiredVideos),
         ),
       ).length,
-      remainingVideos: campaignRows.reduce((sum, row) => {
-        const progress = normalizeVideoProgress(
-          row.videoProgress,
-          campaignRequiredVideos,
-        );
-        return (
-          sum +
-          Math.max(
-            0,
-            (progress.requiredVideos ?? campaignRequiredVideos) -
-              (progress.postedCount ?? 0),
-          )
-        );
-      }, 0),
+      postedVideos: campaignRows.reduce((sum, row) => sum + (normalizeVideoProgress(row.videoProgress, campaignRequiredVideos).postedCount ?? 0), 0),
       completed: campaignRows.filter(
         (row) =>
           inferStatus(row, campaignRequiredVideos) === "Completed" ||
@@ -1916,10 +1934,7 @@ function App() {
                     今日需跟进 <b>{stats.todayFollowUp}</b>
                   </span>
                   <span>
-                    极高 <b>{stats.highest}</b>
-                  </span>
-                  <span>
-                    高 <b>{stats.high}</b>
+                    高优先级 <b>{stats.highPriority}</b>
                   </span>
                   <span>
                     样品运输中 <b>{stats.inTransit}</b>
@@ -1928,7 +1943,7 @@ function App() {
                     到货待拍 <b>{stats.deliveredPending}</b>
                   </span>
                   <span>
-                    剩余视频 <b>{stats.remainingVideos}</b>
+                    已发布视频 <b>{stats.postedVideos}</b>
                   </span>
                   <span>
                     已完成 <b>{stats.completed}</b>
@@ -1991,6 +2006,28 @@ function App() {
         {error && <p className="error">{error}</p>}
       </section>
     );
+  }
+
+
+  function handleLocateCreator() {
+    const normalized = followupSearch.trim().toLowerCase();
+    if (!normalized) {
+      setCreatorSearchStatus("请输入达人账号或关键词。");
+      return;
+    }
+    const matches = tasks.filter((task) => [task.username, task.profileLink, task.product, task.notes].join(" ").toLowerCase().includes(normalized));
+    if (matches.length === 0) {
+      setCreatorSearchStatus("未找到该达人。");
+      return;
+    }
+    if (matches.length === 1) {
+      handleSelectCreator(matches[0].id);
+      setMessage(buildLocalMessageForTask(matches[0]));
+      setCreatorSearchStatus(`已定位 ${displayName(matches[0])}。`);
+      return;
+    }
+    setIsQueueExpanded(true);
+    setCreatorSearchStatus(`找到 ${matches.length} 条结果，请在下方列表选择。`);
   }
 
   function renderDashboard() {
@@ -2083,8 +2120,17 @@ function App() {
               <input
                 value={followupSearch}
                 onChange={(event) => setFollowupSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleLocateCreator();
+                }}
                 placeholder="达人 / 产品 / 状态 / 跟进状态 / 紧急程度"
               />
+            </label>
+            <button type="button" className="secondary" onClick={handleLocateCreator}>定位达人</button>
+            {creatorSearchStatus && <p className="ai-status">{creatorSearchStatus}</p>}
+            <label className="checkbox-field">
+              <input type="checkbox" checked={showArchivedCollaborations} onChange={(event) => setShowArchivedCollaborations(event.target.checked)} />
+              显示已归档合作
             </label>
             <label>
               紧急程度
@@ -2097,7 +2143,6 @@ function App() {
                 }
               >
                 <option value="All">全部</option>
-                <option value="Highest">极高</option>
                 <option value="High">高</option>
                 <option value="Medium">中</option>
                 <option value="Low">低</option>
@@ -2352,6 +2397,11 @@ function App() {
                       rows={3}
                     />
                   </label>
+                  <div className="inline-actions deepseek-near-focus">
+                    <button type="button" className="secondary" onClick={() => void callDeepSeek("generate_personalized_reply")} disabled={deepSeekLoadingAction !== null}>
+                      根据上方重点生成英文回复
+                    </button>
+                  </div>
                   <div className="inline-actions">
                     <button
                       type="button"
@@ -2447,6 +2497,16 @@ function App() {
                       rows={3}
                     />
                   </label>
+                  <div className="inline-actions deepseek-near-focus">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => void callDeepSeek("generate_personalized_reply")}
+                      disabled={deepSeekLoadingAction !== null}
+                    >
+                      根据上方重点生成英文回复
+                    </button>
+                  </div>
                   <div className="reply-inline-fields">
                     <p className="readonly-channel">当前联系渠道：{channel}</p>
                     <label>
@@ -2520,8 +2580,8 @@ function App() {
                       <h3>英文话术</h3>
                       <p className="message-source-label">
                         {messageSource === "deepseek"
-                          ? "DeepSeek 优化话术"
-                          : "本地推荐话术"}
+                          ? "DeepSeek 优化版"
+                          : "免费本地话术"}
                       </p>
                       <label
                         className="sr-only"
@@ -2537,26 +2597,11 @@ function App() {
                         }
                         rows={7}
                       />
-                      <div className="deepseek-actions">
-                        <div className="inline-actions">
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() =>
-                              void callDeepSeek("generate_personalized_reply")
-                            }
-                            disabled={deepSeekLoadingAction !== null}
-                          >
-                            DeepSeek 生成英文回复
-                          </button>
-                        </div>
-                        {deepSeekLoadingAction ===
-                          "generate_personalized_reply" && (
-                          <p className="ai-status" role="status">
-                            DeepSeek 生成中…
-                          </p>
-                        )}
-                      </div>
+                      {deepSeekLoadingAction === "generate_personalized_reply" && (
+                        <p className="ai-status" role="status">
+                          DeepSeek 生成中…
+                        </p>
+                      )}
                       <h3>中文对照 / 中文解释</h3>
                       <span className="sr-only">中文解释</span>
                       <p>
@@ -2594,38 +2639,25 @@ function App() {
                         <button
                           type="button"
                           className="secondary"
-                          onClick={() => markVideoProgress(1)}
+                          onClick={markVideoProgress}
                         >
-                          标记已发布 1 条
+                          发布 1 条视频
                         </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => markVideoProgress(2)}
-                        >
-                          标记已发布 2 条 / 合作完成
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={handleManualVideoProgressUpdate}
-                        >
-                          手动更新视频进度
-                        </button>
+                        <details className="advanced-actions"><summary>更多操作 / 高级操作</summary><div className="inline-actions"><button type="button" className="secondary" onClick={handleManualVideoProgressUpdate}>手动更新视频进度</button>
                         <button
                           type="button"
                           className="secondary"
                           onClick={() => markCreatorOutcome("Completed")}
                         >
-                          标记合作完成
+                          合作完成
                         </button>
                         <button
                           type="button"
                           className="danger secondary"
                           onClick={() => markCreatorOutcome("Failed")}
                         >
-                          标记合作失败
-                        </button>
+                          合作失败
+                        </button></div></details>
                       </div>
                       <div className="skip-today-control">
                         <button
@@ -3423,6 +3455,29 @@ function App() {
         ),
       );
     };
+    const linkedRowsCount = (campaign: Campaign) => rows.filter((row) => row.product === campaign.productName).length;
+    const duplicateCampaign = (campaign: Campaign) => {
+      const copy = { ...campaign, id: `${campaign.id}-copy-${Date.now()}`, productName: `${campaign.productName} Copy`, archivedAt: undefined };
+      setCampaigns([...mergedCampaigns, copy]);
+      setToast({ tone: "success", text: "已复制产品项目。" });
+    };
+    const archiveCampaign = (campaign: Campaign) => {
+      setCampaigns(mergedCampaigns.map((item) => item.id === campaign.id ? { ...item, archivedAt: todayString() } : item));
+      setToast({ tone: "success", text: "已归档产品，历史达人记录和导出数据会保留。" });
+    };
+    const restoreCampaign = (campaign: Campaign) => {
+      setCampaigns(mergedCampaigns.map((item) => item.id === campaign.id ? { ...item, archivedAt: undefined } : item));
+      setToast({ tone: "success", text: "已恢复产品。" });
+    };
+    const deleteCampaign = (campaign: Campaign) => {
+      const linked = linkedRowsCount(campaign);
+      if (linked > 0) {
+        setToast({ tone: "warning", text: `该产品已关联 ${linked} 条达人记录，直接删除可能导致历史数据丢失。建议归档该产品。` });
+        return;
+      }
+      setCampaigns(mergedCampaigns.filter((item) => item.id !== campaign.id));
+      setToast({ tone: "success", text: "该产品暂无关联数据，可以安全删除。" });
+    };
     return (
       <>
         {renderPageHeader(
@@ -3444,13 +3499,23 @@ function App() {
               value={targetCampaign?.productName ?? ""}
               onChange={(event) => setSelectedCampaign(event.target.value)}
             >
-              {mergedCampaigns.map((campaign) => (
+              {activeCampaigns.map((campaign) => (
                 <option key={campaign.id} value={campaign.productName}>
-                  {campaign.productName}
+                  {campaign.productName}{campaign.archivedAt ? "（已归档）" : ""}
                 </option>
               ))}
             </select>
           </label>
+          <label className="checkbox-field"><input type="checkbox" checked={showArchivedProducts} onChange={(event) => setShowArchivedProducts(event.target.checked)} />显示已归档产品</label>
+          {targetCampaign && (
+            <div className="inline-actions campaign-actions">
+              <button type="button" className="secondary" onClick={() => setToast({ tone: "success", text: "可直接在下方编辑产品字段。" })}>编辑</button>
+              <button type="button" className="secondary" onClick={() => duplicateCampaign(targetCampaign)}>复制</button>
+              <button type="button" className="secondary" onClick={() => archiveCampaign(targetCampaign)}>归档</button>
+              {targetCampaign.archivedAt && <button type="button" className="secondary" onClick={() => restoreCampaign(targetCampaign)}>恢复</button>}
+              <button type="button" className="danger secondary" onClick={() => deleteCampaign(targetCampaign)}>删除</button>
+            </div>
+          )}
           {targetCampaign && (
             <div className="settings-form campaign-settings" data-testid="campaign-settings-form">
               <label>
