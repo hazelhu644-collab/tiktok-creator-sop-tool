@@ -1772,6 +1772,92 @@ describe("settings and prompt helper", () => {
     );
   });
 
+
+  it("renames store display name without changing storeId or breaking linked data", async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: "linked-row", storeId: "stable-store", storeName: "Old Brand", product: "Pet Fountain", campaignId: "pet-fountain" })]);
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([{
+      id: "pet-fountain",
+      storeId: "stable-store",
+      storeName: "Old Brand",
+      productName: "Pet Fountain",
+      sellingPoints: "",
+      requirements: ["每位达人 2 条视频"],
+      keyContentPoints: [],
+      avoidShots: "",
+      videoCount: "每位达人 2 条视频",
+      videoLength: "",
+      tagRequirement: "必须挂 TikTok Shop 产品链接",
+      productLink: "",
+      referenceLinks: [],
+      defaultMessageSetting: "",
+      notes: "",
+    }]));
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "stable-store" } });
+    await goTo(user, /设置/);
+    fireEvent.blur(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌"), { target: { value: "New Brand" } });
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("店铺 / 品牌名称已更新"));
+    const savedCampaigns = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
+    const savedRows = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]");
+    expect(savedCampaigns[0]).toMatchObject({ storeId: "stable-store", storeName: "New Brand" });
+    expect(savedRows[0]).toMatchObject({ storeId: "stable-store", storeName: "New Brand", campaignId: "pet-fountain" });
+    expect(screen.getByLabelText("当前店铺 / 品牌")).toHaveValue("stable-store");
+    await goTo(user, /达人数据库/);
+    expect(screen.getAllByDisplayValue("New Brand").length).toBeGreaterThan(0);
+    expect(screen.getByText("Pet Fountain")).toBeInTheDocument();
+  });
+
+  it("blocks blank and duplicate store names without corrupting storage", async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: "a", storeId: "store-a", storeName: "Store A", product: "Brush", campaignId: "brush" })]);
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      { id: "brush", storeId: "store-a", storeName: "Store A", productName: "Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "wand", storeId: "store-b", storeName: "Store B", productName: "Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+    ]));
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "store-a" } });
+    await goTo(user, /设置/);
+    const input = within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌");
+    fireEvent.blur(input, { target: { value: "   " } });
+    expect(screen.getByRole("status")).toHaveTextContent("店铺 / 品牌名称不能为空。");
+    fireEvent.blur(input, { target: { value: "Store B" } });
+    expect(screen.getByRole("status")).toHaveTextContent("该店铺 / 品牌名称已存在，请换一个名称。");
+    const savedCampaigns = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
+    expect(savedCampaigns.find((campaign: { storeId: string }) => campaign.storeId === "store-a").storeName).toBe("Store A");
+  });
+
+  it("migrates missing storeId data and stays usable when selected campaign lookup is missing", async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: "legacy", storeId: undefined, storeName: undefined, product: "Legacy Product" })]);
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([{
+      id: "legacy-product",
+      storeName: undefined,
+      productName: "Legacy Product",
+      sellingPoints: "",
+      requirements: [],
+      keyContentPoints: [],
+      avoidShots: "",
+      videoCount: "2",
+      videoLength: "",
+      tagRequirement: "",
+      productLink: "",
+      referenceLinks: [],
+      defaultMessageSetting: "",
+      notes: "",
+    }]));
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("当前产品项目"), { target: { value: "missing-store::missing-campaign" } });
+    expect(await screen.findByText(/当前产品项目不存在或不属于当前店铺/)).toBeInTheDocument();
+    await goTo(user, /达人数据库/);
+    expect(screen.getByDisplayValue("默认店铺")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Product")).toBeInTheDocument();
+  });
+
   it("prefills saved reference links in the optional ChatGPT helper form", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
