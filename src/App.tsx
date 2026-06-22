@@ -39,6 +39,7 @@ import {
 } from "./messageGenerator";
 import {
   ALL_STORES,
+  DEFAULT_STORE_ID,
   DEFAULT_STORE_NAME,
   campaignIdentity,
   campaignIdFromName,
@@ -718,8 +719,16 @@ function App() {
   );
   const stores = useMemo(() => {
     const byId = new Map<string, string>();
-    rows.forEach((row) => byId.set(rowStoreId(row), normalizeStoreName(row.storeName)));
-    mergedCampaigns.forEach((campaign) => byId.set(normalizeStoreId(campaign.storeId, campaign.storeName), normalizeStoreName(campaign.storeName)));
+    rows.forEach((row) => {
+      const id = rowStoreId(row);
+      if (!byId.has(id)) byId.set(id, normalizeStoreName(row.storeName));
+    });
+    mergedCampaigns.forEach((campaign) => {
+      const id = normalizeStoreId(campaign.storeId, campaign.storeName);
+      const name = normalizeStoreName(campaign.storeName);
+      if (!byId.has(id) || byId.get(id) === DEFAULT_STORE_NAME) byId.set(id, name);
+    });
+    if (byId.size === 0) byId.set(DEFAULT_STORE_ID, DEFAULT_STORE_NAME);
     return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [rows, mergedCampaigns]);
   const storeFilteredCampaigns = useMemo(() => mergedCampaigns.filter((campaign) => selectedStore === ALL_STORES || normalizeStoreId(campaign.storeId, campaign.storeName) === selectedStore), [mergedCampaigns, selectedStore]);
@@ -728,7 +737,9 @@ function App() {
   const activeCampaign =
     selectedCampaign === "ALL"
       ? undefined
-      : mergedCampaigns.find((campaign) => campaignOptionValue(campaign) === selectedCampaign) ?? activeCampaigns.find((campaign) => campaign.productName === selectedCampaign);
+      : activeCampaigns.find((campaign) => campaignOptionValue(campaign) === selectedCampaign)
+        ?? activeCampaigns.find((campaign) => campaign.productName === selectedCampaign)
+        ?? mergedCampaigns.find((campaign) => campaignOptionValue(campaign) === selectedCampaign);
   const activeFilmingRequirements = useMemo(
     () => campaignToFilmingRequirements(activeCampaign, filmingRequirements),
     [activeCampaign, filmingRequirements],
@@ -981,12 +992,20 @@ function App() {
 
   useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
   useEffect(() => {
+    if (selectedStore !== ALL_STORES && !stores.some((store) => store.id === selectedStore)) {
+      setSelectedStore(stores[0]?.id ?? ALL_STORES);
+      setSelectedCampaign("ALL");
+      setToast({ tone: "warning", text: "当前店铺不存在，已切换到可用店铺。" });
+      return;
+    }
     if (
       selectedCampaign !== "ALL" &&
       !activeCampaigns.some((campaign) => campaignOptionValue(campaign) === selectedCampaign || campaign.productName === selectedCampaign)
-    )
+    ) {
       setSelectedCampaign("ALL");
-  }, [activeCampaigns, selectedCampaign]);
+      setToast({ tone: "warning", text: "当前产品项目不存在或不属于当前店铺，已切换到全部产品。" });
+    }
+  }, [activeCampaigns, selectedCampaign, selectedStore, stores]);
   useEffect(() => {
     const target = activeCampaign ?? mergedCampaigns[0];
     if (!target) return;
@@ -2006,7 +2025,9 @@ function App() {
         </label>
         <div className="campaign-context">
           <strong>
-            {selectedCampaign === "ALL" ? (selectedStore === ALL_STORES ? "全部店铺 · 全部产品组合视图" : `${stores.find((store) => store.id === selectedStore)?.name ?? "当前店铺"} · 全部产品`) : campaignLabel(activeCampaign!, showStoreLabels)}
+            {selectedCampaign === "ALL"
+              ? (selectedStore === ALL_STORES ? "全部店铺 · 全部产品组合视图" : `${stores.find((store) => store.id === selectedStore)?.name ?? "未分配店铺"} · 全部产品`)
+              : activeCampaign ? campaignLabel(activeCampaign, showStoreLabels) : "未分配店铺 · 产品项目不可用"}
           </strong>
           <span>
             {selectedCampaign === "ALL"
@@ -3637,13 +3658,31 @@ function App() {
 
   function renderSettings() {
     const targetCampaign = activeCampaign ?? mergedCampaigns[0];
+    const targetCampaignIdentity = targetCampaign ? campaignOptionValue(targetCampaign) : "";
     const updateCampaign = (patch: Partial<Campaign>) => {
       if (!targetCampaign) return;
       setCampaigns(
         mergedCampaigns.map((campaign) =>
-          campaign.id === targetCampaign.id ? { ...campaign, ...patch } : campaign,
+          campaignOptionValue(campaign) === targetCampaignIdentity ? { ...campaign, ...patch } : campaign,
         ),
       );
+    };
+    const renameStore = (campaign: Campaign, rawName: string) => {
+      const nextName = rawName.trim();
+      if (!nextName) {
+        setToast({ tone: "warning", text: "店铺 / 品牌名称不能为空。" });
+        return;
+      }
+      const storeId = normalizeStoreId(campaign.storeId, campaign.storeName);
+      const duplicate = stores.some((store) => store.id !== storeId && store.name.trim().toLowerCase() === nextName.toLowerCase());
+      if (duplicate) {
+        setToast({ tone: "warning", text: "该店铺 / 品牌名称已存在，请换一个名称。" });
+        return;
+      }
+      setCampaigns(mergedCampaigns.map((item) => normalizeStoreId(item.storeId, item.storeName) === storeId ? { ...item, storeId, storeName: nextName } : item));
+      setRows(rows.map((row) => rowStoreId(row) === storeId ? { ...row, storeId, storeName: nextName } : row));
+      if (selectedStore !== ALL_STORES) setSelectedStore(storeId);
+      setToast({ tone: "success", text: "店铺 / 品牌名称已更新，关联产品和达人记录保持不变。" });
     };
     const linkedRowsCount = (campaign: Campaign) => rows.filter((row) => rowMatchesCampaign(row, campaign)).length;
     const syncCampaignVideoCount = (campaign: Campaign) => {
@@ -3748,10 +3787,11 @@ function App() {
               <label>
                 店铺 / 品牌
                 <input
-                  value={targetCampaign.storeName || DEFAULT_STORE_NAME}
-                  onChange={(event) => {
-                    const storeName = normalizeStoreName(event.target.value);
-                    updateCampaign({ storeName, storeId: normalizeStoreId(undefined, storeName) });
+                  key={normalizeStoreId(targetCampaign.storeId, targetCampaign.storeName)}
+                  defaultValue={targetCampaign.storeName || DEFAULT_STORE_NAME}
+                  onBlur={(event) => renameStore(targetCampaign, event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
                   }}
                 />
               </label>
