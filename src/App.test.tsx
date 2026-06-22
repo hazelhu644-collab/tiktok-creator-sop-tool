@@ -466,10 +466,11 @@ describe("creator database redesigned table", () => {
     await goTo(user, /达人数据库/);
 
     const headers = within(screen.getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent ?? "");
-    expect(headers.slice(1, 18)).toEqual([
+    expect(headers.slice(1, 19)).toEqual([
       "达人账号",
       "主页链接",
       "联系渠道",
+      "店铺 / 品牌",
       "产品",
       "合作状态",
       "样品物流状态",

@@ -25,8 +25,16 @@ export type FollowUpHistoryEntry = {
 
 export type TrackingStatus = 'Followed Up' | 'Replied' | 'Reply Pending' | 'No Reply Pending' | 'Skipped Today' | 'Video Posted' | 'Completed' | 'Failed' | '';
 
+export type Store = {
+  id: string;
+  name: string;
+};
+
 export type CreatorRow = {
   id: string;
+  storeId?: string;
+  storeName?: string;
+  campaignId?: string;
   username: string;
   profileLink: string;
   contactMethod: string;
@@ -103,6 +111,8 @@ export type GeneratedMessage = {
 
 export type Campaign = {
   id: string;
+  storeId?: string;
+  storeName?: string;
   productName: string;
   sellingPoints: string;
   requirements: string[];

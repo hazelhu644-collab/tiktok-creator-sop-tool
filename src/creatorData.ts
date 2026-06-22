@@ -1,4 +1,5 @@
 import type { CreatorRow } from './types';
+import { DEFAULT_STORE_ID, DEFAULT_STORE_NAME, normalizeStoreId, normalizeStoreName, campaignIdFromName } from './campaignData';
 import { normalizeText, normalizeVideoProgress } from './sopRules';
 
 export const CREATOR_ROWS_STORAGE_KEY = 'tiktok-creator-sop-tool.creatorRows.v1';
@@ -7,6 +8,7 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{ header: string; key: keyof Creato
   { header: '达人账号', key: 'username' },
   { header: '主页链接', key: 'profileLink' },
   { header: '联系渠道', key: 'contactMethod' },
+  { header: '店铺 / 品牌', key: 'storeName' },
   { header: '产品', key: 'product' },
   { header: '合作状态', key: 'currentStatus' },
   { header: '样品物流状态', key: 'sampleShippingStatus' },
@@ -28,6 +30,7 @@ export type DuplicateCheckResult = {
   duplicateCreator: boolean;
   possibleDuplicate: boolean;
   multiSample: boolean;
+  crossStoreCreator: boolean;
   matchingRows: CreatorRow[];
   sameProductRows: CreatorRow[];
   differentProductRows: CreatorRow[];
@@ -64,6 +67,17 @@ function normalizeProductKey(value: string): string {
   return normalizeText(value).toLowerCase();
 }
 
+export function normalizeCreatorRowStore(row: CreatorRow): CreatorRow {
+  const storeName = normalizeStoreName(row.storeName);
+  const storeId = normalizeStoreId(row.storeId, storeName);
+  const campaignId = row.campaignId || campaignIdFromName(row.product);
+  return { ...row, storeId, storeName, campaignId };
+}
+
+function sameStore(a: CreatorRow, b: CreatorRow): boolean {
+  return normalizeStoreId(a.storeId, a.storeName) === normalizeStoreId(b.storeId, b.storeName);
+}
+
 export function creatorIdentityKeys(row: Pick<CreatorRow, 'username' | 'profileLink'>): string[] {
   return [
     normalizeCreatorAccount(row.username),
@@ -80,13 +94,16 @@ export function isSameCreator(a: Pick<CreatorRow, 'username' | 'profileLink'>, b
 export function getDuplicateCheck(row: CreatorRow, rows: CreatorRow[]): DuplicateCheckResult {
   const matchingRows = rows.filter((candidate) => candidate.id !== row.id && isSameCreator(row, candidate));
   const productKey = normalizeProductKey(row.product);
-  const sameProductRows = matchingRows.filter((candidate) => normalizeProductKey(candidate.product) === productKey && productKey);
-  const differentProductRows = matchingRows.filter((candidate) => normalizeProductKey(candidate.product) !== productKey || !productKey);
+  const sameStoreRows = matchingRows.filter((candidate) => sameStore(row, candidate));
+  const sameProductRows = sameStoreRows.filter((candidate) => normalizeProductKey(candidate.product) === productKey && productKey);
+  const differentProductRows = sameStoreRows.filter((candidate) => normalizeProductKey(candidate.product) !== productKey || !productKey);
+  const crossStoreRows = matchingRows.filter((candidate) => !sameStore(row, candidate));
 
   return {
     duplicateCreator: matchingRows.length > 0,
     possibleDuplicate: sameProductRows.length > 0,
     multiSample: differentProductRows.length > 0,
+    crossStoreCreator: crossStoreRows.length > 0,
     matchingRows,
     sameProductRows,
     differentProductRows,
@@ -95,6 +112,7 @@ export function getDuplicateCheck(row: CreatorRow, rows: CreatorRow[]): Duplicat
 
 export function countActiveCreatorSamples(row: CreatorRow, rows: CreatorRow[]): number {
   return rows.filter((candidate) => isSameCreator(row, candidate)
+    && normalizeStoreId(candidate.storeId, candidate.storeName) === normalizeStoreId(row.storeId, row.storeName)
     && !/completed|failed|lost|归档|失败|合作完成|已完成/i.test(`${candidate.currentStatus} ${candidate.trackingStatus ?? ''}`)
   ).length;
 }
@@ -134,6 +152,7 @@ export type EditableCreatorField =
   | 'username'
   | 'profileLink'
   | 'contactMethod'
+  | 'storeName'
   | 'product'
   | 'currentStatus'
   | 'sampleShippingStatus'
@@ -169,7 +188,7 @@ function normalizeFollowUpHistory(row: CreatorRow): CreatorRow['followUpHistory'
 
 function toStoredRow(row: CreatorRow): CreatorRow {
   return {
-    ...row,
+    ...normalizeCreatorRowStore(row),
     lastFollowUpCount: Number.isFinite(Number(row.lastFollowUpCount)) ? Number(row.lastFollowUpCount) : 0,
     followUpHistory: normalizeFollowUpHistory(row),
   };
@@ -185,7 +204,7 @@ export function loadCreatorRows(): CreatorRow[] {
   try {
     const parsed = JSON.parse(saved) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => toStoredRow(item as CreatorRow)).filter((row) => normalizeText(row.id));
+    return parsed.map((item) => toStoredRow(normalizeCreatorRowStore(item as CreatorRow))).filter((row) => normalizeText(row.id));
   } catch {
     storage.removeItem(CREATOR_ROWS_STORAGE_KEY);
     return [];
@@ -200,6 +219,9 @@ export function createBlankCreatorRow(productName = '', requiredVideos = 1): Cre
     username: '',
     profileLink: '',
     contactMethod: '',
+    storeId: DEFAULT_STORE_ID,
+    storeName: DEFAULT_STORE_NAME,
+    campaignId: campaignIdFromName(productName.trim()),
     product: productName.trim(),
     currentStatus: 'To Contact',
     sampleShippingStatus: 'Not Shipped',
