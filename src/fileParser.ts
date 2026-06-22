@@ -1,10 +1,12 @@
 import type { CreatorRow } from './types';
 import { normalizeText, normalizeVideoProgress } from './sopRules';
+import { DEFAULT_STORE_NAME, normalizeStoreId, normalizeStoreName, campaignIdFromName } from './campaignData';
 
-const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory' | 'archivedAt' | 'archiveReason'>, string[]> = {
+const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'storeId' | 'campaignId' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory' | 'archivedAt' | 'archiveReason'>, string[]> = {
   username: ['creator username', 'username', 'creator', 'creator handle', '达人账号'],
   profileLink: ['creator profile link', 'profile link', 'creator link', 'profile', '主页链接'],
   contactMethod: ['contact method', 'contact', 'channel', '联系渠道'],
+  storeName: ['店铺 / 品牌', '店铺', '品牌', 'store', 'brand', 'shop'],
   product: ['product', 'product name', 'product Name', '产品', '产品名称', '所属产品', '产品项目'],
   currentStatus: ['current status', 'status', 'creator status', '合作状态', '当前状态'],
   sampleShippingStatus: ['sample shipping status', 'shipping status', 'sample status', '物流状态', '样品物流状态'],
@@ -35,19 +37,24 @@ function pickValue(record: Record<string, unknown>, aliases: string[]): string {
   return normalizeText(found?.[1]);
 }
 
-export function normalizeRecord(record: Record<string, unknown>, index: number, requiredVideos = 1): CreatorRow {
+export function normalizeRecord(record: Record<string, unknown>, index: number, requiredVideos = 1, fallbackStoreName = DEFAULT_STORE_NAME): CreatorRow {
   const lastFollowUpValue = pickValue(record, FOLLOW_UP_ALIASES);
   const followUpCount = Number.parseInt(lastFollowUpValue || '0', 10);
   const progressResult = normalizeVideoProgress(pickValue(record, COLUMN_ALIASES.videoProgress), requiredVideos);
   const lastMessageSentAt = pickValue(record, COLUMN_ALIASES.lastMessageSentAt);
   const lastContactDate = pickValue(record, COLUMN_ALIASES.lastContactDate) || lastMessageSentAt;
+  const storeName = normalizeStoreName(pickValue(record, COLUMN_ALIASES.storeName) || fallbackStoreName);
+  const product = pickValue(record, COLUMN_ALIASES.product);
 
   return {
     id: `${index}-${pickValue(record, COLUMN_ALIASES.username) || 'creator'}`,
     username: pickValue(record, COLUMN_ALIASES.username) || `Creator ${index + 1}`,
     profileLink: pickValue(record, COLUMN_ALIASES.profileLink),
     contactMethod: pickValue(record, COLUMN_ALIASES.contactMethod),
-    product: pickValue(record, COLUMN_ALIASES.product),
+    storeId: normalizeStoreId(undefined, storeName),
+    storeName,
+    campaignId: campaignIdFromName(product),
+    product,
     currentStatus: pickValue(record, COLUMN_ALIASES.currentStatus),
     sampleShippingStatus: pickValue(record, COLUMN_ALIASES.sampleShippingStatus),
     sampleDeliveredDate: pickValue(record, COLUMN_ALIASES.sampleDeliveredDate),
@@ -69,7 +76,7 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
   };
 }
 
-export async function parseCreatorFile(file: File, requiredVideos = 1): Promise<CreatorRow[]> {
+export async function parseCreatorFile(file: File, requiredVideos = 1, fallbackStoreName = DEFAULT_STORE_NAME): Promise<CreatorRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase();
   const buffer = await file.arrayBuffer();
 
@@ -79,7 +86,7 @@ export async function parseCreatorFile(file: File, requiredVideos = 1): Promise<
     const workbook = XLSX.read(text, { type: 'string' });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map((record, index) => normalizeRecord(record, index, requiredVideos)).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, requiredVideos, fallbackStoreName)).filter((row) => row.username);
   }
 
   if (extension === 'xlsx' || extension === 'xls') {
@@ -87,7 +94,7 @@ export async function parseCreatorFile(file: File, requiredVideos = 1): Promise<
     const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-    return records.map((record, index) => normalizeRecord(record, index, requiredVideos)).filter((row) => row.username);
+    return records.map((record, index) => normalizeRecord(record, index, requiredVideos, fallbackStoreName)).filter((row) => row.username);
   }
 
   throw new Error('请上传 CSV、XLS 或 XLSX 文件。');

@@ -1,7 +1,29 @@
 import { defaultCreatorFilmingRequirements, type CreatorFilmingRequirements } from './messageGenerator';
-import type { CreatorRow, Campaign } from './types';
+import type { CreatorRow, Campaign, Store } from './types';
 
 export const CAMPAIGNS_STORAGE_KEY = 'tiktok-creator-sop-tool.campaigns.v1';
+export const DEFAULT_STORE_ID = 'default-store';
+export const DEFAULT_STORE_NAME = '默认店铺';
+export const ALL_STORES = 'ALL_STORES';
+
+export function storeIdFromName(name: string): string {
+  const normalized = normalizeName(name) || DEFAULT_STORE_NAME;
+  return normalized.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || encodeURIComponent(normalized);
+}
+
+export function normalizeStoreName(name: string | undefined): string {
+  return normalizeName(name ?? '') || DEFAULT_STORE_NAME;
+}
+
+export function normalizeStoreId(id: string | undefined, name?: string): string {
+  return normalizeName(id ?? '') || (normalizeStoreName(name) === DEFAULT_STORE_NAME ? DEFAULT_STORE_ID : storeIdFromName(normalizeStoreName(name)));
+}
+
+export function normalizeStore(input: { storeId?: string; storeName?: string }): Store {
+  const storeName = normalizeStoreName(input.storeName);
+  return { name: storeName, id: normalizeStoreId(input.storeId, storeName) };
+}
+
 
 const PRESET_REQUIREMENTS: Record<string, Partial<Campaign>> = {
   宠物蒸汽梳毛器: {
@@ -43,11 +65,17 @@ export function campaignIdFromName(name: string): string {
   return normalized.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || encodeURIComponent(normalized);
 }
 
-export function createCampaignFromName(name: string, fallback: CreatorFilmingRequirements = defaultCreatorFilmingRequirements): Campaign {
+export function campaignIdentity(storeId: string, campaignId: string): string {
+  return `${storeId}::${campaignId}`;
+}
+
+export function createCampaignFromName(name: string, fallback: CreatorFilmingRequirements = defaultCreatorFilmingRequirements, storeName = DEFAULT_STORE_NAME, storeId = normalizeStoreId(undefined, storeName)): Campaign {
   const productName = normalizeName(name) || fallback.productName;
   const preset = PRESET_REQUIREMENTS[productName] ?? {};
   return {
     id: campaignIdFromName(productName),
+    storeId,
+    storeName: normalizeStoreName(storeName),
     productName,
     sellingPoints: preset.sellingPoints ?? '',
     requirements: preset.requirements ?? fallback.requirements,
@@ -63,8 +91,16 @@ export function createCampaignFromName(name: string, fallback: CreatorFilmingReq
   };
 }
 
-export function detectCampaignNames(rows: CreatorRow[]): string[] {
-  return Array.from(new Set(rows.map((row) => row.product.trim()).filter(Boolean)));
+export function detectCampaignNames(rows: CreatorRow[]): Array<{ storeId: string; storeName: string; productName: string }> {
+  const byIdentity = new Map<string, { storeId: string; storeName: string; productName: string }>();
+  rows.forEach((row) => {
+    const productName = row.product.trim();
+    if (!productName) return;
+    const storeName = normalizeStoreName(row.storeName);
+    const storeId = normalizeStoreId(row.storeId, storeName);
+    byIdentity.set(campaignIdentity(storeId, campaignIdFromName(productName)), { storeId, storeName, productName });
+  });
+  return Array.from(byIdentity.values());
 }
 
 export function loadCampaigns(): Campaign[] {
@@ -73,7 +109,11 @@ export function loadCampaigns(): Campaign[] {
   try {
     const parsed = JSON.parse(saved) as Campaign[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item) => item?.productName).map((item) => ({ ...createCampaignFromName(item.productName), ...item, id: item.id || campaignIdFromName(item.productName) }));
+    return parsed.filter((item) => item?.productName).map((item) => {
+      const storeName = normalizeStoreName(item.storeName);
+      const storeId = normalizeStoreId(item.storeId, storeName);
+      return ({ ...createCampaignFromName(item.productName, defaultCreatorFilmingRequirements, storeName, storeId), ...item, storeId, storeName, id: item.id || campaignIdFromName(item.productName) });
+    });
   } catch {
     storage()?.removeItem(CAMPAIGNS_STORAGE_KEY);
     return [];
@@ -87,13 +127,18 @@ export function saveCampaigns(campaigns: Campaign[]): void {
 }
 
 export function mergeDetectedCampaigns(saved: Campaign[], rows: CreatorRow[], fallback: CreatorFilmingRequirements = defaultCreatorFilmingRequirements): Campaign[] {
-  const byName = new Map(saved.map((campaign) => [campaign.productName.trim().toLowerCase(), campaign]));
-  detectCampaignNames(rows).forEach((name) => {
-    const key = name.toLowerCase();
-    if (!byName.has(key)) byName.set(key, createCampaignFromName(name, fallback));
+  const byIdentity = new Map<string, Campaign>(saved.map((campaign) => {
+    const storeName = normalizeStoreName(campaign.storeName);
+    const storeId = normalizeStoreId(campaign.storeId, storeName);
+    const normalized = { ...campaign, storeId, storeName, id: campaign.id || campaignIdFromName(campaign.productName) };
+    return [campaignIdentity(storeId, normalized.id), normalized] as const;
+  }));
+  detectCampaignNames(rows).forEach(({ storeId, storeName, productName }) => {
+    const key = campaignIdentity(storeId, campaignIdFromName(productName));
+    if (!byIdentity.has(key)) byIdentity.set(key, createCampaignFromName(productName, fallback, storeName, storeId));
   });
-  if (byName.size === 0) byName.set(fallback.productName.toLowerCase(), createCampaignFromName(fallback.productName, fallback));
-  return Array.from(byName.values());
+  if (byIdentity.size === 0) byIdentity.set(campaignIdentity(DEFAULT_STORE_ID, campaignIdFromName(fallback.productName)), createCampaignFromName(fallback.productName, fallback));
+  return Array.from(byIdentity.values());
 }
 
 export function campaignToFilmingRequirements(campaign: Campaign | undefined, fallback: CreatorFilmingRequirements): CreatorFilmingRequirements {

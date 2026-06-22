@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { campaignToFilmingRequirements, createCampaignFromName, detectCampaignNames, mergeDetectedCampaigns } from './campaignData';
+import { campaignIdentity, campaignIdFromName, campaignToFilmingRequirements, createCampaignFromName, detectCampaignNames, mergeDetectedCampaigns } from './campaignData';
 import { defaultCreatorFilmingRequirements } from './messageGenerator';
 import type { CreatorRow } from './types';
 
-function row(product: string): CreatorRow {
+function row(product: string, storeName = '默认店铺', storeId = 'default-store'): CreatorRow {
   return {
     id: product || 'missing',
     username: `creator-${product}`,
     profileLink: '',
     contactMethod: 'TikTok DM',
+    storeId,
+    storeName,
+    campaignId: campaignIdFromName(product),
     product,
     currentStatus: 'Delivered',
     sampleShippingStatus: 'Delivered',
@@ -30,7 +33,7 @@ function row(product: string): CreatorRow {
 
 describe('campaign data helpers', () => {
   it('detects unique product campaigns from uploaded creator rows', () => {
-    expect(detectCampaignNames([row('宠物蒸汽梳毛器'), row('逗猫棒'), row('宠物蒸汽梳毛器'), row('')])).toEqual(['宠物蒸汽梳毛器', '逗猫棒']);
+    expect(detectCampaignNames([row('宠物蒸汽梳毛器'), row('逗猫棒'), row('宠物蒸汽梳毛器'), row('')]).map((item) => item.productName)).toEqual(['宠物蒸汽梳毛器', '逗猫棒']);
   });
 
   it('merges detected products into campaign objects with product-specific presets', () => {
@@ -39,6 +42,19 @@ describe('campaign data helpers', () => {
     expect(campaigns.map((campaign) => campaign.productName)).toEqual(['宠物蒸汽梳毛器', '逗猫棒', '宠物清洁手套']);
     expect(campaigns.find((campaign) => campaign.productName === '逗猫棒')?.keyContentPoints).toContain('展示猫咪真实互动');
     expect(campaigns.find((campaign) => campaign.productName === '宠物清洁手套')?.requirements).toContain('每条视频 40 秒以上');
+  });
+
+  it('scopes same product names by store when merging detected campaigns', () => {
+    const campaigns = mergeDetectedCampaigns([], [
+      row('Pet Dental Wipes', 'TerraPaw', 'terrapaw'),
+      row('Pet Dental Wipes', 'PinePaw', 'pinepaw'),
+    ], defaultCreatorFilmingRequirements);
+
+    expect(campaigns).toHaveLength(2);
+    expect(campaigns.map((campaign) => campaignIdentity(campaign.storeId!, campaign.id)).sort()).toEqual([
+      'pinepaw::pet-dental-wipes',
+      'terrapaw::pet-dental-wipes',
+    ]);
   });
 
   it('converts a campaign into isolated filming requirements for message generation', () => {

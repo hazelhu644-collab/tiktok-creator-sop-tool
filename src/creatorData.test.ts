@@ -85,7 +85,7 @@ describe('editable creator data helpers', () => {
     ]);
 
     expect(csv.startsWith('\ufeff')).toBe(true);
-    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,产品,合作状态,样品物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复,达人备注,是否同达人多样品,同达人样品数量');
+    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,店铺 / 品牌,产品,合作状态,样品物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复,达人备注,是否同达人多样品,同达人样品数量');
     expect(csv).not.toContain('预计到货日期');
     expect(csv).not.toContain('实际到货日期');
     expect(csv).not.toContain('2 条记录');
@@ -117,6 +117,7 @@ describe('editable creator data helpers', () => {
       '达人账号': 'cn_creator',
       '主页链接': 'https://example.com/cn_creator',
       '联系渠道': 'Email',
+      '店铺': 'TerraPaw',
       '产品': '中文产品',
       '合作状态': '已完成',
       '样品物流状态': 'Delivered',
@@ -137,6 +138,7 @@ describe('editable creator data helpers', () => {
       username: 'cn_creator',
       profileLink: 'https://example.com/cn_creator',
       contactMethod: 'Email',
+      storeName: 'TerraPaw',
       product: '中文产品',
       currentStatus: '已完成',
       sampleDeliveredDate: '2026-06-01',
@@ -151,7 +153,7 @@ describe('editable creator data helpers', () => {
     });
   });
 
-  it('detects same creator + same product as possible duplicate without blocking row creation', () => {
+  it('detects same creator + same store + same product as possible duplicate without blocking row creation', () => {
     const existing = row({ id: 'a', username: '@creatorA', product: 'Pet Brush' });
     const duplicate = row({ id: 'b', username: 'creatorA', product: 'Pet Brush' });
 
@@ -162,7 +164,7 @@ describe('editable creator data helpers', () => {
     expect(result.multiSample).toBe(false);
   });
 
-  it('allows same creator with a different product as valid multi-sample creator', () => {
+  it('allows same creator in the same store with a different product as valid multi-sample creator', () => {
     const existing = row({ id: 'a', username: '@creatorA', product: 'Pet Brush' });
     const secondSample = row({ id: 'b', profileLink: 'https://www.tiktok.com/@creatorA', product: 'Cat Teaser Wand' });
 
@@ -186,6 +188,39 @@ describe('editable creator data helpers', () => {
       duplicateCreatorCount: 2,
     });
     expect([...incoming, ...existing]).toHaveLength(3);
+  });
+
+
+
+  it('migrates existing rows without store fields to 默认店铺', () => {
+    window.localStorage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify([{ ...row(), storeId: undefined, storeName: undefined }]));
+
+    const [loaded] = loadCreatorRows();
+
+    expect(loaded.storeName).toBe('默认店铺');
+    expect(loaded.storeId).toBe('default-store');
+  });
+
+  it('allows same creator in a different store and marks cross-store creator', () => {
+    const existing = row({ id: 'a', username: '@creatorA', product: 'Pet Dental Wipes', storeName: 'TerraPaw', storeId: 'terrapaw' });
+    const crossStore = row({ id: 'b', username: 'creatorA', product: 'Pet Dental Wipes', storeName: 'PinePaw', storeId: 'pinepaw' });
+
+    const result = getDuplicateCheck(crossStore, [existing]);
+
+    expect(result.duplicateCreator).toBe(true);
+    expect(result.possibleDuplicate).toBe(false);
+    expect(result.multiSample).toBe(false);
+    expect(result.crossStoreCreator).toBe(true);
+  });
+
+  it('imports Store and Brand headers into storeName and exports 店铺 / 品牌', () => {
+    const importedStore = normalizeRecord({ Store: 'Shop A', 'Creator username': 'store_creator' }, 0);
+    const importedBrand = normalizeRecord({ Brand: 'PinePaw', 'Creator username': 'brand_creator' }, 1);
+
+    expect(importedStore.storeName).toBe('Shop A');
+    expect(importedBrand.storeName).toBe('PinePaw');
+    expect(creatorRowsToCsv([importedStore]).split('\\n')[0]).toContain('店铺 / 品牌');
+    expect(creatorRowsToCsv([importedStore])).toContain('Shop A');
   });
 
   it('imports ETA and estimated arrival headers into the single sample arrival date field', () => {
