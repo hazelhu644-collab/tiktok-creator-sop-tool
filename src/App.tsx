@@ -1298,18 +1298,18 @@ function App() {
     scrollToQueue();
   }
 
-  function ensureCampaign(productName: string) {
-    if (!mergedCampaigns.some((campaign) => campaign.productName === productName)) {
+  function ensureCampaign(productName: string, storeId: string, storeName: string) {
+    if (!mergedCampaigns.some((campaign) => normalizeStoreId(campaign.storeId, campaign.storeName) === storeId && campaign.productName === productName)) {
       setCampaigns((current) => [
         ...current,
-        createCampaignFromName(productName, filmingRequirements),
+        createCampaignFromName(productName, filmingRequirements, storeName, storeId),
       ]);
     }
   }
 
   function addCreatorDraft(draft: CreatorRow, copyBaseFrom?: CreatorRow) {
     const newRow = copyBaseFrom ? copyCreatorBaseFields(draft, copyBaseFrom) : draft;
-    ensureCampaign(newRow.product);
+    ensureCampaign(newRow.product, normalizeStoreId(newRow.storeId, newRow.storeName), normalizeStoreName(newRow.storeName));
     setRows((currentRows) => [newRow, ...currentRows]);
     setSelectedCreatorId(newRow.id);
     setActiveModule("creators");
@@ -3657,7 +3657,7 @@ function App() {
   }
 
   function renderSettings() {
-    const targetCampaign = activeCampaign ?? mergedCampaigns[0];
+    const targetCampaign = activeCampaign ?? activeCampaigns[0] ?? mergedCampaigns[0];
     const targetCampaignIdentity = targetCampaign ? campaignOptionValue(targetCampaign) : "";
     const updateCampaign = (patch: Partial<Campaign>) => {
       if (!targetCampaign) return;
@@ -3667,22 +3667,50 @@ function App() {
         ),
       );
     };
-    const renameStore = (campaign: Campaign, rawName: string) => {
-      const nextName = rawName.trim();
-      if (!nextName) {
-        setToast({ tone: "warning", text: "店铺 / 品牌名称不能为空。" });
+    const duplicateProductInStore = (campaign: Campaign, productName: string, storeId = normalizeStoreId(campaign.storeId, campaign.storeName)) =>
+      mergedCampaigns.some((item) =>
+        campaignOptionValue(item) !== campaignOptionValue(campaign) &&
+        normalizeStoreId(item.storeId, item.storeName) === storeId &&
+        item.productName.trim().toLowerCase() === productName.trim().toLowerCase(),
+      );
+    const updateCampaignProductName = (campaign: Campaign, productName: string) => {
+      if (duplicateProductInStore(campaign, productName)) {
+        setToast({ tone: "warning", text: "当前店铺下已存在同名产品，请换一个产品名称。" });
         return;
       }
-      const storeId = normalizeStoreId(campaign.storeId, campaign.storeName);
-      const duplicate = stores.some((store) => store.id !== storeId && store.name.trim().toLowerCase() === nextName.toLowerCase());
-      if (duplicate) {
-        setToast({ tone: "warning", text: "该店铺 / 品牌名称已存在，请换一个名称。" });
+      updateCampaign({ productName, id: campaignIdFromName(productName) });
+    };
+    const assignCampaignStore = (campaign: Campaign, nextStoreId: string) => {
+      const nextStore = stores.find((store) => store.id === nextStoreId);
+      if (!nextStore) return;
+      if (duplicateProductInStore(campaign, campaign.productName, nextStore.id)) {
+        setToast({ tone: "warning", text: "当前店铺下已存在同名产品，请换一个产品名称。" });
         return;
       }
-      setCampaigns(mergedCampaigns.map((item) => normalizeStoreId(item.storeId, item.storeName) === storeId ? { ...item, storeId, storeName: nextName } : item));
-      setRows(rows.map((row) => rowStoreId(row) === storeId ? { ...row, storeId, storeName: nextName } : row));
-      if (selectedStore !== ALL_STORES) setSelectedStore(storeId);
-      setToast({ tone: "success", text: "店铺 / 品牌名称已更新，关联产品和达人记录保持不变。" });
+      updateCampaign({ storeId: nextStore.id, storeName: nextStore.name });
+      setToast({ tone: "success", text: "已将产品关联到所选店铺 / 品牌。" });
+    };
+    const createCampaign = () => {
+      const productName = window.prompt("产品 / Campaign 名称：", "")?.trim();
+      if (!productName) return;
+      let targetStore = selectedStore === ALL_STORES ? undefined : stores.find((store) => store.id === selectedStore);
+      if (!targetStore) {
+        const storeName = window.prompt("请选择该产品所属店铺 / 品牌（输入现有店铺名称）：", stores[0]?.name ?? DEFAULT_STORE_NAME)?.trim();
+        targetStore = stores.find((store) => store.name.toLowerCase() === storeName?.toLowerCase());
+      }
+      if (!targetStore) {
+        setToast({ tone: "warning", text: "创建产品前必须选择已有店铺 / 品牌。" });
+        return;
+      }
+      if (mergedCampaigns.some((campaign) => normalizeStoreId(campaign.storeId, campaign.storeName) === targetStore.id && campaign.productName.trim().toLowerCase() === productName.toLowerCase())) {
+        setToast({ tone: "warning", text: "当前店铺下已存在同名产品，请换一个产品名称。" });
+        return;
+      }
+      const nextCampaign = createCampaignFromName(productName, filmingRequirements, targetStore.name, targetStore.id);
+      setCampaigns([...mergedCampaigns, nextCampaign]);
+      setSelectedStore(targetStore.id);
+      setSelectedCampaign(campaignOptionValue(nextCampaign));
+      setToast({ tone: "success", text: "已新增产品项目，并关联到当前店铺 / 品牌。" });
     };
     const linkedRowsCount = (campaign: Campaign) => rows.filter((row) => rowMatchesCampaign(row, campaign)).length;
     const syncCampaignVideoCount = (campaign: Campaign) => {
@@ -3775,6 +3803,7 @@ function App() {
           <label className="checkbox-field"><input type="checkbox" checked={showArchivedProducts} onChange={(event) => setShowArchivedProducts(event.target.checked)} />显示已归档产品</label>
           {targetCampaign && (
             <div className="inline-actions campaign-actions">
+              <button type="button" className="secondary" onClick={createCampaign}>新增产品</button>
               <button type="button" className="secondary" onClick={() => setToast({ tone: "success", text: "可直接在下方编辑产品字段。" })}>编辑</button>
               <button type="button" className="secondary" onClick={() => duplicateCampaign(targetCampaign)}>复制</button>
               <button type="button" className="secondary" onClick={() => archiveCampaign(targetCampaign)}>归档</button>
@@ -3786,20 +3815,18 @@ function App() {
             <div className="settings-form campaign-settings" data-testid="campaign-settings-form">
               <label>
                 店铺 / 品牌
-                <input
-                  key={normalizeStoreId(targetCampaign.storeId, targetCampaign.storeName)}
-                  defaultValue={targetCampaign.storeName || DEFAULT_STORE_NAME}
-                  onBlur={(event) => renameStore(targetCampaign, event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
+                <select
+                  value={normalizeStoreId(targetCampaign.storeId, targetCampaign.storeName)}
+                  onChange={(event) => assignCampaignStore(targetCampaign, event.target.value)}
+                >
+                  {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+                </select>
               </label>
               <label>
                 产品名称
                 <input
                   value={targetCampaign.productName}
-                  onChange={(event) => updateCampaign({ productName: event.target.value })}
+                  onChange={(event) => updateCampaignProductName(targetCampaign, event.target.value)}
                 />
               </label>
               <label>

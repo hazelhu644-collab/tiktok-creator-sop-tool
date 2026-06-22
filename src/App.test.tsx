@@ -1773,61 +1773,71 @@ describe("settings and prompt helper", () => {
   });
 
 
-  it("renames store display name without changing storeId or breaking linked data", async () => {
+  it("uses a store selector for campaigns and allows multiple products under the same store", async () => {
     const user = userEvent.setup();
-    seedCreators([creatorRow({ id: "linked-row", storeId: "stable-store", storeName: "Old Brand", product: "Pet Fountain", campaignId: "pet-fountain" })]);
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([{
-      id: "pet-fountain",
-      storeId: "stable-store",
-      storeName: "Old Brand",
-      productName: "Pet Fountain",
-      sellingPoints: "",
-      requirements: ["每位达人 2 条视频"],
-      keyContentPoints: [],
-      avoidShots: "",
-      videoCount: "每位达人 2 条视频",
-      videoLength: "",
-      tagRequirement: "必须挂 TikTok Shop 产品链接",
-      productLink: "",
-      referenceLinks: [],
-      defaultMessageSetting: "",
-      notes: "",
-    }]));
-
-    render(<App />);
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "stable-store" } });
-    await goTo(user, /设置/);
-    fireEvent.blur(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌"), { target: { value: "New Brand" } });
-
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("店铺 / 品牌名称已更新"));
-    const savedCampaigns = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
-    const savedRows = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]");
-    expect(savedCampaigns[0]).toMatchObject({ storeId: "stable-store", storeName: "New Brand" });
-    expect(savedRows[0]).toMatchObject({ storeId: "stable-store", storeName: "New Brand", campaignId: "pet-fountain" });
-    expect(screen.getByLabelText("当前店铺 / 品牌")).toHaveValue("stable-store");
-    await goTo(user, /达人数据库/);
-    expect(screen.getAllByDisplayValue("New Brand").length).toBeGreaterThan(0);
-    expect(screen.getByText("Pet Fountain")).toBeInTheDocument();
-  });
-
-  it("blocks blank and duplicate store names without corrupting storage", async () => {
-    const user = userEvent.setup();
-    seedCreators([creatorRow({ id: "a", storeId: "store-a", storeName: "Store A", product: "Brush", campaignId: "brush" })]);
+    seedCreators([creatorRow({ id: "linked-row", storeId: "terrapaw", storeName: "TerraPaw", product: "Pet Brush", campaignId: "pet-brush" })]);
     window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      { id: "brush", storeId: "store-a", storeName: "Store A", productName: "Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "wand", storeId: "store-b", storeName: "Store B", productName: "Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "pet-brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "cat-toy-wand", storeId: "terrapaw", storeName: "TerraPaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "cat-toy-wand", storeId: "pinepaw", storeName: "PinePaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
     ]));
 
     render(<App />);
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "store-a" } });
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terrapaw" } });
     await goTo(user, /设置/);
-    const input = within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌");
-    fireEvent.blur(input, { target: { value: "   " } });
-    expect(screen.getByRole("status")).toHaveTextContent("店铺 / 品牌名称不能为空。");
-    fireEvent.blur(input, { target: { value: "Store B" } });
-    expect(screen.getByRole("status")).toHaveTextContent("该店铺 / 品牌名称已存在，请换一个名称。");
-    const savedCampaigns = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
-    expect(savedCampaigns.find((campaign: { storeId: string }) => campaign.storeId === "store-a").storeName).toBe("Store A");
+
+    const form = within(screen.getByTestId("campaign-settings-form"));
+    expect(form.getByLabelText("店铺 / 品牌")).toHaveValue("terrapaw");
+    expect(form.getByLabelText("店铺 / 品牌").tagName).toBe("SELECT");
+    expect(screen.queryByText("该店铺 / 品牌名称已存在，请换一个名称。")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前产品项目")).toHaveTextContent("Pet Brush");
+    expect(screen.getByLabelText("当前产品项目")).toHaveTextContent("Cat Toy Wand");
+  });
+
+  it("validates duplicate product names only within the selected store", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      { id: "brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "wand", storeId: "terrapaw", storeName: "TerraPaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "pine-wand", storeId: "pinepaw", storeName: "PinePaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+    ]));
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terrapaw" } });
+    await goTo(user, /设置/);
+
+    fireEvent.change(within(screen.getByTestId("campaign-settings-form")).getByLabelText("产品名称"), { target: { value: "Cat Toy Wand" } });
+    expect(screen.getByRole("status")).toHaveTextContent("当前店铺下已存在同名产品，请换一个产品名称。");
+    expect(screen.queryByText("该店铺 / 品牌名称已存在，请换一个名称。")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "pinepaw" } });
+    await waitFor(() => expect(screen.getByLabelText("当前产品项目")).toHaveTextContent("Cat Toy Wand"));
+    expect(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌")).toHaveValue("pinepaw");
+  });
+
+  it("creates new campaigns under the current store and requires a store in all-store view", async () => {
+    const user = userEvent.setup();
+    const prompt = vi.spyOn(window, "prompt");
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      { id: "brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "pine-brush", storeId: "pinepaw", storeName: "PinePaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+    ]));
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terrapaw" } });
+    await goTo(user, /设置/);
+    prompt.mockReturnValueOnce("Pet Ear Finger Wipes");
+    await user.click(screen.getByRole("button", { name: "新增产品" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
+      expect(saved).toContainEqual(expect.objectContaining({ storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Ear Finger Wipes" }));
+    });
+
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "ALL_STORES" } });
+    prompt.mockReturnValueOnce("Cat Scratching Patches").mockReturnValueOnce("Missing Store");
+    await user.click(screen.getByRole("button", { name: "新增产品" }));
+    expect(screen.getByRole("status")).toHaveTextContent("创建产品前必须选择已有店铺 / 品牌。");
   });
 
   it("migrates missing storeId data and stays usable when selected campaign lookup is missing", async () => {
