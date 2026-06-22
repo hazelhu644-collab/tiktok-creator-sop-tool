@@ -1815,6 +1815,65 @@ describe("settings and prompt helper", () => {
     expect(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌")).toHaveValue("pinepaw");
   });
 
+
+  it("moves a campaign to another store and keeps linked creator history", async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: "wrong-row", storeId: "terra-pa-w", storeName: "Terra pa w", product: "Pet Dental Wipes", campaignId: "pet-dental-wipes", sampleShippingStatus: "Shipped", videoProgress: "1/2", notes: "keep note", trackingStatus: "Completed", archivedAt: "2026-06-10" })]);
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      { id: "pet-dental-wipes", storeId: "terra-pa-w", storeName: "Terra pa w", productName: "Pet Dental Wipes", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "pet-brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+    ]));
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terra-pa-w" } });
+    await goTo(user, /设置/);
+    fireEvent.change(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌"), { target: { value: "terrapaw" } });
+
+    expect(screen.getByRole("status")).toHaveTextContent("迁移 1 条达人记录");
+    const rows = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]");
+    expect(rows[0]).toEqual(expect.objectContaining({ storeId: "terrapaw", storeName: "TerraPaw", campaignId: "pet-dental-wipes", product: "Pet Dental Wipes", sampleShippingStatus: "Shipped", videoProgress: "1/2", notes: "keep note", trackingStatus: "Completed", archivedAt: "2026-06-10" }));
+  });
+
+  it("merges duplicate product campaigns across stores after confirmation without overwriting target requirements", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    seedCreators([creatorRow({ id: "wrong-row", storeId: "terra-pa-w", storeName: "Terra pa w", product: "Pet Dental Wipes", campaignId: "wrong-dental", sampleShippingStatus: "Delivered", videoProgress: "1/2", notes: "preserve note", trackingStatus: "Completed", lastContactDate: "2026-06-20", followUpHistory: [{ date: "2026-06-20", action: "Message Sent", scenario: "Follow-up", channel: "TikTok DM", message: "ping" }] })]);
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      { id: "wrong-dental", storeId: "terra-pa-w", storeName: "Terra pa w", productName: "Pet Dental Wipes", sellingPoints: "source only", requirements: ["source requirement"], keyContentPoints: ["source shot"], avoidShots: "", videoCount: "3", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+      { id: "target-dental", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Dental Wipes", sellingPoints: "target", requirements: ["target requirement"], keyContentPoints: ["target shot"], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+    ]));
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terra-pa-w" } });
+    await goTo(user, /设置/);
+    fireEvent.change(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌"), { target: { value: "terrapaw" } });
+
+    expect(confirm).toHaveBeenCalledWith("目标店铺下已存在同名产品。是否将当前产品及其达人记录合并到目标产品？");
+    expect(screen.getByRole("status")).toHaveTextContent("已将 1 条达人记录合并到 TerraPaw · Pet Dental Wipes");
+    expect(screen.getByRole("status")).toHaveTextContent("已保留目标产品配置");
+    const rows = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]");
+    expect(rows[0]).toEqual(expect.objectContaining({ storeId: "terrapaw", storeName: "TerraPaw", campaignId: "target-dental", product: "Pet Dental Wipes", sampleShippingStatus: "Delivered", videoProgress: "1/2", notes: "preserve note", trackingStatus: "Completed", lastContactDate: "2026-06-20" }));
+    expect(rows[0].followUpHistory).toHaveLength(1);
+    const campaigns = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
+    expect(campaigns).toContainEqual(expect.objectContaining({ id: "target-dental", requirements: ["target requirement"], keyContentPoints: ["target shot"] }));
+    expect(campaigns).toContainEqual(expect.objectContaining({ id: "wrong-dental", archivedAt: expect.any(String) }));
+  });
+
+
+  it("hides empty archived typo stores from the top selector unless archived products are shown", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      { id: "wrong-dental", storeId: "terra-pa-w", storeName: "Terra pa w", productName: "Pet Dental Wipes", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "", archivedAt: "2026-06-22" },
+      { id: "target-dental", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Dental Wipes", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
+    ]));
+
+    render(<App />);
+    expect(screen.getByLabelText("当前店铺 / 品牌")).not.toHaveTextContent("Terra pa w");
+    await goTo(user, /设置/);
+    await user.click(screen.getByLabelText("显示已归档产品"));
+    expect(screen.getByLabelText("当前店铺 / 品牌")).toHaveTextContent("Terra pa w");
+  });
+
   it("creates new campaigns under the current store and requires a store in all-store view", async () => {
     const user = userEvent.setup();
     const prompt = vi.spyOn(window, "prompt");

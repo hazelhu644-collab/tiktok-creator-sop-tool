@@ -724,13 +724,14 @@ function App() {
       if (!byId.has(id)) byId.set(id, normalizeStoreName(row.storeName));
     });
     mergedCampaigns.forEach((campaign) => {
+      if (campaign.archivedAt && !showArchivedProducts) return;
       const id = normalizeStoreId(campaign.storeId, campaign.storeName);
       const name = normalizeStoreName(campaign.storeName);
       if (!byId.has(id) || byId.get(id) === DEFAULT_STORE_NAME) byId.set(id, name);
     });
     if (byId.size === 0) byId.set(DEFAULT_STORE_ID, DEFAULT_STORE_NAME);
     return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows, mergedCampaigns]);
+  }, [rows, mergedCampaigns, showArchivedProducts]);
   const storeFilteredCampaigns = useMemo(() => mergedCampaigns.filter((campaign) => selectedStore === ALL_STORES || normalizeStoreId(campaign.storeId, campaign.storeName) === selectedStore), [mergedCampaigns, selectedStore]);
   const activeCampaigns = useMemo(() => storeFilteredCampaigns.filter((campaign) => showArchivedProducts || !campaign.archivedAt), [storeFilteredCampaigns, showArchivedProducts]);
   const showStoreLabels = selectedStore === ALL_STORES && stores.some((store) => store.name !== DEFAULT_STORE_NAME);
@@ -3680,15 +3681,52 @@ function App() {
       }
       updateCampaign({ productName, id: campaignIdFromName(productName) });
     };
+    const campaignFieldsDiffer = (source: Campaign, target: Campaign) => {
+      const serialize = (value: unknown) => Array.isArray(value) ? value.join("\n").trim() : String(value ?? "").trim();
+      return (["sellingPoints", "requirements", "keyContentPoints", "avoidShots", "videoCount", "videoLength", "tagRequirement", "productLink", "referenceLinks", "defaultMessageSetting", "notes"] as const)
+        .some((field) => serialize(source[field]) && serialize(target[field]) && serialize(source[field]) !== serialize(target[field]));
+    };
+    const mergeMissingCampaignConfig = (source: Campaign, target: Campaign): Campaign => {
+      const next = { ...target };
+      (["sellingPoints", "avoidShots", "videoCount", "videoLength", "tagRequirement", "productLink", "defaultMessageSetting", "notes"] as const).forEach((field) => {
+        if (!String(next[field] ?? "").trim() && String(source[field] ?? "").trim()) next[field] = source[field] as never;
+      });
+      (["requirements", "keyContentPoints", "referenceLinks"] as const).forEach((field) => {
+        if ((next[field] ?? []).length === 0 && (source[field] ?? []).length > 0) next[field] = source[field] as never;
+      });
+      return next;
+    };
+    const moveRowsToCampaign = (source: Campaign, target: Campaign) => {
+      const movedRows = rows.filter((row) => rowMatchesCampaign(row, source));
+      setRows(rows.map((row) => rowMatchesCampaign(row, source) ? { ...row, storeId: normalizeStoreId(target.storeId, target.storeName), storeName: normalizeStoreName(target.storeName), campaignId: target.id, product: target.productName } : row));
+      return movedRows.length;
+    };
     const assignCampaignStore = (campaign: Campaign, nextStoreId: string) => {
       const nextStore = stores.find((store) => store.id === nextStoreId);
       if (!nextStore) return;
-      if (duplicateProductInStore(campaign, campaign.productName, nextStore.id)) {
-        setToast({ tone: "warning", text: "当前店铺下已存在同名产品，请换一个产品名称。" });
+      const targetDuplicate = mergedCampaigns.find((item) =>
+        campaignOptionValue(item) !== campaignOptionValue(campaign) &&
+        normalizeStoreId(item.storeId, item.storeName) === nextStore.id &&
+        item.productName.trim().toLowerCase() === campaign.productName.trim().toLowerCase(),
+      );
+      if (targetDuplicate) {
+        if (!window.confirm("目标店铺下已存在同名产品。是否将当前产品及其达人记录合并到目标产品？")) return;
+        const movedCount = moveRowsToCampaign(campaign, targetDuplicate);
+        const hasConfigDiff = campaignFieldsDiffer(campaign, targetDuplicate);
+        setCampaigns(mergedCampaigns.map((item) => {
+          if (campaignOptionValue(item) === campaignOptionValue(targetDuplicate)) return mergeMissingCampaignConfig(campaign, targetDuplicate);
+          if (campaignOptionValue(item) === campaignOptionValue(campaign)) return { ...item, archivedAt: todayString() };
+          return item;
+        }));
+        setSelectedStore(nextStore.id);
+        setSelectedCampaign(campaignOptionValue(targetDuplicate));
+        setToast({ tone: hasConfigDiff ? "warning" : "success", text: `已将 ${movedCount} 条达人记录合并到 ${nextStore.name} · ${targetDuplicate.productName}。${hasConfigDiff ? "两个产品配置存在不同拍摄要求，已保留目标产品配置，请手动检查。" : ""}` });
         return;
       }
+      const movedCount = moveRowsToCampaign(campaign, { ...campaign, storeId: nextStore.id, storeName: nextStore.name });
       updateCampaign({ storeId: nextStore.id, storeName: nextStore.name });
-      setToast({ tone: "success", text: "已将产品关联到所选店铺 / 品牌。" });
+      setSelectedStore(nextStore.id);
+      setToast({ tone: "success", text: `已将产品关联到所选店铺 / 品牌，并迁移 ${movedCount} 条达人记录。` });
     };
     const createCampaign = () => {
       const productName = window.prompt("产品 / Campaign 名称：", "")?.trim();
@@ -3895,6 +3933,22 @@ function App() {
               </p>
             </div>
           )}
+        </section>
+        <section className="panel sop-card">
+          <div className="section-heading">
+            <div>
+              <h2>店铺清理</h2>
+              <p className="muted">空的错别字店铺会在产品归档后从顶部下拉中隐藏；仍有关联产品或达人记录的店铺需要先迁移或合并。</p>
+            </div>
+          </div>
+          <div className="inline-actions">
+            {stores.map((store) => {
+              const linkedCampaigns = mergedCampaigns.filter((campaign) => normalizeStoreId(campaign.storeId, campaign.storeName) === store.id && !campaign.archivedAt).length;
+              const linkedRows = rows.filter((row) => rowStoreId(row) === store.id).length;
+              const canDeleteStore = linkedCampaigns === 0 && linkedRows === 0;
+              return <button key={store.id} type="button" className="secondary" onClick={() => setToast(canDeleteStore ? { tone: "success", text: `${store.name} 已无关联产品或达人记录，会从店铺下拉中隐藏。` } : { tone: "warning", text: "该店铺仍有关联产品或达人记录，请先迁移或合并后再删除。" })}>{canDeleteStore ? `隐藏空店铺：${store.name}` : `检查店铺：${store.name}`}</button>;
+            })}
+          </div>
         </section>
         <section className="panel prompt-helper">
           <div className="section-heading">
