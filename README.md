@@ -155,3 +155,60 @@ Channel style:
 The project should be built as a lightweight web MVP that can be deployed later to Vercel or Netlify.
 
 The code should be clean and easy to extend in future versions.
+
+## 如何使用这个模板
+
+这个仓库可以作为你自己的 TikTok Creator SOP Tool 模板。请在自己的 GitHub、Vercel 和浏览器环境中使用它，不要复用仓库所有者的 SaaS、数据、API key 或 Vercel 项目。
+
+### 1. 复制模板
+
+* 在 GitHub 页面点击 **Use this template** 创建你自己的仓库；或
+* Fork this repository 到你自己的 GitHub 账号。
+
+### 2. 默认使用本地 / 免费模式
+
+* 这个工具默认可以在 local/free mode 下使用，不需要配置任何付费 API。
+* 上传和测试的数据会存储在你自己的浏览器 `localStorage` 中。
+* `localStorage` 数据不会自动同步到 GitHub、Vercel 或其他用户账号。
+* 如果你需要重置本地数据，可以清空浏览器站点数据或使用应用内的数据重置功能（如果当前版本提供）。
+
+### 3. 部署到你自己的 Vercel
+
+1. 登录你自己的 Vercel account。
+2. 点击 **Add New Project** / **Import Project**。
+3. 选择你通过模板创建或 Fork 的 repository。
+4. 保持默认构建设置并点击 **Deploy**。
+5. 部署完成后，打开 Vercel 提供的 deployed URL。
+6. 可选：如果你需要 API 生成能力，在 Vercel Project Settings 中配置环境变量。
+
+### 4. 可选 API 环境变量
+
+API 是可选功能。Local/free message generation 不需要 API key，也可以正常使用基础模板能力。
+
+如果你想启用 DeepSeek API，请在本地 `.env.local` 或 Vercel 环境变量中配置你自己的 key：
+
+```env
+DEEPSEEK_API_KEY=your_api_key_here
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+说明：
+
+* `DEEPSEEK_API_KEY`：你的 DeepSeek API key。每个用户都必须配置自己的 API key，不要使用仓库所有者或其他人的 key。
+* `DEEPSEEK_MODEL`：可选模型名；如果不确定，可以先使用 `deepseek-chat`。
+* 不配置 API key 时，应用仍可使用 local/free mode 进行测试和基础消息生成。
+
+### 5. Demo Mode 测试
+
+* 使用 **Demo Mode** 进行功能测试和演示。
+* Demo Mode 使用 fake data，适合在本地、截图、演示或部署后验证流程。
+* Demo Mode 不会暴露真实 creator data。
+* Demo data 是假的，安全用于测试。
+
+### 6. 隐私与安全注意事项
+
+* 不要把真实 creator CSV 文件上传到 GitHub。
+* 不要提交 `.env`、`.env.local`、`.env.production` 等环境变量文件。
+* 不要提交任何 API keys、tokens 或密钥。
+* 不要分享生产环境 `localStorage` 数据；其中可能包含你的真实 creator workflow 信息。
+* Demo data 是 fake data，可以安全用于测试、演示和模板验证。
