@@ -135,15 +135,30 @@ describe('MVP SOP rules', () => {
     expect(task.suggestedAction).toContain('剩余 2 条视频');
   });
 
-  it('warns over-required progress without blanking analysis', () => {
+  it('keeps over-required progress valid without failure warnings', () => {
     const [task] = analyzeCreators([
       row({ videoProgress: 'posted 6', firstVideoPostedDate: '2026-06-04' }),
     ], today, 5);
 
     expect(task.videoProgress).toBe('6/5');
     expect(task.videoProgressWarning).toBe(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
-    expect(task.failedWarnings).toContain(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
-    expect(task.triggerReason).toBeTruthy();
+    expect(task.failedWarnings).not.toContain(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
+    expect(task.needsFollowUp).toBe(false);
+  });
+
+  it('parses actual posted numerators without capping completion logic', () => {
+    const [oneRequired, twoRequired] = analyzeCreators([
+      row({ id: 'over-one', videoProgress: '2/1', firstVideoPostedDate: '2026-06-04' }),
+      row({ id: 'over-two', videoProgress: '3/2', firstVideoPostedDate: '2026-06-04' }),
+    ], today, 2);
+
+    expect(oneRequired.videoProgress).toBe('2/1');
+    expect(oneRequired.videoProgressWarning).toBe(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
+    expect(oneRequired.failedWarnings).not.toContain(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
+    expect(oneRequired.needsFollowUp).toBe(false);
+    expect(twoRequired.videoProgress).toBe('3/2');
+    expect(twoRequired.videoProgressWarning).toBe(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
+    expect(twoRequired.needsFollowUp).toBe(false);
   });
 
   it('keeps priority analysis stable when a blank manually added row exists', () => {
