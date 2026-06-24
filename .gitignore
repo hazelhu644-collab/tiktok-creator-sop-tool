@@ -3,5 +3,10 @@ dist
 .DS_Store
 .env
 .env.local
+.env.production
 .vite
 tsconfig.tsbuildinfo
+*.csv
+creator-data.csv
+exports/
+private-data/
