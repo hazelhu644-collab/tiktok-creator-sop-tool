@@ -220,6 +220,41 @@ describe("operations workbench navigation and dashboard", () => {
     expect(screen.getByTestId("current-creator-panel")).toBeInTheDocument();
   });
 
+
+  it("counts actual over-delivered posted video numerators in dashboard and product overview", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "over-delivery",
+        productName: "Over Delivery Product",
+        sellingPoints: "",
+        requirements: ["每位达人 1 条视频"],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "每位达人 1 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      creatorRow({ id: "zero", username: "zero_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "0/1" }),
+      creatorRow({ id: "one", username: "one_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "1/1" }),
+      creatorRow({ id: "two", username: "two_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "2/1" }),
+      creatorRow({ id: "partial", username: "partial_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "1/2" }),
+      creatorRow({ id: "three", username: "three_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "3/2" }),
+    ]);
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: /已发布视频数量7/ })).toBeInTheDocument();
+    const campaignCards = screen.getAllByRole("button", { name: /Over Delivery Product5 位达人/ });
+    expect(campaignCards.some((card) => card.textContent?.includes("已发布视频 7"))).toBe(true);
+  });
+
   it("keeps overview card clicks on 今日工作台 and reveals processed creators from the processed card", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
@@ -917,6 +952,54 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       });
     });
     expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
+  });
+
+  it("allows 发布 1 条视频 to increment 1/1 into valid 2/1", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "one-video-campaign",
+        productName: "One Video Product",
+        sellingPoints: "",
+        requirements: ["每位达人 1 条视频"],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "每位达人 1 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      creatorRow({
+        id: "over-click",
+        username: "over_click_creator",
+        product: "One Video Product",
+        campaignId: "one-video-campaign",
+        videoProgress: "1/1",
+        firstVideoPostedDate: "2026-06-10",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+    await user.selectOptions(screen.getByLabelText("选择达人"), "over-click");
+    await user.click(screen.getByRole("button", { name: "发布 1 条视频" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const updated = saved.find((row) => row.id === "over-click");
+      expect(updated?.videoProgress).toBe("2/1");
+      expect(updated?.videoProgressWarning).toBeUndefined();
+      expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
+        action: "Video Posted",
+        note: "已记录达人发布 1 条视频，当前进度 2/1。",
+      });
+    });
   });
 
   it("processes local-message tracking actions without calling DeepSeek", async () => {
@@ -2088,7 +2171,7 @@ describe("settings and prompt helper", () => {
     expect(screen.getByDisplayValue("0/1")).toBeInTheDocument();
   });
 
-  it("matches sync rows by campaignId before product fallback and warns on invalid published counts", async () => {
+  it("matches sync rows by campaignId before product fallback and preserves over-delivered counts", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
       {
@@ -2122,13 +2205,13 @@ describe("settings and prompt helper", () => {
       const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
       expect(saved.find((row) => row.id === "stable-match")?.videoProgress).toBe("0/1");
       expect(saved.find((row) => row.id === "preserve")?.videoProgress).toBe("1/1");
-      expect(saved.find((row) => row.id === "invalid")?.videoProgress).toBe("2/2");
-      expect(saved.find((row) => row.id === "invalid")?.videoProgressWarning).toContain("请手动检查");
+      expect(saved.find((row) => row.id === "invalid")?.videoProgress).toBe("2/1");
+      expect(saved.find((row) => row.id === "invalid")?.videoProgressWarning).toBe("超额发布");
     });
     expect(screen.getByRole("status")).toHaveTextContent("目标视频数量：1");
-    expect(screen.getByRole("status")).toHaveTextContent("已同步 2 条达人记录");
-    expect(screen.getByRole("status")).toHaveTextContent("保留 1 条已有发布进度");
-    expect(screen.getByRole("status")).toHaveTextContent("跳过 1 条需要手动检查");
+    expect(screen.getByRole("status")).toHaveTextContent("已同步 3 条达人记录");
+    expect(screen.getByRole("status")).toHaveTextContent("保留 2 条已有发布进度");
+    expect(screen.getByRole("status")).toHaveTextContent("跳过 0 条需要手动检查");
   });
 
   it("keeps completed and failed collaborations in the Creator Database, hides them from today queue, and searches archived rows", async () => {

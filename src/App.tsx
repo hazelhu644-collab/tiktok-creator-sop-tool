@@ -1162,10 +1162,11 @@ function App() {
   const activeEnrichedRows = enrichedRows.filter((entry) => isActiveDailyCollaboration(entry.row, requiredVideosForProduct(entry.row.product)));
 
   const deliveredWaitingVideoCount = activeEnrichedRows.filter((entry) => {
-    const { posted } = videoProgressCounts(entry.row, requiredVideos);
-    return isSampleDeliveredForVideo(entry.row, requiredVideos) && posted === 0;
+    const rowRequiredVideos = requiredVideosForProduct(entry.row.product);
+    const { posted } = videoProgressCounts(entry.row, rowRequiredVideos);
+    return isSampleDeliveredForVideo(entry.row, rowRequiredVideos) && posted === 0;
   }).length;
-  const postedVideoCount = activeEnrichedRows.reduce((sum, entry) => sum + videoProgressCounts(entry.row, requiredVideos).posted, 0);
+  const postedVideoCount = activeEnrichedRows.reduce((sum, entry) => sum + videoProgressCounts(entry.row, requiredVideosForProduct(entry.row.product)).posted, 0);
   const postedThisWeekCount = activeEnrichedRows.reduce((count, entry) => {
     const dateSet = new Set(
       [entry.row.firstVideoPostedDate, entry.row.latestVideoPostedDate ?? ""].filter(
@@ -1763,7 +1764,7 @@ function App() {
     const today = todayString();
     const selectedRequiredVideos = parseRequiredVideos(selectedTaskCampaignRequirements(selectedTask));
     const current = normalizeVideoProgress(selectedTask.videoProgress, selectedRequiredVideos);
-    const nextPosted = Math.min((current.postedCount ?? 0) + 1, selectedRequiredVideos);
+    const nextPosted = (current.postedCount ?? 0) + 1;
     const reachedRequirement = nextPosted >= selectedRequiredVideos;
     setRows((currentRows) =>
       currentRows.map((row) => {
@@ -3766,14 +3767,9 @@ function App() {
         const progress = normalizeVideoProgress(row.videoProgress, targetRequiredVideos);
         const postedFromText = row.videoProgress.match(/^\s*(\d+)\s*(?:\/|of)\s*\d+/i)?.[1];
         const postedCount = typeof progress.postedCount === "number" ? progress.postedCount : postedFromText ? Number.parseInt(postedFromText, 10) : undefined;
-        if (typeof postedCount !== "number" || !Number.isFinite(postedCount) || postedCount > targetRequiredVideos) {
+        if (typeof postedCount !== "number" || !Number.isFinite(postedCount)) {
           skippedCount += 1;
-          return {
-            ...row,
-            videoProgressWarning: postedCount && postedCount > targetRequiredVideos
-              ? `已发布 ${postedCount} 条超过目标 ${targetRequiredVideos} 条，请手动检查。`
-              : row.videoProgressWarning,
-          };
+          return row;
         }
         if (postedCount > 0) preservedPublishedCount += 1;
         const nextProgress = `${postedCount}/${targetRequiredVideos}`;

@@ -9,7 +9,7 @@ export const PRIORITY_RANK: Record<Priority, number> = {
 };
 
 export const DEFAULT_REQUIRED_VIDEOS = 1;
-export const VIDEO_PROGRESS_OVER_REQUIRED_WARNING = '视频进度超过当前达人拍摄要求。请检查已发布视频数量或修改达人拍摄要求。';
+export const VIDEO_PROGRESS_OVER_REQUIRED_WARNING = '超额发布';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -95,16 +95,20 @@ export function normalizeVideoProgress(value: unknown, requiredVideos = DEFAULT_
 }
 
 function normalizePostedCount(postedCount: number, providedRequiredVideos: number, requiredVideos: number, raw: string): VideoProgressNormalization {
-  if (!Number.isSafeInteger(postedCount) || postedCount < 0 || providedRequiredVideos !== requiredVideos) {
+  const safeProvidedRequiredVideos = Number.isSafeInteger(providedRequiredVideos) && providedRequiredVideos > 0
+    ? providedRequiredVideos
+    : requiredVideos;
+
+  if (!Number.isSafeInteger(postedCount) || postedCount < 0) {
     return { normalized: raw, warning: buildVideoProgressWarning(requiredVideos), requiredVideos };
   }
 
-  const normalized = `${postedCount}/${requiredVideos}`;
-  if (postedCount > requiredVideos) {
-    return { normalized, warning: VIDEO_PROGRESS_OVER_REQUIRED_WARNING, postedCount, requiredVideos, isOverRequired: true };
+  const normalized = `${postedCount}/${safeProvidedRequiredVideos}`;
+  if (postedCount > safeProvidedRequiredVideos) {
+    return { normalized, warning: VIDEO_PROGRESS_OVER_REQUIRED_WARNING, postedCount, requiredVideos: safeProvidedRequiredVideos, isOverRequired: true };
   }
 
-  return { normalized, postedCount, requiredVideos };
+  return { normalized, postedCount, requiredVideos: safeProvidedRequiredVideos };
 }
 
 function looksLikeExcelConvertedDate(value: unknown, normalized: string): boolean {
@@ -194,10 +198,6 @@ export function getFailureWarnings(row: CreatorRow, today = new Date(), required
   const notes = normalizeText(row.notes);
   const progress = videoProgress(row, requiredVideos);
   const missingVideos = missingVideoCount(progress, requiredVideos);
-
-  if (progress.isOverRequired) {
-    warnings.push(VIDEO_PROGRESS_OVER_REQUIRED_WARNING);
-  }
 
   if (hasDeliveredEvidence(row) && progress.postedCount === 0 && deliveredDays !== null && deliveredDays >= 7) {
     warnings.push(`样品已到货 ${deliveredDays} 天，但视频进度仍为 0/${requiredVideos}。`);
