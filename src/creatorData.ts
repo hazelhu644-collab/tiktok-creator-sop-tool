@@ -194,11 +194,11 @@ function toStoredRow(row: CreatorRow): CreatorRow {
   };
 }
 
-export function loadCreatorRows(): CreatorRow[] {
+export function loadCreatorRows(storageKey = CREATOR_ROWS_STORAGE_KEY): CreatorRow[] {
   const storage = getBrowserStorage();
   if (!storage) return [];
 
-  const saved = storage.getItem(CREATOR_ROWS_STORAGE_KEY);
+  const saved = storage.getItem(storageKey);
   if (!saved) return [];
 
   try {
@@ -206,7 +206,7 @@ export function loadCreatorRows(): CreatorRow[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.map((item) => toStoredRow(normalizeCreatorRowStore(item as CreatorRow))).filter((row) => normalizeText(row.id));
   } catch {
-    storage.removeItem(CREATOR_ROWS_STORAGE_KEY);
+    storage.removeItem(storageKey);
     return [];
   }
 }
@@ -246,20 +246,20 @@ export function deleteCreatorRow(rows: CreatorRow[], rowId: string): CreatorRow[
   return rows.filter((row) => row.id !== rowId);
 }
 
-export function saveCreatorRows(rows: CreatorRow[]): void {
+export function saveCreatorRows(rows: CreatorRow[], storageKey = CREATOR_ROWS_STORAGE_KEY): void {
   const storage = getBrowserStorage();
   if (!storage) return;
 
   if (rows.length === 0) {
-    storage.removeItem(CREATOR_ROWS_STORAGE_KEY);
+    storage.removeItem(storageKey);
     return;
   }
 
-  storage.setItem(CREATOR_ROWS_STORAGE_KEY, JSON.stringify(rows.map(toStoredRow)));
+  storage.setItem(storageKey, JSON.stringify(rows.map(toStoredRow)));
 }
 
-export function clearSavedCreatorRows(): void {
-  getBrowserStorage()?.removeItem(CREATOR_ROWS_STORAGE_KEY);
+export function clearSavedCreatorRows(storageKey = CREATOR_ROWS_STORAGE_KEY): void {
+  getBrowserStorage()?.removeItem(storageKey);
 }
 
 export function updateCreatorField(row: CreatorRow, field: EditableCreatorField, rawValue: string, requiredVideos = 1): CreatorRow {

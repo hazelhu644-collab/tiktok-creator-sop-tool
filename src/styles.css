@@ -124,3 +124,18 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
   font-size: 0.75rem;
   font-weight: 700;
 }
+.demo-mode-banner {
+  align-items: center;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 14px;
+  color: #9a3412;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+.demo-mode-banner strong { color: #c2410c; }
+.privacy-guidance { margin-top: 1rem; }
+.privacy-guidance ol { margin: 0.5rem 0 0; padding-left: 1.4rem; }

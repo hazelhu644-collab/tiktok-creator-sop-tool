@@ -103,8 +103,8 @@ export function detectCampaignNames(rows: CreatorRow[]): Array<{ storeId: string
   return Array.from(byIdentity.values());
 }
 
-export function loadCampaigns(): Campaign[] {
-  const saved = storage()?.getItem(CAMPAIGNS_STORAGE_KEY);
+export function loadCampaigns(storageKey = CAMPAIGNS_STORAGE_KEY): Campaign[] {
+  const saved = storage()?.getItem(storageKey);
   if (!saved) return [];
   try {
     const parsed = JSON.parse(saved) as Campaign[];
@@ -115,15 +115,15 @@ export function loadCampaigns(): Campaign[] {
       return ({ ...createCampaignFromName(item.productName, defaultCreatorFilmingRequirements, storeName, storeId), ...item, storeId, storeName, id: item.id || campaignIdFromName(item.productName) });
     });
   } catch {
-    storage()?.removeItem(CAMPAIGNS_STORAGE_KEY);
+    storage()?.removeItem(storageKey);
     return [];
   }
 }
 
-export function saveCampaigns(campaigns: Campaign[]): void {
+export function saveCampaigns(campaigns: Campaign[], storageKey = CAMPAIGNS_STORAGE_KEY): void {
   const target = storage();
   if (!target) return;
-  target.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify(campaigns));
+  target.setItem(storageKey, JSON.stringify(campaigns));
 }
 
 export function mergeDetectedCampaigns(saved: Campaign[], rows: CreatorRow[], fallback: CreatorFilmingRequirements = defaultCreatorFilmingRequirements): Campaign[] {
