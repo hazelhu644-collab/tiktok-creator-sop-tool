@@ -1,20 +1,42 @@
 # TikTok Creator SOP Tool
 
-A lightweight web MVP for TikTok Shop sellers to manage creator collaboration workflows.
-
-## Product Goal
+An AI-powered workflow platform for TikTok Shop creator outreach and collaboration.
 
 This tool helps TikTok Shop sellers manage creator outreach, sample follow-up, video delivery, and collaboration status in a clear SOP-based workflow.
 
-The first version focuses on solving one core problem:
+Built with ChatGPT + Codex for creator collaboration operations.
 
-After uploading a creator collaboration spreadsheet, the tool should automatically generate a daily follow-up task list and tell the seller which creators need attention today.
+---
+
+## Features
+
+* Creator outreach workflow management
+* Daily creator follow-up task list
+* Sample delivery and video progress tracking
+* AI-assisted creator message generation
+* SOP-based collaboration status management
+* Multi-stage creator pipeline
+* Demo Mode with fake data
+* Local/free mode without required API keys
+
+---
+
+## Product Goal
+
+After uploading a creator collaboration spreadsheet, the tool automatically analyzes each creator’s current status and generates a daily follow-up task list.
+
+The goal is to help sellers know which creators need attention today and what action should be taken next.
+
+---
 
 ## Target Users
 
 * TikTok Shop small sellers
 * Chinese cross-border e-commerce teams
-* New sellers who do not know how to manage creator collaborations step by step
+* New sellers managing creator collaborations for the first time
+* Brand-side operators who need a clearer outreach workflow
+
+---
 
 ## Core Value
 
@@ -26,19 +48,23 @@ The tool helps users:
 4. Improve creator video delivery rate
 5. Reduce wasted product samples
 
-## First MVP Scope
+---
 
-The first version should be a deployable web tool.
+## MVP Scope
 
-Users can upload an Excel spreadsheet. The tool will read the creator data, analyze each creator’s current status, and generate a daily task list.
+The first version is a lightweight deployable web tool.
 
-The MVP does not need login, database, TikTok API connection, or payment system.
+Users can upload a spreadsheet. The tool reads the creator data, analyzes each creator’s current status, and generates a daily task list.
+
+The MVP does not require login, database, TikTok API connection, or payment system.
 
 All data can be processed temporarily in the browser or in the current session.
 
-## First Product Focus
+---
 
-The first product template is for a pet steam grooming brush.
+## First Product Template
+
+The first product template is designed for a pet steam grooming brush.
 
 Video requirements:
 
@@ -57,6 +83,8 @@ Content priority:
 4. Show a natural daily pet-care scene
 5. Show easy cleanup
 
+---
+
 ## Creator Status Options
 
 * To Contact
@@ -69,6 +97,8 @@ Content priority:
 * Posted 1 Video / Waiting for 2nd Video
 * Completed
 * Failed
+
+---
 
 ## Spreadsheet Fields
 
@@ -84,7 +114,15 @@ The uploaded spreadsheet should include:
 * Last contact date
 * Notes
 
-Video progress can be entered as `0/2`, `1/2`, or `2/2`. Spreadsheet software may auto-convert values like `1/2` into a date, so users can use safer formats such as `1 of 2`, `0 of 2`, `2 of 2`, `1 video`, or `posted 1`.
+Video progress can be entered as `0/2`, `1/2`, or `2/2`.
+
+Spreadsheet software may auto-convert values like `1/2` into a date, so users can also use safer formats such as:
+
+* `1 of 2`
+* `0 of 2`
+* `2 of 2`
+* `1 video`
+* `posted 1`
 
 The system should generate:
 
@@ -94,6 +132,8 @@ The system should generate:
 * Priority
 * Recommended next action
 
+---
+
 ## Daily Task Priority Rules
 
 Priority order:
@@ -102,6 +142,8 @@ Priority order:
 2. High: creator posted 1 video but has not posted the second video
 3. Medium: creator was followed up, but has not replied after 1 day
 4. Low: creator was contacted, but has not replied after 2 days
+
+---
 
 ## Failed Collaboration Candidate Rules
 
@@ -115,6 +157,8 @@ Suggest “Failed Candidate” when:
 * Creator has not replied for a long time and has no clear filming plan
 * The video does not follow the brief and the creator is unwilling to correct it
 
+---
+
 ## Output Structure
 
 After the user uploads a spreadsheet, the tool should show:
@@ -126,6 +170,8 @@ After the user uploads a spreadsheet, the tool should show:
 5. A prompt for the user to select a creator and generate a message
 
 The tool should not automatically generate messages for all creators at once.
+
+---
 
 ## Message Generation Logic
 
@@ -150,65 +196,100 @@ Channel style:
 * Email: more complete and structured
 * WhatsApp: conversational but slightly more detailed than TikTok DM
 
+---
+
+## Tech Stack
+
+* TypeScript
+* Vite
+* ChatGPT
+* Codex
+* Vercel
+
+---
+
 ## Deployment Goal
 
-The project should be built as a lightweight web MVP that can be deployed later to Vercel or Netlify.
+The project is designed as a lightweight web MVP that can be deployed to Vercel or Netlify.
 
 The code should be clean and easy to extend in future versions.
 
-## 如何使用这个模板
+---
 
-这个仓库可以作为你自己的 TikTok Creator SOP Tool 模板。请在自己的 GitHub、Vercel 和浏览器环境中使用它，不要复用仓库所有者的 SaaS、数据、API key 或 Vercel 项目。
+## How to Use This Template
 
-### 1. 复制模板
+This repository can be used as a TikTok Creator SOP Tool template.
 
-* 在 GitHub 页面点击 **Use this template** 创建你自己的仓库；或
-* Fork this repository 到你自己的 GitHub 账号。
+Please use it in your own GitHub, Vercel, and browser environment. Do not reuse the repository owner’s SaaS, data, API keys, or Vercel project.
 
-### 2. 默认使用本地 / 免费模式
+### 1. Copy the Template
 
-* 这个工具默认可以在 local/free mode 下使用，不需要配置任何付费 API。
-* 上传和测试的数据会存储在你自己的浏览器 `localStorage` 中。
-* `localStorage` 数据不会自动同步到 GitHub、Vercel 或其他用户账号。
-* 如果你需要重置本地数据，可以清空浏览器站点数据或使用应用内的数据重置功能（如果当前版本提供）。
+* Click **Use this template** on GitHub to create your own repository; or
+* Fork this repository to your own GitHub account.
 
-### 3. 部署到你自己的 Vercel
+### 2. Use Local / Free Mode by Default
 
-1. 登录你自己的 Vercel account。
-2. 点击 **Add New Project** / **Import Project**。
-3. 选择你通过模板创建或 Fork 的 repository。
-4. 保持默认构建设置并点击 **Deploy**。
-5. 部署完成后，打开 Vercel 提供的 deployed URL。
-6. 可选：如果你需要 API 生成能力，在 Vercel Project Settings 中配置环境变量。
+* This tool can run in local/free mode without any paid API.
+* Uploaded and test data is stored in your browser `localStorage`.
+* `localStorage` data does not automatically sync to GitHub, Vercel, or other user accounts.
+* To reset local data, clear browser site data or use the in-app reset function if available.
 
-### 4. 可选 API 环境变量
+### 3. Deploy to Your Own Vercel
 
-API 是可选功能。Local/free message generation 不需要 API key，也可以正常使用基础模板能力。
+1. Log in to your own Vercel account.
+2. Click **Add New Project** / **Import Project**.
+3. Select the repository you created from this template or fork.
+4. Keep the default build settings and click **Deploy**.
+5. Open the deployed URL provided by Vercel.
+6. Optional: configure environment variables if you want API-based generation.
 
-如果你想启用 DeepSeek API，请在本地 `.env.local` 或 Vercel 环境变量中配置你自己的 key：
+### 4. Optional API Environment Variables
+
+API usage is optional. Local/free message generation works without an API key.
+
+If you want to enable DeepSeek API, configure your own key in `.env.local` or Vercel environment variables:
 
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
 DEEPSEEK_MODEL=deepseek-chat
 ```
 
-说明：
+Notes:
 
-* `DEEPSEEK_API_KEY`：你的 DeepSeek API key。每个用户都必须配置自己的 API key，不要使用仓库所有者或其他人的 key。
-* `DEEPSEEK_MODEL`：可选模型名；如果不确定，可以先使用 `deepseek-chat`。
-* 不配置 API key 时，应用仍可使用 local/free mode 进行测试和基础消息生成。
+* `DEEPSEEK_API_KEY`: your own DeepSeek API key.
+* `DEEPSEEK_MODEL`: optional model name. If unsure, use `deepseek-chat`.
+* Without an API key, the app can still use local/free mode for testing and basic message generation.
 
-### 5. Demo Mode 测试
+### 5. Demo Mode
 
-* 使用 **Demo Mode** 进行功能测试和演示。
-* Demo Mode 使用 fake data，适合在本地、截图、演示或部署后验证流程。
-* Demo Mode 不会暴露真实 creator data。
-* Demo data 是假的，安全用于测试。
+* Use **Demo Mode** for testing and demos.
+* Demo Mode uses fake data.
+* Demo data is safe for screenshots, testing, and public walkthroughs.
+* Demo Mode does not expose real creator data.
 
-### 6. 隐私与安全注意事项
+---
 
-* 不要把真实 creator CSV 文件上传到 GitHub。
-* 不要提交 `.env`、`.env.local`、`.env.production` 等环境变量文件。
-* 不要提交任何 API keys、tokens 或密钥。
-* 不要分享生产环境 `localStorage` 数据；其中可能包含你的真实 creator workflow 信息。
-* Demo data 是 fake data，可以安全用于测试、演示和模板验证。
+## Privacy and Security
+
+* Do not upload real creator CSV files to GitHub.
+* Do not commit `.env`, `.env.local`, `.env.production`, or other environment files.
+* Do not commit API keys, tokens, passwords, cookies, or private credentials.
+* Do not share production `localStorage` data, because it may contain real creator workflow information.
+* Demo data is fake and safe for testing.
+
+---
+
+## Roadmap
+
+* Browser automation support
+* TikTok Shop workflow integration
+* Creator CRM dashboard
+* Campaign performance tracking
+* Multi-product collaboration templates
+* Team collaboration mode
+
+---
+
+## License
+
+MIT License.
