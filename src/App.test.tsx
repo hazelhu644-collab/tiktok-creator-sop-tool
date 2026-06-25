@@ -2250,3 +2250,80 @@ describe("settings and prompt helper", () => {
   });
 
 });
+
+describe("safe sharing demo mode", () => {
+  it("loads fake demo creators without reading or overwriting production localStorage", async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ username: "real_private_creator", notes: "real private note", profileLink: "https://real.example/private" })]);
+
+    render(<App />);
+    await goTo(user, /设置/);
+    expect(screen.getByText("分享前请使用演示模式或模板仓库，不要分享包含真实达人数据的浏览器数据或 CSV。")).toBeInTheDocument();
+    expect(screen.getByText("演示模式不会读取你的真实 localStorage 数据。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "进入演示模式" }));
+
+    expect(screen.getByText("演示模式 / Demo Mode")).toBeInTheDocument();
+    expect(screen.getAllByText("当前为演示模式，所有数据均为虚拟示例，不会读取你的真实达人数据。").length).toBeGreaterThan(0);
+    expect(window.localStorage.getItem("demo_creatorRows")).toContain("@demo_creator_001");
+    await goTo(user, /达人数据库/);
+    expect(screen.queryByText("real_private_creator")).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY)).toContain("real_private_creator");
+    expect(window.localStorage.getItem("demo_creatorRows")).toContain("@demo_creator_001");
+
+    await goTo(user, /设置/);
+    await user.click(screen.getByRole("button", { name: "退出演示模式" }));
+    await goTo(user, /达人数据库/);
+    expect(screen.getByDisplayValue("real_private_creator")).toBeInTheDocument();
+  });
+
+  it("resets only demo data and leaves real creator data untouched", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    seedCreators([creatorRow({ username: "real_reset_guard" })]);
+    window.localStorage.setItem("demo_creatorRows", JSON.stringify([creatorRow({ id: "custom-demo", username: "@changed_demo" })]));
+
+    render(<App />);
+    await goTo(user, /设置/);
+    await user.click(screen.getByRole("button", { name: "重置演示数据" }));
+
+    expect(window.confirm).toHaveBeenCalledWith("这会重置演示模式下的数据，不会影响你的真实达人数据。");
+    expect(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY)).toContain("real_reset_guard");
+    expect(window.localStorage.getItem("demo_creatorRows")).toContain("@demo_creator_001");
+    expect(window.localStorage.getItem("demo_creatorRows")).not.toContain("@changed_demo");
+  });
+
+  it("warns before production CSV export and exports demo CSV without real data", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:demo");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    seedCreators([creatorRow({ username: "real_export_guard" })]);
+
+    render(<App />);
+    await goTo(user, /达人数据库/);
+    await user.click(screen.getByRole("button", { name: "导出 CSV" }));
+    expect(confirmSpy).toHaveBeenCalledWith("导出的 CSV 可能包含真实达人账号、备注、产品链接和跟进记录，请确认是否继续。");
+    expect(createObjectUrl).not.toHaveBeenCalled();
+
+    await goTo(user, /设置/);
+    await user.click(screen.getByRole("button", { name: "进入演示模式" }));
+    await goTo(user, /达人数据库/);
+    await user.click(screen.getByRole("button", { name: "导出 CSV" }));
+    expect(screen.getByText("当前导出的是演示数据。")).toBeInTheDocument();
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY)).toContain("real_export_guard");
+  });
+
+  it("keeps local message generation usable and disables DeepSeek in demo mode", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await goTo(user, /设置/);
+    await user.click(screen.getByRole("button", { name: "进入演示模式" }));
+    await goTo(user, /达人跟进中心/);
+
+    expect(screen.getAllByText(/Demo/).length).toBeGreaterThan(0);
+    const deepSeekButtons = screen.getAllByRole("button", { name: /DeepSeek|根据上方重点生成英文回复/ });
+    expect(deepSeekButtons.some((button) => button.hasAttribute("disabled"))).toBe(true);
+  });
+});

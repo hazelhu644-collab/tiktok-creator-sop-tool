@@ -51,6 +51,13 @@ import {
   normalizeStoreId,
   normalizeStoreName,
 } from "./campaignData";
+import {
+  DEMO_MODE_FLAG_KEY,
+  isDemoModeEnabled,
+  resetDemoData,
+  seedDemoData,
+  storageKeysForMode,
+} from "./demoMode";
 import type {
   Campaign,
   Channel,
@@ -194,11 +201,11 @@ const navItems: Array<{ key: ModuleKey; label: string; helper: string }> = [
   { key: "settings", label: "设置", helper: "数据与 SOP 默认值" },
 ];
 
-function loadFilmingRequirements(): CreatorFilmingRequirements {
+function loadFilmingRequirements(storageKey = FILMING_REQUIREMENTS_STORAGE_KEY): CreatorFilmingRequirements {
   if (typeof window === "undefined") return defaultCreatorFilmingRequirements;
 
   const savedRequirements = window.localStorage.getItem(
-    FILMING_REQUIREMENTS_STORAGE_KEY,
+    storageKey,
   );
   if (!savedRequirements) return defaultCreatorFilmingRequirements;
 
@@ -229,10 +236,10 @@ function loadFilmingRequirements(): CreatorFilmingRequirements {
   }
 }
 
-function saveFilmingRequirements(requirements: CreatorFilmingRequirements) {
+function saveFilmingRequirements(requirements: CreatorFilmingRequirements, storageKey = FILMING_REQUIREMENTS_STORAGE_KEY) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(
-    FILMING_REQUIREMENTS_STORAGE_KEY,
+    storageKey,
     JSON.stringify(requirements),
   );
 }
@@ -613,7 +620,13 @@ function buildTemplateMessages(form: TemplateForm): TemplateMessage[] {
 }
 
 function App() {
-  const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
+  const [isDemoMode, setIsDemoMode] = useState(() => isDemoModeEnabled());
+  const storageKeys = useMemo(() => storageKeysForMode(isDemoMode), [isDemoMode]);
+  const [rows, setRows] = useState<CreatorRow[]>(() => {
+    const demo = isDemoModeEnabled();
+    if (demo && typeof window !== "undefined") seedDemoData();
+    return loadCreatorRows(storageKeysForMode(demo).creatorRows);
+  });
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -649,8 +662,8 @@ function App() {
     () => emptyTemplateForm,
   );
   const [filmingRequirements, setFilmingRequirements] =
-    useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
-  const [campaigns, setCampaigns] = useState<Campaign[]>(() => loadCampaigns());
+    useState<CreatorFilmingRequirements>(() => loadFilmingRequirements(storageKeysForMode(isDemoModeEnabled()).filmingRequirements));
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => loadCampaigns(storageKeysForMode(isDemoModeEnabled()).campaigns));
   const [selectedStore, setSelectedStore] = useState(ALL_STORES);
   const [selectedCampaign, setSelectedCampaign] = useState("ALL");
   const [isEditingFilmingRequirements, setIsEditingFilmingRequirements] =
@@ -962,7 +975,37 @@ function App() {
     [templateForm],
   );
 
-  useEffect(() => saveCreatorRows(rows), [rows]);
+  useEffect(() => saveCreatorRows(rows, storageKeys.creatorRows), [rows, storageKeys.creatorRows]);
+
+  function switchDemoMode(nextDemoMode: boolean) {
+    if (nextDemoMode && typeof window !== "undefined") {
+      seedDemoData();
+      window.localStorage.setItem(DEMO_MODE_FLAG_KEY, "demo");
+    }
+    if (!nextDemoMode && typeof window !== "undefined") window.localStorage.removeItem(DEMO_MODE_FLAG_KEY);
+    const nextKeys = storageKeysForMode(nextDemoMode);
+    setIsDemoMode(nextDemoMode);
+    setRows(loadCreatorRows(nextKeys.creatorRows));
+    setCampaigns(loadCampaigns(nextKeys.campaigns));
+    setFilmingRequirements(loadFilmingRequirements(nextKeys.filmingRequirements));
+    setSelectedCreatorId("");
+    setTemplateCreatorId("");
+    setMessage(null);
+    setMessageSource("local");
+    setToast({ tone: "success", text: nextDemoMode ? "已进入演示模式。" : "已退出演示模式，恢复真实数据视图。" });
+  }
+
+  function handleResetDemoData() {
+    if (!window.confirm("这会重置演示模式下的数据，不会影响你的真实达人数据。")) return;
+    resetDemoData();
+    if (isDemoMode) {
+      const nextKeys = storageKeysForMode(true);
+      setRows(loadCreatorRows(nextKeys.creatorRows));
+      setCampaigns(loadCampaigns(nextKeys.campaigns));
+      setFilmingRequirements(loadFilmingRequirements(nextKeys.filmingRequirements));
+    }
+    setToast({ tone: "success", text: "已重置演示数据，真实数据未受影响。" });
+  }
 
   useEffect(() => {
     const today = todayString();
@@ -991,7 +1034,7 @@ function App() {
   }, []);
 
 
-  useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
+  useEffect(() => saveCampaigns(mergedCampaigns, storageKeys.campaigns), [mergedCampaigns, storageKeys.campaigns]);
   useEffect(() => {
     if (selectedStore !== ALL_STORES && !stores.some((store) => store.id === selectedStore)) {
       setSelectedStore(stores[0]?.id ?? ALL_STORES);
@@ -1604,6 +1647,11 @@ function App() {
         setMessageSource("local");
       }
 
+      if (isDemoMode) {
+        setDeepSeekError("演示模式下不建议调用真实 API，请确认是否继续。");
+        return;
+      }
+
       const response = await fetch("/api/deepseek-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1916,7 +1964,7 @@ function App() {
       productName: next.productName,
       videos: String(parseRequiredVideos(next)),
     }));
-    saveFilmingRequirements(next);
+    saveFilmingRequirements(next, storageKeys.filmingRequirements);
     setIsEditingFilmingRequirements(false);
     setToast({ tone: "success", text: "拍摄要求已保存。" });
   }
@@ -1941,7 +1989,7 @@ function App() {
       listToText(defaultCreatorFilmingRequirements.referenceLinks),
     );
     setFilmingRequirements(defaultCreatorFilmingRequirements);
-    saveFilmingRequirements(defaultCreatorFilmingRequirements);
+    saveFilmingRequirements(defaultCreatorFilmingRequirements, storageKeys.filmingRequirements);
     setIsEditingFilmingRequirements(false);
     setToast({ tone: "success", text: "已恢复默认拍摄要求。" });
   }
@@ -2144,6 +2192,16 @@ function App() {
     );
   }
 
+  function handleExportCsv() {
+    if (isDemoMode) {
+      setToast({ tone: "success", text: "当前导出的是演示数据。" });
+      downloadCreatorRowsCsv(rows);
+      return;
+    }
+    if (!window.confirm("导出的 CSV 可能包含真实达人账号、备注、产品链接和跟进记录，请确认是否继续。")) return;
+    downloadCreatorRowsCsv(rows);
+  }
+
   function renderImportCard() {
     return (
       <section className="panel compact-panel">
@@ -2166,7 +2224,7 @@ function App() {
             <button
               type="button"
               className="secondary"
-              onClick={() => downloadCreatorRowsCsv(rows)}
+              onClick={() => handleExportCsv()}
               disabled={rows.length === 0}
             >
               导出 CSV
@@ -2591,7 +2649,7 @@ function App() {
                     />
                   </label>
                   <div className="inline-actions deepseek-near-focus">
-                    <button type="button" className="secondary" onClick={() => void callDeepSeek("generate_personalized_reply")} disabled={deepSeekLoadingAction !== null}>
+                    <button type="button" className="secondary" onClick={() => void callDeepSeek("generate_personalized_reply")} disabled={isDemoMode || deepSeekLoadingAction !== null}>
                       根据上方重点生成英文回复
                     </button>
                   </div>
@@ -2602,7 +2660,7 @@ function App() {
                       onClick={() =>
                         void callDeepSeek("translate_creator_reply")
                       }
-                      disabled={deepSeekLoadingAction !== null}
+                      disabled={isDemoMode || deepSeekLoadingAction !== null}
                     >
                       DeepSeek 翻译达人回复
                     </button>
@@ -2695,7 +2753,7 @@ function App() {
                       type="button"
                       className="secondary"
                       onClick={() => void callDeepSeek("generate_personalized_reply")}
-                      disabled={deepSeekLoadingAction !== null}
+                      disabled={isDemoMode || deepSeekLoadingAction !== null}
                     >
                       根据上方重点生成英文回复
                     </button>
@@ -3815,6 +3873,31 @@ function App() {
         <section className="panel sop-card">
           <div className="section-heading">
             <div>
+              <h2>安全分享 / 演示模式</h2>
+              <p className="muted">分享前请使用演示模式或模板仓库，不要分享包含真实达人数据的浏览器数据或 CSV。</p>
+              <p className="muted">演示模式不会读取你的真实 localStorage 数据。</p>
+            </div>
+          </div>
+          <div className="inline-actions">
+            <button type="button" className="secondary" onClick={() => switchDemoMode(true)} disabled={isDemoMode}>进入演示模式</button>
+            <button type="button" className="secondary" onClick={() => switchDemoMode(false)} disabled={!isDemoMode}>退出演示模式</button>
+            <button type="button" className="secondary" onClick={handleResetDemoData}>重置演示数据</button>
+          </div>
+          {isDemoMode && <p className="ai-status">当前为演示模式，所有数据均为虚拟示例，不会读取你的真实达人数据。</p>}
+          <div className="privacy-guidance">
+            <h3>如何安全分享给别人</h3>
+            <ol>
+              <li>使用演示模式给别人体验。</li>
+              <li>不要分享自己的真实达人数据或 CSV。</li>
+              <li>如果对方想长期使用，请让对方 Fork / Use this template。</li>
+              <li>对方部署自己的 Vercel，使用自己的浏览器数据和 API Key。</li>
+              <li>DeepSeek API Key 需要对方自己配置。</li>
+            </ol>
+          </div>
+        </section>
+        <section className="panel sop-card">
+          <div className="section-heading">
+            <div>
               <h2>产品项目设置</h2>
               <p className="muted">
                 达人拍摄要求是 Campaign 核心配置。每个产品项目独立保存 8 个拍摄要求字段，供工作台、话术、DeepSeek 和内容审核调用。
@@ -4057,7 +4140,7 @@ function App() {
               type="button"
               className="secondary danger"
               onClick={() => {
-                clearSavedCreatorRows();
+                clearSavedCreatorRows(storageKeys.creatorRows);
                 setRows([]);
                 setToast({ tone: "success", text: "已清空本地达人数据。" });
               }}
@@ -4107,6 +4190,12 @@ function App() {
         </nav>
       </aside>
       <main className="workspace">
+        {isDemoMode && (
+          <div className="demo-mode-banner" role="status">
+            <strong>演示模式 / Demo Mode</strong>
+            <span>当前为演示模式，所有数据均为虚拟示例，不会读取你的真实达人数据。</span>
+          </div>
+        )}
         {renderCampaignSelector()}
         {renderActiveModule()}
       </main>
