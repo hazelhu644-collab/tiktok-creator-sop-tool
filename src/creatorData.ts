@@ -21,7 +21,6 @@ export const CREATOR_TEMPLATE_COLUMNS: Array<{
   { header: "店铺 / 品牌", key: "storeName" },
   { header: "产品", key: "product" },
   { header: "合作状态", key: "currentStatus" },
-  { header: "样品物流状态", key: "sampleShippingStatus" },
   { header: "样品到货日期", key: "sampleDeliveredDate" },
   { header: "视频进度", key: "videoProgress" },
   { header: "首条视频发布日期", key: "firstVideoPostedDate" },
