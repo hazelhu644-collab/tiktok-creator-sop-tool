@@ -274,9 +274,9 @@ function displayStatus(status: CreatorStatus): string {
 function priorityLabel(task: Task): string {
   return task.priority === "High"
     ? "高"
-      : task.priority === "Medium"
-        ? "中"
-        : "低";
+    : task.priority === "Medium"
+      ? "中"
+      : "低";
 }
 
 function compactCreatorLabel(task: Task): string {
@@ -285,8 +285,10 @@ function compactCreatorLabel(task: Task): string {
 
 function queueStatusLabelText(task: Task): string {
   if (task.trackingStatus?.trim()) return task.trackingStatus.trim();
-  if (task.priority === "Low" && task.triggerReason.includes("今日已处理")) return "今日已处理";
-  if (task.priority === "Low" && task.triggerReason.includes("暂不催")) return "暂不催";
+  if (task.priority === "Low" && task.triggerReason.includes("今日已处理"))
+    return "今日已处理";
+  if (task.priority === "Low" && task.triggerReason.includes("暂不催"))
+    return "暂不催";
   if (task.priority === "High") return "待跟进";
   if (task.priority === "Medium") return "轻跟进";
   return "稍后复查";
@@ -317,7 +319,10 @@ function parseRequiredVideoCountText(value: string | undefined): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function campaignRequiredVideoCount(campaign: Campaign, fallback: CreatorFilmingRequirements): number {
+function campaignRequiredVideoCount(
+  campaign: Campaign,
+  fallback: CreatorFilmingRequirements,
+): number {
   return (
     parseRequiredVideoCountText(campaign.videoCount) ??
     parseRequiredVideos(campaignToFilmingRequirements(campaign, fallback))
@@ -329,16 +334,28 @@ function normalizedProductKey(value: string): string {
 }
 
 function campaignOptionValue(campaign: Campaign): string {
-  return campaignIdentity(normalizeStoreId(campaign.storeId, campaign.storeName), campaign.id);
+  return campaignIdentity(
+    normalizeStoreId(campaign.storeId, campaign.storeName),
+    campaign.id,
+  );
 }
 
-function campaignSelectValue(campaign: Campaign, campaigns: Campaign[]): string {
-  const sameProduct = campaigns.filter((item) => item.productName === campaign.productName);
-  return sameProduct.length === 1 ? campaign.productName : campaignOptionValue(campaign);
+function campaignSelectValue(
+  campaign: Campaign,
+  campaigns: Campaign[],
+): string {
+  const sameProduct = campaigns.filter(
+    (item) => item.productName === campaign.productName,
+  );
+  return sameProduct.length === 1
+    ? campaign.productName
+    : campaignOptionValue(campaign);
 }
 
 function campaignLabel(campaign: Campaign, showStore = true): string {
-  return showStore ? `${normalizeStoreName(campaign.storeName)} · ${campaign.productName}` : campaign.productName;
+  return showStore
+    ? `${normalizeStoreName(campaign.storeName)} · ${campaign.productName}`
+    : campaign.productName;
 }
 
 function rowStoreId(row: CreatorRow): string {
@@ -353,7 +370,10 @@ function rowMatchesCampaign(row: CreatorRow, campaign: Campaign): boolean {
   if (rowStoreId(row) !== campaign.storeId) return false;
   const rowCampaignId = row.campaignId;
   if (rowCampaignId && rowCampaignId === campaign.id) return true;
-  return normalizedProductKey(row.product) === normalizedProductKey(campaign.productName);
+  return (
+    normalizedProductKey(row.product) ===
+    normalizedProductKey(campaign.productName)
+  );
 }
 
 function hasAny(value: string, terms: string[]) {
@@ -366,7 +386,9 @@ function isCurrentWeek(dateValue: string) {
   const date = new Date(`${dateValue}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return false;
   const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const today = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
   const day = today.getUTCDay() || 7;
   const weekStart = new Date(today);
   weekStart.setUTCDate(today.getUTCDate() - day + 1);
@@ -375,7 +397,10 @@ function isCurrentWeek(dateValue: string) {
   return date >= weekStart && date < weekEnd;
 }
 
-function videoProgressCounts(row: Pick<CreatorRow, "videoProgress">, requiredVideos: number) {
+function videoProgressCounts(
+  row: Pick<CreatorRow, "videoProgress">,
+  requiredVideos: number,
+) {
   const progress = normalizeVideoProgress(row.videoProgress, requiredVideos);
   return {
     posted: progress.postedCount ?? 0,
@@ -384,7 +409,9 @@ function videoProgressCounts(row: Pick<CreatorRow, "videoProgress">, requiredVid
 }
 
 function isSampleDeliveredForVideo(row: CreatorRow, requiredVideos: number) {
-  return ["Delivered", "Waiting Video"].includes(inferStatus(row, requiredVideos));
+  return ["Delivered", "Waiting Video"].includes(
+    inferStatus(row, requiredVideos),
+  );
 }
 
 function isSampleInTransitForDaily(row: CreatorRow, requiredVideos: number) {
@@ -426,7 +453,13 @@ function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
     return "Waiting Video";
   if (
     isDeliveredLogisticsStatus(row.sampleShippingStatus) ||
-    hasAny(status, ["delivered", "已签收", "已到货", "waiting video", "等待视频"])
+    hasAny(status, [
+      "delivered",
+      "已签收",
+      "已到货",
+      "waiting video",
+      "等待视频",
+    ])
   )
     return "Delivered";
   if (
@@ -455,25 +488,32 @@ function statusTone(status: CreatorStatus) {
   return `status-pill status-${status.toLowerCase().replace(/\s+/g, "-")}`;
 }
 
-function isArchivedCollaboration(row: Pick<CreatorRow, "archivedAt" | "currentStatus" | "trackingStatus">): boolean {
+function isArchivedCollaboration(
+  row: Pick<CreatorRow, "archivedAt" | "currentStatus" | "trackingStatus">,
+): boolean {
   return Boolean(
     row.archivedAt ||
-      hasAny(`${row.currentStatus} ${row.trackingStatus ?? ""}`, [
-        "completed",
-        "complete",
-        "已完成",
-        "合作完成",
-        "failed",
-        "lost",
-        "失败",
-        "归档",
-      ]),
+    hasAny(`${row.currentStatus} ${row.trackingStatus ?? ""}`, [
+      "completed",
+      "complete",
+      "已完成",
+      "合作完成",
+      "failed",
+      "lost",
+      "失败",
+      "归档",
+    ]),
   );
 }
 
-function isActiveDailyCollaboration(row: CreatorRow, requiredVideos: number): boolean {
+function isActiveDailyCollaboration(
+  row: CreatorRow,
+  requiredVideos: number,
+): boolean {
   const status = inferStatus(row, requiredVideos);
-  return !isArchivedCollaboration(row) && status !== "Completed" && status !== "Lost";
+  return (
+    !isArchivedCollaboration(row) && status !== "Completed" && status !== "Lost"
+  );
 }
 
 function parseNumberFromNotes(notes: string, keys: string[]): string {
@@ -619,7 +659,8 @@ function App() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState<Toast>(null);
   const [importSummary, setImportSummary] = useState("");
-  const [pendingDuplicateAdd, setPendingDuplicateAdd] = useState<PendingDuplicateAdd>(null);
+  const [pendingDuplicateAdd, setPendingDuplicateAdd] =
+    useState<PendingDuplicateAdd>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CreatorStatus | "All">(
@@ -705,7 +746,8 @@ function App() {
   const [isAdvancedReplyOpen, setIsAdvancedReplyOpen] = useState(false);
   const [showNextCreatorPrompt, setShowNextCreatorPrompt] = useState(false);
   const [showProcessedToday, setShowProcessedToday] = useState(false);
-  const [showArchivedCollaborations, setShowArchivedCollaborations] = useState(false);
+  const [showArchivedCollaborations, setShowArchivedCollaborations] =
+    useState(false);
   const [showArchivedProducts, setShowArchivedProducts] = useState(false);
   const [creatorSearchStatus, setCreatorSearchStatus] = useState("");
   const [lastProcessingResult, setLastProcessingResult] = useState("");
@@ -714,7 +756,12 @@ function App() {
   const messageAreaRef = useRef<HTMLDivElement | null>(null);
 
   const mergedCampaigns = useMemo(
-    () => mergeDetectedCampaigns(campaigns, rows.map(normalizeCreatorRowStore), filmingRequirements),
+    () =>
+      mergeDetectedCampaigns(
+        campaigns,
+        rows.map(normalizeCreatorRowStore),
+        filmingRequirements,
+      ),
     [campaigns, rows, filmingRequirements],
   );
   const stores = useMemo(() => {
@@ -727,20 +774,46 @@ function App() {
       if (campaign.archivedAt && !showArchivedProducts) return;
       const id = normalizeStoreId(campaign.storeId, campaign.storeName);
       const name = normalizeStoreName(campaign.storeName);
-      if (!byId.has(id) || byId.get(id) === DEFAULT_STORE_NAME) byId.set(id, name);
+      if (!byId.has(id) || byId.get(id) === DEFAULT_STORE_NAME)
+        byId.set(id, name);
     });
     if (byId.size === 0) byId.set(DEFAULT_STORE_ID, DEFAULT_STORE_NAME);
-    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   }, [rows, mergedCampaigns, showArchivedProducts]);
-  const storeFilteredCampaigns = useMemo(() => mergedCampaigns.filter((campaign) => selectedStore === ALL_STORES || normalizeStoreId(campaign.storeId, campaign.storeName) === selectedStore), [mergedCampaigns, selectedStore]);
-  const activeCampaigns = useMemo(() => storeFilteredCampaigns.filter((campaign) => showArchivedProducts || !campaign.archivedAt), [storeFilteredCampaigns, showArchivedProducts]);
-  const showStoreLabels = selectedStore === ALL_STORES && stores.some((store) => store.name !== DEFAULT_STORE_NAME);
+  const storeFilteredCampaigns = useMemo(
+    () =>
+      mergedCampaigns.filter(
+        (campaign) =>
+          selectedStore === ALL_STORES ||
+          normalizeStoreId(campaign.storeId, campaign.storeName) ===
+            selectedStore,
+      ),
+    [mergedCampaigns, selectedStore],
+  );
+  const activeCampaigns = useMemo(
+    () =>
+      storeFilteredCampaigns.filter(
+        (campaign) => showArchivedProducts || !campaign.archivedAt,
+      ),
+    [storeFilteredCampaigns, showArchivedProducts],
+  );
+  const showStoreLabels =
+    selectedStore === ALL_STORES &&
+    stores.some((store) => store.name !== DEFAULT_STORE_NAME);
   const activeCampaign =
     selectedCampaign === "ALL"
       ? undefined
-      : activeCampaigns.find((campaign) => campaignOptionValue(campaign) === selectedCampaign)
-        ?? activeCampaigns.find((campaign) => campaign.productName === selectedCampaign)
-        ?? mergedCampaigns.find((campaign) => campaignOptionValue(campaign) === selectedCampaign);
+      : (activeCampaigns.find(
+          (campaign) => campaignOptionValue(campaign) === selectedCampaign,
+        ) ??
+        activeCampaigns.find(
+          (campaign) => campaign.productName === selectedCampaign,
+        ) ??
+        mergedCampaigns.find(
+          (campaign) => campaignOptionValue(campaign) === selectedCampaign,
+        ));
   const activeFilmingRequirements = useMemo(
     () => campaignToFilmingRequirements(activeCampaign, filmingRequirements),
     [activeCampaign, filmingRequirements],
@@ -752,12 +825,33 @@ function App() {
   const visibleRows = useMemo(
     () =>
       selectedCampaign === "ALL"
-        ? rows.filter((row) => rowMatchesStore(row, selectedStore) && (showArchivedCollaborations || !isArchivedCollaboration(row)) && (showArchivedProducts || !campaignForRow(row)?.archivedAt))
-        : rows.filter((row) => activeCampaign ? rowMatchesCampaign(row, activeCampaign) && (showArchivedCollaborations || !isArchivedCollaboration(row)) : false),
-    [rows, selectedStore, selectedCampaign, activeCampaign, showArchivedCollaborations, showArchivedProducts, mergedCampaigns],
+        ? rows.filter(
+            (row) =>
+              rowMatchesStore(row, selectedStore) &&
+              (showArchivedCollaborations || !isArchivedCollaboration(row)) &&
+              (showArchivedProducts || !campaignForRow(row)?.archivedAt),
+          )
+        : rows.filter((row) =>
+            activeCampaign
+              ? rowMatchesCampaign(row, activeCampaign) &&
+                (showArchivedCollaborations || !isArchivedCollaboration(row))
+              : false,
+          ),
+    [
+      rows,
+      selectedStore,
+      selectedCampaign,
+      activeCampaign,
+      showArchivedCollaborations,
+      showArchivedProducts,
+      mergedCampaigns,
+    ],
   );
   const dailyQueueRows = useMemo(
-    () => visibleRows.filter((row) => isActiveDailyCollaboration(row, requiredVideosForProduct(row.product))),
+    () =>
+      visibleRows.filter((row) =>
+        isActiveDailyCollaboration(row, requiredVideosForProduct(row.product)),
+      ),
     [visibleRows, mergedCampaigns, activeFilmingRequirements],
   );
   const tasks = useMemo(
@@ -769,7 +863,10 @@ function App() {
     [tasks],
   );
   const activeSampleCounts = useMemo(
-    () => new Map(rows.map((row) => [row.id, countActiveCreatorSamples(row, rows)])),
+    () =>
+      new Map(
+        rows.map((row) => [row.id, countActiveCreatorSamples(row, rows)]),
+      ),
     [rows],
   );
   const matchesWorkbenchFilter = (task: Task, key: WorkbenchFilterKey) => {
@@ -778,17 +875,30 @@ function App() {
     const progress = normalizeVideoProgress(task.videoProgress, requiredVideos);
     switch (key) {
       case "follow_up_today":
-        return Boolean(taskMeta?.needsFollowUp || task.needsFollowUp) && !isHandledToday(task);
+        return (
+          Boolean(taskMeta?.needsFollowUp || task.needsFollowUp) &&
+          !isHandledToday(task)
+        );
       case "processed_today":
         return isHandledToday(task);
       case "sample_shipped":
         return isSampleInTransitForDaily(task, requiredVideos);
       case "delivered_waiting_video":
-        return isSampleDeliveredForVideo(task, requiredVideos) && (progress.postedCount ?? 0) === 0;
+        return (
+          isSampleDeliveredForVideo(task, requiredVideos) &&
+          (progress.postedCount ?? 0) === 0
+        );
       case "remaining_video":
-        return (progress.postedCount ?? 0) > 0 && (progress.postedCount ?? 0) < (progress.requiredVideos ?? requiredVideos);
+        return (
+          (progress.postedCount ?? 0) > 0 &&
+          (progress.postedCount ?? 0) <
+            (progress.requiredVideos ?? requiredVideos)
+        );
       case "posted_this_week":
-        return isCurrentWeek(task.firstVideoPostedDate) || isCurrentWeek(task.latestVideoPostedDate ?? "");
+        return (
+          isCurrentWeek(task.firstVideoPostedDate) ||
+          isCurrentWeek(task.latestVideoPostedDate ?? "")
+        );
       case "completed":
         return status === "Completed";
       case "failed":
@@ -846,9 +956,9 @@ function App() {
         const urgencyLabel =
           task.priority === "High"
             ? "高"
-              : task.priority === "Medium"
-                ? "中"
-                : "低";
+            : task.priority === "Medium"
+              ? "中"
+              : "低";
         const haystack = [
           task.username,
           task.profileLink,
@@ -872,7 +982,9 @@ function App() {
           (!normalized || haystack.includes(normalized))
         );
       })
-      .sort((a, b) => a.stageRank - b.stageRank || a.priorityRank - b.priorityRank);
+      .sort(
+        (a, b) => a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
+      );
   }, [
     tasks,
     followupSearch,
@@ -966,23 +1078,41 @@ function App() {
 
   useEffect(() => {
     const today = todayString();
-    const specialStatus = /lost|returned|canceled|failed|completed|合作失败|合作完成|已归档/i;
+    const specialStatus =
+      /lost|returned|canceled|failed|completed|合作失败|合作完成|已归档/i;
     setRows((currentRows) => {
       let changed = false;
       const nextRows = currentRows.map((row) => {
-        if (row.archivedAt || specialStatus.test(`${row.currentStatus} ${row.sampleShippingStatus} ${row.trackingStatus ?? ""}`)) return row;
-        if (!isInTransitLogisticsStatus(row.sampleShippingStatus) || !row.sampleDeliveredDate || row.sampleDeliveredDate > today) return row;
+        if (
+          row.archivedAt ||
+          specialStatus.test(
+            `${row.currentStatus} ${row.sampleShippingStatus} ${row.trackingStatus ?? ""}`,
+          )
+        )
+          return row;
+        if (
+          !isInTransitLogisticsStatus(row.sampleShippingStatus) ||
+          !row.sampleDeliveredDate ||
+          row.sampleDeliveredDate > today
+        )
+          return row;
         changed = true;
         return {
           ...row,
-          sampleShippingStatus: row.sampleShippingStatus.match(/[㐀-鿿]/) ? "已签收" : "Delivered",
+          sampleShippingStatus: row.sampleShippingStatus.match(/[㐀-鿿]/)
+            ? "已签收"
+            : "Delivered",
           currentStatus: "Delivered",
           trackingStatus: "确认样品是否收到 / 确认拍摄计划",
           lastMessageScenario: "确认样品是否收到 / 确认拍摄计划",
           nextFollowUpDate: today,
           followUpHistory: [
             ...(row.followUpHistory ?? []),
-            { date: today, action: "Creator Replied" as const, note: "系统根据样品到货日期自动更新为 Delivered。" },
+            {
+              date: today,
+              action: "Creator Replied" as const,
+              note: "系统根据样品到货日期自动更新为 Delivered。",
+            },
           ],
         };
       });
@@ -990,10 +1120,12 @@ function App() {
     });
   }, []);
 
-
   useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
   useEffect(() => {
-    if (selectedStore !== ALL_STORES && !stores.some((store) => store.id === selectedStore)) {
+    if (
+      selectedStore !== ALL_STORES &&
+      !stores.some((store) => store.id === selectedStore)
+    ) {
       setSelectedStore(stores[0]?.id ?? ALL_STORES);
       setSelectedCampaign("ALL");
       setToast({ tone: "warning", text: "当前店铺不存在，已切换到可用店铺。" });
@@ -1001,10 +1133,17 @@ function App() {
     }
     if (
       selectedCampaign !== "ALL" &&
-      !activeCampaigns.some((campaign) => campaignOptionValue(campaign) === selectedCampaign || campaign.productName === selectedCampaign)
+      !activeCampaigns.some(
+        (campaign) =>
+          campaignOptionValue(campaign) === selectedCampaign ||
+          campaign.productName === selectedCampaign,
+      )
     ) {
       setSelectedCampaign("ALL");
-      setToast({ tone: "warning", text: "当前产品项目不存在或不属于当前店铺，已切换到全部产品。" });
+      setToast({
+        tone: "warning",
+        text: "当前产品项目不存在或不属于当前店铺，已切换到全部产品。",
+      });
     }
   }, [activeCampaigns, selectedCampaign, selectedStore, stores]);
   useEffect(() => {
@@ -1016,8 +1155,17 @@ function App() {
       sellingPoint: target.sellingPoints,
       requirement: target.keyContentPoints.filter(Boolean).join("; "),
       length: target.videoLength || form.length,
-      videos: target.videoCount || String(parseRequiredVideos(campaignToFilmingRequirements(target, filmingRequirements))),
-      tagRequirement: [target.tagRequirement, target.productLink].filter(Boolean).join("; ") || form.tagRequirement,
+      videos:
+        target.videoCount ||
+        String(
+          parseRequiredVideos(
+            campaignToFilmingRequirements(target, filmingRequirements),
+          ),
+        ),
+      tagRequirement:
+        [target.tagRequirement, target.productLink]
+          .filter(Boolean)
+          .join("; ") || form.tagRequirement,
     }));
   }, [activeCampaign, mergedCampaigns, filmingRequirements]);
 
@@ -1036,8 +1184,11 @@ function App() {
       sellingPoint: creatorRequirements.sellingPoints || form.sellingPoint,
       requirement: creatorRequirements.requiredScenes || form.requirement,
       length: creatorRequirements.videoLength || form.length,
-      videos: creatorRequirements.videoCount || String(parseRequiredVideos(creatorRequirements)),
-      tagRequirement: creatorRequirements.productLinkRequirement || form.tagRequirement,
+      videos:
+        creatorRequirements.videoCount ||
+        String(parseRequiredVideos(creatorRequirements)),
+      tagRequirement:
+        creatorRequirements.productLinkRequirement || form.tagRequirement,
       trackingNumber:
         parseNumberFromNotes(selectedTemplateCreator.notes, [
           "tracking",
@@ -1061,14 +1212,32 @@ function App() {
   const databaseRows = useMemo(
     () =>
       selectedCampaign === "ALL"
-        ? rows.filter((row) => rowMatchesStore(row, selectedStore) && (showArchivedProducts || !campaignForRow(row)?.archivedAt))
-        : rows.filter((row) => activeCampaign ? rowMatchesCampaign(row, activeCampaign) : false),
-    [rows, selectedStore, selectedCampaign, activeCampaign, showArchivedProducts, mergedCampaigns],
+        ? rows.filter(
+            (row) =>
+              rowMatchesStore(row, selectedStore) &&
+              (showArchivedProducts || !campaignForRow(row)?.archivedAt),
+          )
+        : rows.filter((row) =>
+            activeCampaign ? rowMatchesCampaign(row, activeCampaign) : false,
+          ),
+    [
+      rows,
+      selectedStore,
+      selectedCampaign,
+      activeCampaign,
+      showArchivedProducts,
+      mergedCampaigns,
+    ],
   );
   const productTotalCount = databaseRows.length;
-  const archivedProductCount = databaseRows.filter(isArchivedCollaboration).length;
+  const archivedProductCount = databaseRows.filter(
+    isArchivedCollaboration,
+  ).length;
   const databaseVisibleRows = useMemo(
-    () => databaseRows.filter((row) => showArchivedCollaborations || !isArchivedCollaboration(row)),
+    () =>
+      databaseRows.filter(
+        (row) => showArchivedCollaborations || !isArchivedCollaboration(row),
+      ),
     [databaseRows, showArchivedCollaborations],
   );
 
@@ -1083,7 +1252,12 @@ function App() {
         avgViews: avgViews(row),
         gmv: gmvRange(row),
       })),
-    [databaseVisibleRows, tasksById, mergedCampaigns, activeFilmingRequirements],
+    [
+      databaseVisibleRows,
+      tasksById,
+      mergedCampaigns,
+      activeFilmingRequirements,
+    ],
   );
 
   const archivedSearchMatches = useMemo(() => {
@@ -1091,7 +1265,15 @@ function App() {
     if (!normalized || showArchivedCollaborations) return [];
     return databaseRows.filter((row) => {
       if (!isArchivedCollaboration(row)) return false;
-      return [row.username, row.profileLink, row.product, row.currentStatus, row.sampleShippingStatus, row.notes, row.trackingStatus ?? ""]
+      return [
+        row.username,
+        row.profileLink,
+        row.product,
+        row.currentStatus,
+        row.sampleShippingStatus,
+        row.notes,
+        row.trackingStatus ?? "",
+      ]
         .join(" ")
         .toLowerCase()
         .includes(normalized);
@@ -1147,7 +1329,10 @@ function App() {
             inferStatus(task, requiredVideos) === "Product Tag Missing" ||
             inferStatus(task, requiredVideos) === "Ready for Ads",
         )
-        .sort((a, b) => a.stageRank - b.stageRank || a.priorityRank - b.priorityRank)
+        .sort(
+          (a, b) =>
+            a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
+        )
         .slice(0, 12),
     [tasks, requiredVideos],
   );
@@ -1159,19 +1344,35 @@ function App() {
     (task) => task.needsFollowUp && !isHandledToday(task),
   ).length;
 
-  const activeEnrichedRows = enrichedRows.filter((entry) => isActiveDailyCollaboration(entry.row, requiredVideosForProduct(entry.row.product)));
+  const activeEnrichedRows = enrichedRows.filter((entry) =>
+    isActiveDailyCollaboration(
+      entry.row,
+      requiredVideosForProduct(entry.row.product),
+    ),
+  );
 
   const deliveredWaitingVideoCount = activeEnrichedRows.filter((entry) => {
     const rowRequiredVideos = requiredVideosForProduct(entry.row.product);
     const { posted } = videoProgressCounts(entry.row, rowRequiredVideos);
-    return isSampleDeliveredForVideo(entry.row, rowRequiredVideos) && posted === 0;
+    return (
+      isSampleDeliveredForVideo(entry.row, rowRequiredVideos) && posted === 0
+    );
   }).length;
-  const postedVideoCount = activeEnrichedRows.reduce((sum, entry) => sum + videoProgressCounts(entry.row, requiredVideosForProduct(entry.row.product)).posted, 0);
+  const postedVideoCount = activeEnrichedRows.reduce(
+    (sum, entry) =>
+      sum +
+      videoProgressCounts(
+        entry.row,
+        requiredVideosForProduct(entry.row.product),
+      ).posted,
+    0,
+  );
   const postedThisWeekCount = activeEnrichedRows.reduce((count, entry) => {
     const dateSet = new Set(
-      [entry.row.firstVideoPostedDate, entry.row.latestVideoPostedDate ?? ""].filter(
-        (date) => date && isCurrentWeek(date),
-      ),
+      [
+        entry.row.firstVideoPostedDate,
+        entry.row.latestVideoPostedDate ?? "",
+      ].filter((date) => date && isCurrentWeek(date)),
     );
     return count + dateSet.size;
   }, 0);
@@ -1208,12 +1409,19 @@ function App() {
     },
     {
       label: "合作完成数量",
-      value: databaseRows.filter((row) => inferStatus(row, requiredVideosForProduct(row.product)) === "Completed").length,
+      value: databaseRows.filter(
+        (row) =>
+          inferStatus(row, requiredVideosForProduct(row.product)) ===
+          "Completed",
+      ).length,
       filterKey: "completed",
     },
     {
       label: "合作失败数量",
-      value: databaseRows.filter((row) => inferStatus(row, requiredVideosForProduct(row.product)) === "Lost").length,
+      value: databaseRows.filter(
+        (row) =>
+          inferStatus(row, requiredVideosForProduct(row.product)) === "Lost",
+      ).length,
       filterKey: "failed",
     },
     {
@@ -1225,19 +1433,28 @@ function App() {
     },
   ];
 
-
   async function handleFile(file: File | undefined) {
     if (!file) return;
     try {
       setError("");
-      const parsedRows = await parseCreatorFile(file, requiredVideos, selectedStore === ALL_STORES ? '未分配店铺' : (stores.find((store) => store.id === selectedStore)?.name ?? DEFAULT_STORE_NAME));
+      const parsedRows = await parseCreatorFile(
+        file,
+        requiredVideos,
+        selectedStore === ALL_STORES
+          ? "未分配店铺"
+          : (stores.find((store) => store.id === selectedStore)?.name ??
+              DEFAULT_STORE_NAME),
+      );
       const summary = buildDuplicateImportSummary(parsedRows, rows);
       const summaryText = `检测到 ${summary.possibleDuplicateCount} 个可能重复达人；检测到 ${summary.multiSampleCount} 个同达人多样品记录。`;
       setRows((currentRows) => [...parsedRows, ...currentRows]);
       setImportSummary(summaryText);
       setFileName(file.name);
       setSelectedIds([]);
-      setToast({ tone: "success", text: `导入成功，已追加 ${parsedRows.length} 条记录。${summaryText}` });
+      setToast({
+        tone: "success",
+        text: `导入成功，已追加 ${parsedRows.length} 条记录。${summaryText}`,
+      });
       if (parsedRows.length === 0)
         setError("没有找到达人数据。请检查表头和表格内容。");
     } catch (err) {
@@ -1254,25 +1471,63 @@ function App() {
       currentRows.map((row) => {
         if (row.id !== rowId) return row;
         let updated = updateCreatorField(row, field, value, requiredVideos);
-        if (field === 'storeName') {
+        if (field === "storeName") {
           const storeName = normalizeStoreName(value);
-          updated = { ...updated, storeName, storeId: normalizeStoreId(undefined, storeName) };
+          updated = {
+            ...updated,
+            storeName,
+            storeId: normalizeStoreId(undefined, storeName),
+          };
         }
         if (field === "product") {
-          const newRequirement = parseRequiredVideos(campaignToFilmingRequirements(mergedCampaigns.find((campaign) => rowMatchesCampaign({ ...updated, product: value }, campaign)), filmingRequirements));
-          const progress = normalizeVideoProgress(row.videoProgress, requiredVideos);
+          const newRequirement = parseRequiredVideos(
+            campaignToFilmingRequirements(
+              mergedCampaigns.find((campaign) =>
+                rowMatchesCampaign({ ...updated, product: value }, campaign),
+              ),
+              filmingRequirements,
+            ),
+          );
+          const progress = normalizeVideoProgress(
+            row.videoProgress,
+            requiredVideos,
+          );
           if ((progress.postedCount ?? 0) === 0) {
-            updated = { ...updated, videoProgress: `0/${newRequirement}`, videoProgressWarning: undefined };
-          } else if (window.confirm("当前达人已有视频进度，是否根据新产品要求更新视频数量？")) {
-            updated = { ...updated, videoProgress: `${progress.postedCount}/${newRequirement}`, videoProgressWarning: undefined };
+            updated = {
+              ...updated,
+              videoProgress: `0/${newRequirement}`,
+              videoProgressWarning: undefined,
+            };
+          } else if (
+            window.confirm(
+              "当前达人已有视频进度，是否根据新产品要求更新视频数量？",
+            )
+          ) {
+            updated = {
+              ...updated,
+              videoProgress: `${progress.postedCount}/${newRequirement}`,
+              videoProgressWarning: undefined,
+            };
           }
         }
-        if (field === "username" || field === "profileLink" || field === "product") {
+        if (
+          field === "username" ||
+          field === "profileLink" ||
+          field === "product"
+        ) {
           const duplicate = getDuplicateCheck(updated, currentRows);
           if (duplicate.possibleDuplicate) {
-            setToast({ tone: "warning", text: "该达人在当前店铺的同一产品项目下可能已重复录入，建议检查是否需要合并。" });
+            setToast({
+              tone: "warning",
+              text: "该达人在当前店铺的同一产品项目下可能已重复录入，建议检查是否需要合并。",
+            });
           } else if (duplicate.duplicateCreator) {
-            setToast({ tone: "warning", text: duplicate.crossStoreCreator ? "跨店铺达人：该达人在其他店铺也有合作记录，请确认本次沟通是否需要区分店铺。" : "同店铺多样品：该达人在当前店铺有不同产品合作，可继续保存。" });
+            setToast({
+              tone: "warning",
+              text: duplicate.crossStoreCreator
+                ? "跨店铺达人：该达人在其他店铺也有合作记录，请确认本次沟通是否需要区分店铺。"
+                : "同店铺多样品：该达人在当前店铺有不同产品合作，可继续保存。",
+            });
           }
         }
         return updated;
@@ -1300,18 +1555,39 @@ function App() {
     scrollToQueue();
   }
 
-  function ensureCampaign(productName: string, storeId: string, storeName: string) {
-    if (!mergedCampaigns.some((campaign) => normalizeStoreId(campaign.storeId, campaign.storeName) === storeId && campaign.productName === productName)) {
+  function ensureCampaign(
+    productName: string,
+    storeId: string,
+    storeName: string,
+  ) {
+    if (
+      !mergedCampaigns.some(
+        (campaign) =>
+          normalizeStoreId(campaign.storeId, campaign.storeName) === storeId &&
+          campaign.productName === productName,
+      )
+    ) {
       setCampaigns((current) => [
         ...current,
-        createCampaignFromName(productName, filmingRequirements, storeName, storeId),
+        createCampaignFromName(
+          productName,
+          filmingRequirements,
+          storeName,
+          storeId,
+        ),
       ]);
     }
   }
 
   function addCreatorDraft(draft: CreatorRow, copyBaseFrom?: CreatorRow) {
-    const newRow = copyBaseFrom ? copyCreatorBaseFields(draft, copyBaseFrom) : draft;
-    ensureCampaign(newRow.product, normalizeStoreId(newRow.storeId, newRow.storeName), normalizeStoreName(newRow.storeName));
+    const newRow = copyBaseFrom
+      ? copyCreatorBaseFields(draft, copyBaseFrom)
+      : draft;
+    ensureCampaign(
+      newRow.product,
+      normalizeStoreId(newRow.storeId, newRow.storeName),
+      normalizeStoreName(newRow.storeName),
+    );
     setRows((currentRows) => [newRow, ...currentRows]);
     setSelectedCreatorId(newRow.id);
     setActiveModule("creators");
@@ -1320,26 +1596,92 @@ function App() {
   }
 
   function handleAddCreator() {
-    const creatorName = window.prompt("达人账号（可留空后在表格中填写）：", "")?.trim() ?? "";
-    const choice = window.prompt(
-      "所属产品（同达人多样品时必须填写不同产品 / 样品项目）：",
-      activeCampaign?.productName ?? mergedCampaigns[0]?.productName ?? filmingRequirements.productName,
+    const creatorName =
+      window.prompt("达人账号（可留空后在表格中填写）：", "")?.trim() ?? "";
+    let draftStore =
+      selectedStore === ALL_STORES
+        ? undefined
+        : stores.find((store) => store.id === selectedStore);
+
+    if (!draftStore) {
+      if (stores.length === 1) {
+        draftStore = stores[0];
+      } else {
+        const storeChoice = window
+          .prompt(
+            `请选择店铺/品牌后再新增达人：${stores.map((store) => store.name).join(" / ")}`,
+            "",
+          )
+          ?.trim();
+        draftStore = stores.find(
+          (store) =>
+            store.id === storeChoice ||
+            store.name.toLowerCase() === (storeChoice ?? "").toLowerCase(),
+        );
+        if (!draftStore) {
+          setToast({ tone: "warning", text: "请选择店铺/品牌后再新增达人" });
+          setActiveModule("creators");
+          return;
+        }
+      }
+    }
+
+    const storeId = draftStore.id;
+    const storeName = draftStore.name;
+    const storeCampaigns = mergedCampaigns.filter(
+      (campaign) =>
+        normalizeStoreId(campaign.storeId, campaign.storeName) === storeId &&
+        (showArchivedProducts || !campaign.archivedAt),
     );
-    const productName =
-      choice?.trim() ||
-      activeCampaign?.productName || mergedCampaigns[0]?.productName ||
-      filmingRequirements.productName;
-    const draftStore = selectedStore === ALL_STORES ? stores[0] : stores.find((store) => store.id === selectedStore);
-    const storeName = draftStore?.name ?? DEFAULT_STORE_NAME;
-    const storeId = draftStore?.id ?? normalizeStoreId(undefined, storeName);
-    const productRequirement = parseRequiredVideos(campaignToFilmingRequirements(mergedCampaigns.find((campaign) => campaign.storeId === storeId && campaign.productName === productName), filmingRequirements));
-    const draft = { ...createBlankCreatorRow(productName, productRequirement), username: creatorName, storeId, storeName, campaignId: campaignIdFromName(productName) };
+    const defaultProduct =
+      activeCampaign &&
+      normalizeStoreId(activeCampaign.storeId, activeCampaign.storeName) ===
+        storeId
+        ? activeCampaign.productName
+        : (storeCampaigns[0]?.productName ?? filmingRequirements.productName);
+    const choice = window.prompt(
+      `所属产品（仅限 ${storeName}；同达人多样品时必须填写不同产品 / 样品项目）：`,
+      defaultProduct,
+    );
+    const productName = choice?.trim() || defaultProduct;
+    const matchedCampaign = storeCampaigns.find(
+      (campaign) => campaign.productName === productName,
+    );
+    const productRequirement = parseRequiredVideos(
+      campaignToFilmingRequirements(matchedCampaign, filmingRequirements),
+    );
+    const draft = {
+      ...createBlankCreatorRow(
+        productName,
+        productRequirement,
+        storeId,
+        storeName,
+      ),
+      username: creatorName,
+      campaignId: matchedCampaign?.id ?? campaignIdFromName(productName),
+    };
     const duplicate = getDuplicateCheck(draft, rows);
     if (creatorName && duplicate.duplicateCreator && duplicate.matchingRows[0]) {
       setPendingDuplicateAdd({ draft, existing: duplicate.matchingRows[0] });
-      setToast({ tone: "warning", text: duplicate.crossStoreCreator ? "跨店铺达人：该达人在其他店铺也有合作记录，请确认本次沟通是否需要区分店铺。" : "同店铺多样品：该达人在当前店铺有不同产品合作，可继续保存。" });
+      setToast({
+        tone: "warning",
+        text: duplicate.possibleDuplicate
+          ? "该达人在当前店铺的同一产品项目下可能已重复录入，建议检查是否需要合并。"
+          : "同店铺多样品：该达人在当前店铺有不同产品合作，可继续保存。",
+      });
       setActiveModule("creators");
       return;
+    }
+    if (creatorName && duplicate.multiSample) {
+      setToast({
+        tone: "warning",
+        text: "同店铺多样品：该达人在当前店铺有不同产品合作，可继续保存。",
+      });
+    } else if (creatorName && duplicate.crossStoreCreator) {
+      setToast({
+        tone: "warning",
+        text: "跨店铺达人：该达人在其他店铺也有合作记录，请确认本次沟通是否需要区分店铺。",
+      });
     }
     addCreatorDraft(draft);
   }
@@ -1369,13 +1711,21 @@ function App() {
   }
 
   function selectedRowsSpanMultipleStores() {
-    const storeIds = new Set(rows.filter((row) => selectedIds.includes(row.id)).map(rowStoreId));
+    const storeIds = new Set(
+      rows.filter((row) => selectedIds.includes(row.id)).map(rowStoreId),
+    );
     return storeIds.size > 1;
   }
 
   function handleBulkStatusUpdate() {
     if (selectedIds.length === 0) return;
-    if (selectedRowsSpanMultipleStores() && !window.confirm("本次选择包含多个店铺的达人记录，请确认是否继续批量操作。")) return;
+    if (
+      selectedRowsSpanMultipleStores() &&
+      !window.confirm(
+        "本次选择包含多个店铺的达人记录，请确认是否继续批量操作。",
+      )
+    )
+      return;
     applyStatusToRows(selectedIds, bulkStatus);
   }
 
@@ -1408,7 +1758,13 @@ function App() {
   function handleBulkCopyOutreach() {
     const selectedRows = rows.filter((row) => selectedIds.includes(row.id));
     if (selectedRows.length === 0) return;
-    if (selectedRowsSpanMultipleStores() && !window.confirm("本次选择包含多个店铺的达人记录，请确认是否继续批量操作。")) return;
+    if (
+      selectedRowsSpanMultipleStores() &&
+      !window.confirm(
+        "本次选择包含多个店铺的达人记录，请确认是否继续批量操作。",
+      )
+    )
+      return;
     void copyText(
       selectedRows.map(buildOutreachForRow).join("\n\n---\n\n"),
       `已复制 ${selectedRows.length} 条邀约话术。`,
@@ -1501,28 +1857,58 @@ function App() {
     setDeepSeekRecommendedTrackingStatus("");
   }
 
-  function campaignForRow(row: Pick<CreatorRow, 'storeId' | 'storeName' | 'product' | 'campaignId'>): Campaign | undefined {
+  function campaignForRow(
+    row: Pick<CreatorRow, "storeId" | "storeName" | "product" | "campaignId">,
+  ): Campaign | undefined {
     const storeId = normalizeStoreId(row.storeId, row.storeName);
-    return mergedCampaigns.find((campaign) => campaign.storeId === storeId && ((row.campaignId && campaign.id === row.campaignId) || campaign.productName === row.product));
+    return mergedCampaigns.find(
+      (campaign) =>
+        campaign.storeId === storeId &&
+        ((row.campaignId && campaign.id === row.campaignId) ||
+          campaign.productName === row.product),
+    );
   }
 
   function campaignForProduct(product: string): Campaign | undefined {
-    return mergedCampaigns.find((campaign) => (selectedStore === ALL_STORES || normalizeStoreId(campaign.storeId, campaign.storeName) === selectedStore) && campaign.productName === product);
+    return mergedCampaigns.find(
+      (campaign) =>
+        (selectedStore === ALL_STORES ||
+          normalizeStoreId(campaign.storeId, campaign.storeName) ===
+            selectedStore) &&
+        campaign.productName === product,
+    );
   }
 
   function requiredVideosForProduct(product: string): number {
-    return parseRequiredVideos(campaignToFilmingRequirements(campaignForProduct(product), activeFilmingRequirements));
+    return parseRequiredVideos(
+      campaignToFilmingRequirements(
+        campaignForProduct(product),
+        activeFilmingRequirements,
+      ),
+    );
   }
 
   function requiredVideosForRow(row: CreatorRow): number {
-    return parseRequiredVideos(campaignToFilmingRequirements(campaignForRow(row), activeFilmingRequirements));
+    return parseRequiredVideos(
+      campaignToFilmingRequirements(
+        campaignForRow(row),
+        activeFilmingRequirements,
+      ),
+    );
   }
 
-  function selectedTaskCampaignRequirements(task: Task): CreatorFilmingRequirements {
-    return campaignToFilmingRequirements(campaignForRow(task), activeFilmingRequirements);
+  function selectedTaskCampaignRequirements(
+    task: Task,
+  ): CreatorFilmingRequirements {
+    return campaignToFilmingRequirements(
+      campaignForRow(task),
+      activeFilmingRequirements,
+    );
   }
 
-  function campaignRequirementEntries(requirements: CreatorFilmingRequirements): Array<{ label: string; value: string }> {
+  function campaignRequirementEntries(
+    requirements: CreatorFilmingRequirements,
+  ): Array<{ label: string; value: string }> {
     return [
       { label: "产品名称", value: requirements.productName },
       { label: "必须展示内容", value: requirements.requiredScenes },
@@ -1530,7 +1916,10 @@ function App() {
       { label: "视频时长要求", value: requirements.videoLength },
       { label: "视频数量要求", value: requirements.videoCount },
       { label: "不希望达人这样拍", value: requirements.avoidShots },
-      { label: "挂车 / TikTok Shop 产品链接要求", value: requirements.productLinkRequirement },
+      {
+        label: "挂车 / TikTok Shop 产品链接要求",
+        value: requirements.productLinkRequirement,
+      },
       { label: "参考视频链接", value: requirements.referenceVideoLinks },
     ];
   }
@@ -1762,8 +2151,13 @@ function App() {
   function markVideoProgress() {
     if (!selectedTask) return;
     const today = todayString();
-    const selectedRequiredVideos = parseRequiredVideos(selectedTaskCampaignRequirements(selectedTask));
-    const current = normalizeVideoProgress(selectedTask.videoProgress, selectedRequiredVideos);
+    const selectedRequiredVideos = parseRequiredVideos(
+      selectedTaskCampaignRequirements(selectedTask),
+    );
+    const current = normalizeVideoProgress(
+      selectedTask.videoProgress,
+      selectedRequiredVideos,
+    );
     const nextPosted = (current.postedCount ?? 0) + 1;
     const reachedRequirement = nextPosted >= selectedRequiredVideos;
     setRows((currentRows) =>
@@ -1771,8 +2165,12 @@ function App() {
         if (row.id !== selectedTask.id) return row;
         return {
           ...row,
-          currentStatus: reachedRequirement ? "视频已达要求，待确认合作完成" : `已发布 ${nextPosted} 条 / 待补剩余视频`,
-          trackingStatus: reachedRequirement ? "视频数量已达要求" : "已发布部分视频",
+          currentStatus: reachedRequirement
+            ? "视频已达要求，待确认合作完成"
+            : `已发布 ${nextPosted} 条 / 待补剩余视频`,
+          trackingStatus: reachedRequirement
+            ? "视频数量已达要求"
+            : "已发布部分视频",
           videoProgress: `${nextPosted}/${selectedRequiredVideos}`,
           videoProgressWarning: undefined,
           firstVideoPostedDate: row.firstVideoPostedDate || today,
@@ -1781,19 +2179,28 @@ function App() {
           nextFollowUpDate: reachedRequirement ? today : addDays(2),
           followUpHistory: [
             ...(row.followUpHistory ?? []),
-            { date: today, action: "Video Posted", note: `已记录达人发布 1 条视频，当前进度 ${nextPosted}/${selectedRequiredVideos}。` },
+            {
+              date: today,
+              action: "Video Posted",
+              note: `已记录达人发布 1 条视频，当前进度 ${nextPosted}/${selectedRequiredVideos}。`,
+            },
           ],
         };
       }),
     );
-    finishProcessing(reachedRequirement ? "已达到产品视频数量要求，请确认是否合作完成。" : "已记录达人发布 1 条视频。");
+    finishProcessing(
+      reachedRequirement
+        ? "已达到产品视频数量要求，请确认是否合作完成。"
+        : "已记录达人发布 1 条视频。",
+    );
   }
 
   function handleManualVideoProgressUpdate() {
     if (!selectedTask) return;
     const progress = window.prompt(
       "视频进度：可填 0/1、1/1、0/2、1/2 或自定义",
-      selectedTask.videoProgress || `0/${parseRequiredVideos(selectedTaskCampaignRequirements(selectedTask))}`,
+      selectedTask.videoProgress ||
+        `0/${parseRequiredVideos(selectedTaskCampaignRequirements(selectedTask))}`,
     );
     if (progress === null) return;
     const firstDate = window.prompt(
@@ -1806,21 +2213,34 @@ function App() {
       selectedTask.latestVideoPostedDate || firstDate || "",
     );
     if (latestDate === null) return;
-    const note = window.prompt("视频进度备注（可留空）", "手动更新视频进度。") ?? "";
+    const note =
+      window.prompt("视频进度备注（可留空）", "手动更新视频进度。") ?? "";
     const today = todayString();
     setRows((currentRows) =>
       currentRows.map((row) => {
         if (row.id !== selectedTask.id) return row;
-        const updated = updateCreatorField(row, "videoProgress", progress, requiredVideos);
+        const updated = updateCreatorField(
+          row,
+          "videoProgress",
+          progress,
+          requiredVideos,
+        );
         return {
           ...updated,
           firstVideoPostedDate: firstDate,
           latestVideoPostedDate: latestDate,
           lastHandledDate: today,
-          nextFollowUpDate: normalizeVideoProgress(progress, requiredVideos).postedCount === 2 ? "" : row.nextFollowUpDate,
+          nextFollowUpDate:
+            normalizeVideoProgress(progress, requiredVideos).postedCount === 2
+              ? ""
+              : row.nextFollowUpDate,
           followUpHistory: [
             ...(row.followUpHistory ?? []),
-            { date: today, action: "Video Posted", note: note || `手动更新视频进度为 ${progress}。` },
+            {
+              date: today,
+              action: "Video Posted",
+              note: note || `手动更新视频进度为 ${progress}。`,
+            },
           ],
         };
       }),
@@ -1901,10 +2321,18 @@ function App() {
       productName:
         filmingProductNameDraft.trim() ||
         defaultCreatorFilmingRequirements.productName,
-      requiredScenes: keyContentPoints.join("；") || defaultCreatorFilmingRequirements.requiredScenes,
-      videoCount: requirements.find((item) => item.includes("条视频")) || defaultCreatorFilmingRequirements.videoCount,
-      videoLength: requirements.find((item) => item.includes("秒")) || defaultCreatorFilmingRequirements.videoLength,
-      productLinkRequirement: requirements.find((item) => item.includes("链接")) || defaultCreatorFilmingRequirements.productLinkRequirement,
+      requiredScenes:
+        keyContentPoints.join("；") ||
+        defaultCreatorFilmingRequirements.requiredScenes,
+      videoCount:
+        requirements.find((item) => item.includes("条视频")) ||
+        defaultCreatorFilmingRequirements.videoCount,
+      videoLength:
+        requirements.find((item) => item.includes("秒")) ||
+        defaultCreatorFilmingRequirements.videoLength,
+      productLinkRequirement:
+        requirements.find((item) => item.includes("链接")) ||
+        defaultCreatorFilmingRequirements.productLinkRequirement,
       requirements,
       keyContentPoints,
       referenceLinks,
@@ -1947,7 +2375,10 @@ function App() {
   }
 
   function handleOpenPromptHelper() {
-    const helperRequirements = campaignToFilmingRequirements(activeCampaign ?? mergedCampaigns[0], filmingRequirements);
+    const helperRequirements = campaignToFilmingRequirements(
+      activeCampaign ?? mergedCampaigns[0],
+      filmingRequirements,
+    );
     setPromptHelperForm({
       sellingPoints: "",
       videoCount: String(parseRequiredVideos(helperRequirements)),
@@ -1955,7 +2386,9 @@ function App() {
       targetPetOrScene: "",
       mustShowShots: "",
       avoidShots: "",
-      referenceLinks: helperRequirements.referenceVideoLinks || listToText(helperRequirements.referenceLinks),
+      referenceLinks:
+        helperRequirements.referenceVideoLinks ||
+        listToText(helperRequirements.referenceLinks),
     });
     setGeneratedChatGptPrompt("");
     setPromptCopyStatus("");
@@ -2000,7 +2433,11 @@ function App() {
             }}
           >
             <option value={ALL_STORES}>全部店铺</option>
-            {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>
+                {store.name}
+              </option>
+            ))}
           </select>
         </label>
         <label>
@@ -2019,8 +2456,12 @@ function App() {
           >
             <option value="ALL">全部产品</option>
             {activeCampaigns.map((campaign) => (
-              <option key={campaignOptionValue(campaign)} value={campaignSelectValue(campaign, activeCampaigns)}>
-                {campaignLabel(campaign, showStoreLabels)}{campaign.archivedAt ? "（已归档）" : ""}
+              <option
+                key={campaignOptionValue(campaign)}
+                value={campaignSelectValue(campaign, activeCampaigns)}
+              >
+                {campaignLabel(campaign, showStoreLabels)}
+                {campaign.archivedAt ? "（已归档）" : ""}
               </option>
             ))}
           </select>
@@ -2028,8 +2469,12 @@ function App() {
         <div className="campaign-context">
           <strong>
             {selectedCampaign === "ALL"
-              ? (selectedStore === ALL_STORES ? "全部店铺 · 全部产品组合视图" : `${stores.find((store) => store.id === selectedStore)?.name ?? "未分配店铺"} · 全部产品`)
-              : activeCampaign ? campaignLabel(activeCampaign, showStoreLabels) : "未分配店铺 · 产品项目不可用"}
+              ? selectedStore === ALL_STORES
+                ? "全部店铺 · 全部产品组合视图"
+                : `${stores.find((store) => store.id === selectedStore)?.name ?? "未分配店铺"} · 全部产品`
+              : activeCampaign
+                ? campaignLabel(activeCampaign, showStoreLabels)
+                : "未分配店铺 · 产品项目不可用"}
           </strong>
           <span>
             {selectedCampaign === "ALL"
@@ -2042,13 +2487,17 @@ function App() {
   }
 
   function campaignStats(campaign: Campaign) {
-    const campaignRows = rows.filter((row) => rowMatchesCampaign(row, campaign));
+    const campaignRows = rows.filter((row) =>
+      rowMatchesCampaign(row, campaign),
+    );
     const campaignRequirements = campaignToFilmingRequirements(
       campaign,
       filmingRequirements,
     );
     const campaignRequiredVideos = parseRequiredVideos(campaignRequirements);
-    const activeCampaignRows = campaignRows.filter((row) => isActiveDailyCollaboration(row, campaignRequiredVideos));
+    const activeCampaignRows = campaignRows.filter((row) =>
+      isActiveDailyCollaboration(row, campaignRequiredVideos),
+    );
     const campaignTasks = analyzeCreators(
       activeCampaignRows,
       undefined,
@@ -2063,7 +2512,8 @@ function App() {
       todayFollowUp: campaignTasks.filter(
         (task) => task.needsFollowUp && !isHandledToday(task),
       ).length,
-      highPriority: campaignTasks.filter((task) => task.priority === "High").length,
+      highPriority: campaignTasks.filter((task) => task.priority === "High")
+        .length,
       inTransit: activeCampaignRows.filter(
         (row) => inferStatus(row, campaignRequiredVideos) === "Sample Shipped",
       ).length,
@@ -2072,7 +2522,13 @@ function App() {
           inferStatus(row, campaignRequiredVideos),
         ),
       ).length,
-      postedVideos: campaignRows.reduce((sum, row) => sum + (normalizeVideoProgress(row.videoProgress, campaignRequiredVideos).postedCount ?? 0), 0),
+      postedVideos: campaignRows.reduce(
+        (sum, row) =>
+          sum +
+          (normalizeVideoProgress(row.videoProgress, campaignRequiredVideos)
+            .postedCount ?? 0),
+        0,
+      ),
       completed: campaignRows.filter(
         (row) =>
           inferStatus(row, campaignRequiredVideos) === "Completed" ||
@@ -2106,10 +2562,16 @@ function App() {
                 key={campaign.id}
                 className="campaign-card"
                 aria-label={`${campaignLabel(campaign, showStoreLabels)}${stats.creatorCount} 位达人`}
-                onClick={() => setSelectedCampaign(campaignOptionValue(campaign))}
+                onClick={() =>
+                  setSelectedCampaign(campaignOptionValue(campaign))
+                }
               >
-                <span className="product-badge">{campaignLabel(campaign, showStoreLabels)}</span>
-                <strong>总合作记录 / 总达人数：{stats.creatorCount} 位达人</strong>
+                <span className="product-badge">
+                  {campaignLabel(campaign, showStoreLabels)}
+                </span>
+                <strong>
+                  总合作记录 / 总达人数：{stats.creatorCount} 位达人
+                </strong>
                 <div className="campaign-metrics">
                   <span>
                     进行中 <b>{stats.activeCount}</b>
@@ -2181,10 +2643,39 @@ function App() {
         {pendingDuplicateAdd && (
           <div className="inline-warning duplicate-warning">
             <strong>该达人已存在。你可以选择：</strong>
-            <span>检测到该达人已存在。请确认这是重复录入，还是同一达人申请了不同样品。</span>
-            <button type="button" onClick={() => addCreatorDraft(pendingDuplicateAdd.draft, pendingDuplicateAdd.existing)}>继续新增为不同样品</button>
-            <button type="button" className="secondary" onClick={() => addCreatorDraft(pendingDuplicateAdd.draft, pendingDuplicateAdd.existing)}>复制已有达人基础信息</button>
-            <button type="button" className="secondary" onClick={() => setPendingDuplicateAdd(null)}>取消新增</button>
+            <span>
+              检测到该达人已存在。请确认这是重复录入，还是同一达人申请了不同样品。
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                addCreatorDraft(
+                  pendingDuplicateAdd.draft,
+                  pendingDuplicateAdd.existing,
+                )
+              }
+            >
+              继续新增为不同样品
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() =>
+                addCreatorDraft(
+                  pendingDuplicateAdd.draft,
+                  pendingDuplicateAdd.existing,
+                )
+              }
+            >
+              复制已有达人基础信息
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setPendingDuplicateAdd(null)}
+            >
+              取消新增
+            </button>
           </div>
         )}
         {error && <p className="error">{error}</p>}
@@ -2192,14 +2683,18 @@ function App() {
     );
   }
 
-
   function handleLocateCreator() {
     const normalized = followupSearch.trim().toLowerCase();
     if (!normalized) {
       setCreatorSearchStatus("请输入达人账号或关键词。");
       return;
     }
-    const matches = tasks.filter((task) => [task.username, task.profileLink, task.product, task.notes].join(" ").toLowerCase().includes(normalized));
+    const matches = tasks.filter((task) =>
+      [task.username, task.profileLink, task.product, task.notes]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized),
+    );
     if (matches.length === 0) {
       setCreatorSearchStatus("未找到该达人。");
       return;
@@ -2310,11 +2805,26 @@ function App() {
                 placeholder="达人 / 产品 / 状态 / 跟进状态 / 紧急程度"
               />
             </label>
-            <button type="button" className="secondary" onClick={handleLocateCreator}>定位达人</button>
-            {creatorSearchStatus && <p className="ai-status">{creatorSearchStatus}</p>}
+            <button
+              type="button"
+              className="secondary"
+              onClick={handleLocateCreator}
+            >
+              定位达人
+            </button>
+            {creatorSearchStatus && (
+              <p className="ai-status">{creatorSearchStatus}</p>
+            )}
             <label className="checkbox-field">
-              <input type="checkbox" checked={showArchivedCollaborations} onChange={(event) => setShowArchivedCollaborations(event.target.checked)} />
-              显示已归档合作
+              <input
+                aria-label="显示已归档合作"
+                type="checkbox"
+                checked={showArchivedCollaborations}
+                onChange={(event) =>
+                  setShowArchivedCollaborations(event.target.checked)
+                }
+              />
+              显示归档达人
             </label>
             <label>
               紧急程度
@@ -2393,11 +2903,18 @@ function App() {
                       <span className="queue-badges">
                         <em>{priorityLabel(task)}</em>
                         <em>{queueStatusLabel(task)}</em>
-                        {(activeSampleCounts.get(task.id) ?? 0) > 1 && <em>同达人多样品</em>}
+                        {(activeSampleCounts.get(task.id) ?? 0) > 1 && (
+                          <em>同达人多样品</em>
+                        )}
                       </span>
                     </span>
                     <span className="queue-sub-line">
-                      {selectedStore === ALL_STORES ? `${task.storeName || DEFAULT_STORE_NAME} · ` : ""}{task.product || "缺少产品名称"} · {task.currentStatus || displayStatus(inferStatus(task, requiredVideos))}
+                      {selectedStore === ALL_STORES
+                        ? `${task.storeName || DEFAULT_STORE_NAME} · `
+                        : ""}
+                      {task.product || "缺少产品名称"} ·{" "}
+                      {task.currentStatus ||
+                        displayStatus(inferStatus(task, requiredVideos))}
                     </span>
                   </button>
                 ))
@@ -2444,7 +2961,8 @@ function App() {
                   达人账号<b>{displayName(selectedTask)}</b>
                 </span>
                 <span>
-                  店铺 / 品牌<b>{selectedTask.storeName || DEFAULT_STORE_NAME}</b>
+                  店铺 / 品牌
+                  <b>{selectedTask.storeName || DEFAULT_STORE_NAME}</b>
                 </span>
                 <span>
                   产品项目<b>{selectedTask.product || "缺少产品名称"}</b>
@@ -2475,27 +2993,56 @@ function App() {
               {getDuplicateCheck(selectedTask, rows).crossStoreCreator && (
                 <div className="inline-warning duplicate-warning">
                   <strong>跨店铺达人</strong>
-                  <span>该达人在其他店铺也有合作记录，请确认本次沟通是否需要区分店铺。</span>
+                  <span>
+                    该达人在其他店铺也有合作记录，请确认本次沟通是否需要区分店铺。
+                  </span>
                 </div>
               )}
               {(activeSampleCounts.get(selectedTask.id) ?? 0) > 1 && (
                 <div className="inline-warning duplicate-warning">
                   <strong>同达人多样品</strong>
-                  <span>该达人还有 {(activeSampleCounts.get(selectedTask.id) ?? 1) - 1} 个其他样品合作。该达人存在多个样品合作，请确认是否需要合并沟通。</span>
-                  <button type="button" className="secondary" onClick={() => {
-                    setFollowupSearch(displayName(selectedTask));
-                    setOnlyCurrentCreator(false);
-                    setIsQueueExpanded(true);
-                  }}>查看其他样品记录</button>
-                  <button type="button" className="secondary" onClick={() => setToast({ tone: "success", text: "生成多样品合并提醒：请在一条消息中列出多个产品，并分别确认每个样品的到货、拍摄和发布时间。" })}>生成多样品合并提醒</button>
+                  <span>
+                    该达人还有{" "}
+                    {(activeSampleCounts.get(selectedTask.id) ?? 1) - 1}{" "}
+                    个其他样品合作。该达人存在多个样品合作，请确认是否需要合并沟通。
+                  </span>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setFollowupSearch(displayName(selectedTask));
+                      setOnlyCurrentCreator(false);
+                      setIsQueueExpanded(true);
+                    }}
+                  >
+                    查看其他样品记录
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      setToast({
+                        tone: "success",
+                        text: "生成多样品合并提醒：请在一条消息中列出多个产品，并分别确认每个样品的到货、拍摄和发布时间。",
+                      })
+                    }
+                  >
+                    生成多样品合并提醒
+                  </button>
                 </div>
               )}
-              <details className="more-info-card current-product-brief" data-testid="current-product-filming-requirements">
+              <details
+                className="more-info-card current-product-brief"
+                data-testid="current-product-filming-requirements"
+              >
                 <summary>当前产品拍摄要求</summary>
                 <div className="current-creator-grid secondary-grid">
-                  {campaignRequirementEntries(selectedTaskCampaignRequirements(selectedTask)).map((item) => (
+                  {campaignRequirementEntries(
+                    selectedTaskCampaignRequirements(selectedTask),
+                  ).map((item) => (
                     <span key={item.label}>
-                      {item.label}<b>{item.value || "—"}</b>
+                      {item.label}
+                      <b>{item.value || "—"}</b>
                     </span>
                   ))}
                 </div>
@@ -2591,7 +3138,14 @@ function App() {
                     />
                   </label>
                   <div className="inline-actions deepseek-near-focus">
-                    <button type="button" className="secondary" onClick={() => void callDeepSeek("generate_personalized_reply")} disabled={deepSeekLoadingAction !== null}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        void callDeepSeek("generate_personalized_reply")
+                      }
+                      disabled={deepSeekLoadingAction !== null}
+                    >
                       根据上方重点生成英文回复
                     </button>
                   </div>
@@ -2694,7 +3248,9 @@ function App() {
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => void callDeepSeek("generate_personalized_reply")}
+                      onClick={() =>
+                        void callDeepSeek("generate_personalized_reply")
+                      }
                       disabled={deepSeekLoadingAction !== null}
                     >
                       根据上方重点生成英文回复
@@ -2790,7 +3346,8 @@ function App() {
                         }
                         rows={7}
                       />
-                      {deepSeekLoadingAction === "generate_personalized_reply" && (
+                      {deepSeekLoadingAction ===
+                        "generate_personalized_reply" && (
                         <p className="ai-status" role="status">
                           DeepSeek 生成中…
                         </p>
@@ -2836,21 +3393,32 @@ function App() {
                         >
                           发布 1 条视频
                         </button>
-                        <details className="advanced-actions"><summary>更多操作 / 高级操作</summary><div className="inline-actions"><button type="button" className="secondary" onClick={handleManualVideoProgressUpdate}>手动更新视频进度</button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => markCreatorOutcome("Completed")}
-                        >
-                          合作完成
-                        </button>
-                        <button
-                          type="button"
-                          className="danger secondary"
-                          onClick={() => markCreatorOutcome("Failed")}
-                        >
-                          合作失败
-                        </button></div></details>
+                        <details className="advanced-actions">
+                          <summary>更多操作 / 高级操作</summary>
+                          <div className="inline-actions">
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={handleManualVideoProgressUpdate}
+                            >
+                              手动更新视频进度
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => markCreatorOutcome("Completed")}
+                            >
+                              合作完成
+                            </button>
+                            <button
+                              type="button"
+                              className="danger secondary"
+                              onClick={() => markCreatorOutcome("Failed")}
+                            >
+                              合作失败
+                            </button>
+                          </div>
+                        </details>
                       </div>
                       <div className="skip-today-control">
                         <button
@@ -2987,11 +3555,22 @@ function App() {
             </label>
           </div>
           <label className="checkbox-field">
-            <input type="checkbox" checked={showArchivedCollaborations} onChange={(event) => setShowArchivedCollaborations(event.target.checked)} />
-            显示已归档合作
+            <input
+              aria-label="显示已归档合作"
+              type="checkbox"
+              checked={showArchivedCollaborations}
+              onChange={(event) =>
+                setShowArchivedCollaborations(event.target.checked)
+              }
+            />
+            显示归档达人
           </label>
           {!showArchivedCollaborations && archivedProductCount > 0 && (
-            <p className="ai-status">当前显示 active records，已隐藏 {archivedProductCount} 条已归档合作；开启“显示已归档合作”可查看和搜索这些历史记录。默认 CSV 导出包含所有历史记录。</p>
+            <p className="ai-status">
+              当前显示 active records，已隐藏 {archivedProductCount}{" "}
+              条已归档合作；开启“显示归档达人”可查看和搜索这些历史记录。默认 CSV
+              导出包含所有历史记录。
+            </p>
           )}
           <div className="sticky-action-bar">
             <span>当前产品总记录：{productTotalCount}</span>
@@ -3028,7 +3607,11 @@ function App() {
           </div>
           {filteredRows.length === 0 ? (
             <div className="empty-state">
-              <strong>{archivedSearchMatches.length > 0 ? "该达人存在于已归档合作中，可开启显示已归档合作查看。" : "没有匹配的达人。"}</strong>
+              <strong>
+                {archivedSearchMatches.length > 0
+                  ? "该达人存在于已归档合作中，可开启显示已归档合作查看。"
+                  : "没有匹配的达人。"}
+              </strong>
               <span>下一步：清空筛选、导入 CSV / Excel，或点击 新增达人。</span>
             </div>
           ) : (
@@ -3081,19 +3664,38 @@ function App() {
                           aria-label="达人账号"
                           value={entry.row.username}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "username", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "username",
+                              event.target.value,
+                            )
                           }
                         />
-                        {getDuplicateCheck(entry.row, rows).multiSample && <span className="mini-badge">同店铺多样品</span>}
-                        {getDuplicateCheck(entry.row, rows).crossStoreCreator && <span className="mini-badge">跨店铺达人</span>}
-                        {getDuplicateCheck(entry.row, rows).possibleDuplicate && <small className="warning-text">该达人在当前店铺的同一产品项目下可能已重复录入，建议检查是否需要合并。</small>}
+                        {isArchivedCollaboration(entry.row) && <span className="mini-badge">已归档</span>}
+                        {getDuplicateCheck(entry.row, rows).multiSample && (
+                          <span className="mini-badge">同店铺多样品</span>
+                        )}
+                        {getDuplicateCheck(entry.row, rows)
+                          .crossStoreCreator && (
+                          <span className="mini-badge">跨店铺达人</span>
+                        )}
+                        {getDuplicateCheck(entry.row, rows)
+                          .possibleDuplicate && (
+                          <small className="warning-text">
+                            该达人在当前店铺的同一产品项目下可能已重复录入，建议检查是否需要合并。
+                          </small>
+                        )}
                       </td>
                       <td>
                         <input
                           aria-label="主页链接"
                           value={entry.row.profileLink}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "profileLink", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "profileLink",
+                              event.target.value,
+                            )
                           }
                           placeholder="@账号或主页链接"
                         />
@@ -3103,7 +3705,11 @@ function App() {
                           aria-label="联系渠道"
                           value={entry.row.contactMethod}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "contactMethod", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "contactMethod",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3112,17 +3718,28 @@ function App() {
                           aria-label="店铺 / 品牌"
                           value={entry.row.storeName || DEFAULT_STORE_NAME}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "storeName", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "storeName",
+                              event.target.value,
+                            )
                           }
                         />
-                        {getDuplicateCheck(entry.row, rows).crossStoreCreator && <span className="mini-badge">跨店铺达人</span>}
+                        {getDuplicateCheck(entry.row, rows)
+                          .crossStoreCreator && (
+                          <span className="mini-badge">跨店铺达人</span>
+                        )}
                       </td>
                       <td>
                         <input
                           aria-label="产品名称"
                           value={entry.row.product}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "product", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "product",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3131,7 +3748,11 @@ function App() {
                           aria-label="合作状态"
                           value={entry.row.currentStatus}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "currentStatus", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "currentStatus",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3140,7 +3761,11 @@ function App() {
                           aria-label="样品物流状态"
                           value={entry.row.sampleShippingStatus}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "sampleShippingStatus", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "sampleShippingStatus",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3150,7 +3775,11 @@ function App() {
                           type="date"
                           value={entry.row.sampleDeliveredDate}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "sampleDeliveredDate", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "sampleDeliveredDate",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3159,7 +3788,11 @@ function App() {
                           aria-label="视频进度"
                           value={entry.row.videoProgress}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "videoProgress", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "videoProgress",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3169,7 +3802,11 @@ function App() {
                           type="date"
                           value={entry.row.firstVideoPostedDate}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "firstVideoPostedDate", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "firstVideoPostedDate",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3179,7 +3816,11 @@ function App() {
                           type="date"
                           value={entry.row.lastContactDate}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "lastContactDate", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "lastContactDate",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3190,7 +3831,11 @@ function App() {
                           min="0"
                           value={entry.row.lastFollowUpCount}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "lastFollowUpCount", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "lastFollowUpCount",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3199,7 +3844,11 @@ function App() {
                           aria-label="跟进状态"
                           value={entry.row.trackingStatus ?? ""}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "trackingStatus", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "trackingStatus",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3208,7 +3857,11 @@ function App() {
                           aria-label="最近沟通动作"
                           value={entry.row.lastMessageScenario ?? ""}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "lastMessageScenario", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "lastMessageScenario",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3217,7 +3870,11 @@ function App() {
                           aria-label="最近沟通渠道"
                           value={entry.row.lastMessageChannel ?? ""}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "lastMessageChannel", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "lastMessageChannel",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3227,7 +3884,11 @@ function App() {
                           type="date"
                           value={entry.row.nextFollowUpDate ?? ""}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "nextFollowUpDate", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "nextFollowUpDate",
+                              event.target.value,
+                            )
                           }
                         />
                       </td>
@@ -3236,7 +3897,11 @@ function App() {
                           aria-label="达人回复"
                           value={entry.row.lastCreatorResponse ?? ""}
                           onChange={(event) =>
-                            updateRow(entry.row.id, "lastCreatorResponse", event.target.value)
+                            updateRow(
+                              entry.row.id,
+                              "lastCreatorResponse",
+                              event.target.value,
+                            )
                           }
                           rows={1}
                         />
@@ -3256,7 +3921,10 @@ function App() {
                           type="button"
                           className="secondary compact-button"
                           onClick={() =>
-                            void copyText(buildOutreachForRow(entry.row), "已复制邀约话术。")
+                            void copyText(
+                              buildOutreachForRow(entry.row),
+                              "已复制邀约话术。",
+                            )
                           }
                         >
                           复制英文话术
@@ -3529,7 +4197,10 @@ function App() {
   }
 
   function reviewChecklistForRow(row: CreatorRow) {
-    const requirements = campaignToFilmingRequirements(campaignForRow(row), activeFilmingRequirements);
+    const requirements = campaignToFilmingRequirements(
+      campaignForRow(row),
+      activeFilmingRequirements,
+    );
     return [
       `是否展示必须展示内容：${requirements.requiredScenes || "按 Campaign 配置"}`,
       `是否体现产品卖点：${requirements.sellingPoints || "按 Campaign 配置"}`,
@@ -3659,99 +4330,229 @@ function App() {
   }
 
   function renderSettings() {
-    const targetCampaign = activeCampaign ?? activeCampaigns[0] ?? mergedCampaigns[0];
-    const targetCampaignIdentity = targetCampaign ? campaignOptionValue(targetCampaign) : "";
+    const targetCampaign =
+      activeCampaign ?? activeCampaigns[0] ?? mergedCampaigns[0];
+    const targetCampaignIdentity = targetCampaign
+      ? campaignOptionValue(targetCampaign)
+      : "";
     const updateCampaign = (patch: Partial<Campaign>) => {
       if (!targetCampaign) return;
       setCampaigns(
         mergedCampaigns.map((campaign) =>
-          campaignOptionValue(campaign) === targetCampaignIdentity ? { ...campaign, ...patch } : campaign,
+          campaignOptionValue(campaign) === targetCampaignIdentity
+            ? { ...campaign, ...patch }
+            : campaign,
         ),
       );
     };
-    const duplicateProductInStore = (campaign: Campaign, productName: string, storeId = normalizeStoreId(campaign.storeId, campaign.storeName)) =>
-      mergedCampaigns.some((item) =>
-        campaignOptionValue(item) !== campaignOptionValue(campaign) &&
-        normalizeStoreId(item.storeId, item.storeName) === storeId &&
-        item.productName.trim().toLowerCase() === productName.trim().toLowerCase(),
+    const duplicateProductInStore = (
+      campaign: Campaign,
+      productName: string,
+      storeId = normalizeStoreId(campaign.storeId, campaign.storeName),
+    ) =>
+      mergedCampaigns.some(
+        (item) =>
+          campaignOptionValue(item) !== campaignOptionValue(campaign) &&
+          normalizeStoreId(item.storeId, item.storeName) === storeId &&
+          item.productName.trim().toLowerCase() ===
+            productName.trim().toLowerCase(),
       );
-    const updateCampaignProductName = (campaign: Campaign, productName: string) => {
+    const updateCampaignProductName = (
+      campaign: Campaign,
+      productName: string,
+    ) => {
       if (duplicateProductInStore(campaign, productName)) {
-        setToast({ tone: "warning", text: "当前店铺下已存在同名产品，请换一个产品名称。" });
+        setToast({
+          tone: "warning",
+          text: "当前店铺下已存在同名产品，请换一个产品名称。",
+        });
         return;
       }
       updateCampaign({ productName, id: campaignIdFromName(productName) });
     };
     const campaignFieldsDiffer = (source: Campaign, target: Campaign) => {
-      const serialize = (value: unknown) => Array.isArray(value) ? value.join("\n").trim() : String(value ?? "").trim();
-      return (["sellingPoints", "requirements", "keyContentPoints", "avoidShots", "videoCount", "videoLength", "tagRequirement", "productLink", "referenceLinks", "defaultMessageSetting", "notes"] as const)
-        .some((field) => serialize(source[field]) && serialize(target[field]) && serialize(source[field]) !== serialize(target[field]));
+      const serialize = (value: unknown) =>
+        Array.isArray(value)
+          ? value.join("\n").trim()
+          : String(value ?? "").trim();
+      return (
+        [
+          "sellingPoints",
+          "requirements",
+          "keyContentPoints",
+          "avoidShots",
+          "videoCount",
+          "videoLength",
+          "tagRequirement",
+          "productLink",
+          "referenceLinks",
+          "defaultMessageSetting",
+          "notes",
+        ] as const
+      ).some(
+        (field) =>
+          serialize(source[field]) &&
+          serialize(target[field]) &&
+          serialize(source[field]) !== serialize(target[field]),
+      );
     };
-    const mergeMissingCampaignConfig = (source: Campaign, target: Campaign): Campaign => {
+    const mergeMissingCampaignConfig = (
+      source: Campaign,
+      target: Campaign,
+    ): Campaign => {
       const next = { ...target };
-      (["sellingPoints", "avoidShots", "videoCount", "videoLength", "tagRequirement", "productLink", "defaultMessageSetting", "notes"] as const).forEach((field) => {
-        if (!String(next[field] ?? "").trim() && String(source[field] ?? "").trim()) next[field] = source[field] as never;
+      (
+        [
+          "sellingPoints",
+          "avoidShots",
+          "videoCount",
+          "videoLength",
+          "tagRequirement",
+          "productLink",
+          "defaultMessageSetting",
+          "notes",
+        ] as const
+      ).forEach((field) => {
+        if (
+          !String(next[field] ?? "").trim() &&
+          String(source[field] ?? "").trim()
+        )
+          next[field] = source[field] as never;
       });
-      (["requirements", "keyContentPoints", "referenceLinks"] as const).forEach((field) => {
-        if ((next[field] ?? []).length === 0 && (source[field] ?? []).length > 0) next[field] = source[field] as never;
-      });
+      (["requirements", "keyContentPoints", "referenceLinks"] as const).forEach(
+        (field) => {
+          if (
+            (next[field] ?? []).length === 0 &&
+            (source[field] ?? []).length > 0
+          )
+            next[field] = source[field] as never;
+        },
+      );
       return next;
     };
     const moveRowsToCampaign = (source: Campaign, target: Campaign) => {
       const movedRows = rows.filter((row) => rowMatchesCampaign(row, source));
-      setRows(rows.map((row) => rowMatchesCampaign(row, source) ? { ...row, storeId: normalizeStoreId(target.storeId, target.storeName), storeName: normalizeStoreName(target.storeName), campaignId: target.id, product: target.productName } : row));
+      setRows(
+        rows.map((row) =>
+          rowMatchesCampaign(row, source)
+            ? {
+                ...row,
+                storeId: normalizeStoreId(target.storeId, target.storeName),
+                storeName: normalizeStoreName(target.storeName),
+                campaignId: target.id,
+                product: target.productName,
+              }
+            : row,
+        ),
+      );
       return movedRows.length;
     };
     const assignCampaignStore = (campaign: Campaign, nextStoreId: string) => {
       const nextStore = stores.find((store) => store.id === nextStoreId);
       if (!nextStore) return;
-      const targetDuplicate = mergedCampaigns.find((item) =>
-        campaignOptionValue(item) !== campaignOptionValue(campaign) &&
-        normalizeStoreId(item.storeId, item.storeName) === nextStore.id &&
-        item.productName.trim().toLowerCase() === campaign.productName.trim().toLowerCase(),
+      const targetDuplicate = mergedCampaigns.find(
+        (item) =>
+          campaignOptionValue(item) !== campaignOptionValue(campaign) &&
+          normalizeStoreId(item.storeId, item.storeName) === nextStore.id &&
+          item.productName.trim().toLowerCase() ===
+            campaign.productName.trim().toLowerCase(),
       );
       if (targetDuplicate) {
-        if (!window.confirm("目标店铺下已存在同名产品。是否将当前产品及其达人记录合并到目标产品？")) return;
+        if (
+          !window.confirm(
+            "目标店铺下已存在同名产品。是否将当前产品及其达人记录合并到目标产品？",
+          )
+        )
+          return;
         const movedCount = moveRowsToCampaign(campaign, targetDuplicate);
         const hasConfigDiff = campaignFieldsDiffer(campaign, targetDuplicate);
-        setCampaigns(mergedCampaigns.map((item) => {
-          if (campaignOptionValue(item) === campaignOptionValue(targetDuplicate)) return mergeMissingCampaignConfig(campaign, targetDuplicate);
-          if (campaignOptionValue(item) === campaignOptionValue(campaign)) return { ...item, archivedAt: todayString() };
-          return item;
-        }));
+        setCampaigns(
+          mergedCampaigns.map((item) => {
+            if (
+              campaignOptionValue(item) === campaignOptionValue(targetDuplicate)
+            )
+              return mergeMissingCampaignConfig(campaign, targetDuplicate);
+            if (campaignOptionValue(item) === campaignOptionValue(campaign))
+              return { ...item, archivedAt: todayString() };
+            return item;
+          }),
+        );
         setSelectedStore(nextStore.id);
         setSelectedCampaign(campaignOptionValue(targetDuplicate));
-        setToast({ tone: hasConfigDiff ? "warning" : "success", text: `已将 ${movedCount} 条达人记录合并到 ${nextStore.name} · ${targetDuplicate.productName}。${hasConfigDiff ? "两个产品配置存在不同拍摄要求，已保留目标产品配置，请手动检查。" : ""}` });
+        setToast({
+          tone: hasConfigDiff ? "warning" : "success",
+          text: `已将 ${movedCount} 条达人记录合并到 ${nextStore.name} · ${targetDuplicate.productName}。${hasConfigDiff ? "两个产品配置存在不同拍摄要求，已保留目标产品配置，请手动检查。" : ""}`,
+        });
         return;
       }
-      const movedCount = moveRowsToCampaign(campaign, { ...campaign, storeId: nextStore.id, storeName: nextStore.name });
+      const movedCount = moveRowsToCampaign(campaign, {
+        ...campaign,
+        storeId: nextStore.id,
+        storeName: nextStore.name,
+      });
       updateCampaign({ storeId: nextStore.id, storeName: nextStore.name });
       setSelectedStore(nextStore.id);
-      setToast({ tone: "success", text: `已将产品关联到所选店铺 / 品牌，并迁移 ${movedCount} 条达人记录。` });
+      setToast({
+        tone: "success",
+        text: `已将产品关联到所选店铺 / 品牌，并迁移 ${movedCount} 条达人记录。`,
+      });
     };
     const createCampaign = () => {
       const productName = window.prompt("产品 / Campaign 名称：", "")?.trim();
       if (!productName) return;
-      let targetStore = selectedStore === ALL_STORES ? undefined : stores.find((store) => store.id === selectedStore);
+      let targetStore =
+        selectedStore === ALL_STORES
+          ? undefined
+          : stores.find((store) => store.id === selectedStore);
       if (!targetStore) {
-        const storeName = window.prompt("请选择该产品所属店铺 / 品牌（输入现有店铺名称）：", stores[0]?.name ?? DEFAULT_STORE_NAME)?.trim();
-        targetStore = stores.find((store) => store.name.toLowerCase() === storeName?.toLowerCase());
+        const storeName = window
+          .prompt(
+            "请选择该产品所属店铺 / 品牌（输入现有店铺名称）：",
+            stores[0]?.name ?? DEFAULT_STORE_NAME,
+          )
+          ?.trim();
+        targetStore = stores.find(
+          (store) => store.name.toLowerCase() === storeName?.toLowerCase(),
+        );
       }
       if (!targetStore) {
-        setToast({ tone: "warning", text: "创建产品前必须选择已有店铺 / 品牌。" });
+        setToast({
+          tone: "warning",
+          text: "创建产品前必须选择已有店铺 / 品牌。",
+        });
         return;
       }
-      if (mergedCampaigns.some((campaign) => normalizeStoreId(campaign.storeId, campaign.storeName) === targetStore.id && campaign.productName.trim().toLowerCase() === productName.toLowerCase())) {
-        setToast({ tone: "warning", text: "当前店铺下已存在同名产品，请换一个产品名称。" });
+      if (
+        mergedCampaigns.some(
+          (campaign) =>
+            normalizeStoreId(campaign.storeId, campaign.storeName) ===
+              targetStore.id &&
+            campaign.productName.trim().toLowerCase() ===
+              productName.toLowerCase(),
+        )
+      ) {
+        setToast({
+          tone: "warning",
+          text: "当前店铺下已存在同名产品，请换一个产品名称。",
+        });
         return;
       }
-      const nextCampaign = createCampaignFromName(productName, filmingRequirements, targetStore.name, targetStore.id);
+      const nextCampaign = createCampaignFromName(
+        productName,
+        filmingRequirements,
+        targetStore.name,
+        targetStore.id,
+      );
       setCampaigns([...mergedCampaigns, nextCampaign]);
       setSelectedStore(targetStore.id);
       setSelectedCampaign(campaignOptionValue(nextCampaign));
-      setToast({ tone: "success", text: "已新增产品项目，并关联到当前店铺 / 品牌。" });
+      setToast({
+        tone: "success",
+        text: "已新增产品项目，并关联到当前店铺 / 品牌。",
+      });
     };
-    const linkedRowsCount = (campaign: Campaign) => rows.filter((row) => rowMatchesCampaign(row, campaign)).length;
+    const linkedRowsCount = (campaign: Campaign) =>
+      rows.filter((row) => rowMatchesCampaign(row, campaign)).length;
     const syncCampaignVideoCount = (campaign: Campaign) => {
       const latestCampaign =
         mergedCampaigns.find((item) => item.id === campaign.id) ?? campaign;
@@ -3764,19 +4565,37 @@ function App() {
       let skippedCount = 0;
       const nextRows = rows.map((row) => {
         if (!rowMatchesCampaign(row, latestCampaign)) return row;
-        const progress = normalizeVideoProgress(row.videoProgress, targetRequiredVideos);
-        const postedFromText = row.videoProgress.match(/^\s*(\d+)\s*(?:\/|of)\s*\d+/i)?.[1];
-        const postedCount = typeof progress.postedCount === "number" ? progress.postedCount : postedFromText ? Number.parseInt(postedFromText, 10) : undefined;
+        const progress = normalizeVideoProgress(
+          row.videoProgress,
+          targetRequiredVideos,
+        );
+        const postedFromText = row.videoProgress.match(
+          /^\s*(\d+)\s*(?:\/|of)\s*\d+/i,
+        )?.[1];
+        const postedCount =
+          typeof progress.postedCount === "number"
+            ? progress.postedCount
+            : postedFromText
+              ? Number.parseInt(postedFromText, 10)
+              : undefined;
         if (typeof postedCount !== "number" || !Number.isFinite(postedCount)) {
           skippedCount += 1;
           return row;
         }
         if (postedCount > 0) preservedPublishedCount += 1;
         const nextProgress = `${postedCount}/${targetRequiredVideos}`;
-        if (row.videoProgress === nextProgress && !row.videoProgressWarning) return row;
+        if (row.videoProgress === nextProgress && !row.videoProgressWarning)
+          return row;
         updatedCount += 1;
-        const normalized = normalizeVideoProgress(nextProgress, targetRequiredVideos);
-        return { ...row, videoProgress: normalized.normalized, videoProgressWarning: normalized.warning };
+        const normalized = normalizeVideoProgress(
+          nextProgress,
+          targetRequiredVideos,
+        );
+        return {
+          ...row,
+          videoProgress: normalized.normalized,
+          videoProgressWarning: normalized.warning,
+        };
       });
       setRows(nextRows);
       setToast({
@@ -3785,22 +4604,43 @@ function App() {
       });
     };
     const duplicateCampaign = (campaign: Campaign) => {
-      const copy = { ...campaign, id: `${campaign.id}-copy-${Date.now()}`, productName: `${campaign.productName} Copy`, archivedAt: undefined };
+      const copy = {
+        ...campaign,
+        id: `${campaign.id}-copy-${Date.now()}`,
+        productName: `${campaign.productName} Copy`,
+        archivedAt: undefined,
+      };
       setCampaigns([...mergedCampaigns, copy]);
       setToast({ tone: "success", text: "已复制产品项目。" });
     };
     const archiveCampaign = (campaign: Campaign) => {
-      setCampaigns(mergedCampaigns.map((item) => item.id === campaign.id ? { ...item, archivedAt: todayString() } : item));
-      setToast({ tone: "success", text: "已归档产品，历史达人记录和导出数据会保留。" });
+      setCampaigns(
+        mergedCampaigns.map((item) =>
+          item.id === campaign.id
+            ? { ...item, archivedAt: todayString() }
+            : item,
+        ),
+      );
+      setToast({
+        tone: "success",
+        text: "已归档产品，历史达人记录和导出数据会保留。",
+      });
     };
     const restoreCampaign = (campaign: Campaign) => {
-      setCampaigns(mergedCampaigns.map((item) => item.id === campaign.id ? { ...item, archivedAt: undefined } : item));
+      setCampaigns(
+        mergedCampaigns.map((item) =>
+          item.id === campaign.id ? { ...item, archivedAt: undefined } : item,
+        ),
+      );
       setToast({ tone: "success", text: "已恢复产品。" });
     };
     const deleteCampaign = (campaign: Campaign) => {
       const linked = linkedRowsCount(campaign);
       if (linked > 0) {
-        setToast({ tone: "warning", text: `该产品已关联 ${linked} 条达人记录，直接删除可能导致历史数据丢失。建议归档该产品。` });
+        setToast({
+          tone: "warning",
+          text: `该产品已关联 ${linked} 条达人记录，直接删除可能导致历史数据丢失。建议归档该产品。`,
+        });
         return;
       }
       setCampaigns(mergedCampaigns.filter((item) => item.id !== campaign.id));
@@ -3817,57 +4657,139 @@ function App() {
             <div>
               <h2>产品项目设置</h2>
               <p className="muted">
-                达人拍摄要求是 Campaign 核心配置。每个产品项目独立保存 8 个拍摄要求字段，供工作台、话术、DeepSeek 和内容审核调用。
+                达人拍摄要求是 Campaign 核心配置。每个产品项目独立保存 8
+                个拍摄要求字段，供工作台、话术、DeepSeek 和内容审核调用。
               </p>
             </div>
           </div>
           <label className="campaign-picker">
             选择产品 / Campaign
             <select
-              value={targetCampaign ? campaignSelectValue(targetCampaign, activeCampaigns) : ""}
+              value={
+                targetCampaign
+                  ? campaignSelectValue(targetCampaign, activeCampaigns)
+                  : ""
+              }
               onChange={(event) => setSelectedCampaign(event.target.value)}
             >
               {activeCampaigns.map((campaign) => (
-                <option key={campaignOptionValue(campaign)} value={campaignSelectValue(campaign, activeCampaigns)}>
-                  {campaignLabel(campaign, showStoreLabels)}{campaign.archivedAt ? "（已归档）" : ""}
+                <option
+                  key={campaignOptionValue(campaign)}
+                  value={campaignSelectValue(campaign, activeCampaigns)}
+                >
+                  {campaignLabel(campaign, showStoreLabels)}
+                  {campaign.archivedAt ? "（已归档）" : ""}
                 </option>
               ))}
             </select>
           </label>
-          <label className="checkbox-field"><input type="checkbox" checked={showArchivedProducts} onChange={(event) => setShowArchivedProducts(event.target.checked)} />显示已归档产品</label>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={showArchivedProducts}
+              onChange={(event) =>
+                setShowArchivedProducts(event.target.checked)
+              }
+            />
+            显示已归档产品
+          </label>
           {targetCampaign && (
             <div className="inline-actions campaign-actions">
-              <button type="button" className="secondary" onClick={createCampaign}>新增产品</button>
-              <button type="button" className="secondary" onClick={() => setToast({ tone: "success", text: "可直接在下方编辑产品字段。" })}>编辑</button>
-              <button type="button" className="secondary" onClick={() => duplicateCampaign(targetCampaign)}>复制</button>
-              <button type="button" className="secondary" onClick={() => archiveCampaign(targetCampaign)}>归档</button>
-              {targetCampaign.archivedAt && <button type="button" className="secondary" onClick={() => restoreCampaign(targetCampaign)}>恢复</button>}
-              <button type="button" className="danger secondary" onClick={() => deleteCampaign(targetCampaign)}>删除</button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={createCampaign}
+              >
+                新增产品
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  setToast({
+                    tone: "success",
+                    text: "可直接在下方编辑产品字段。",
+                  })
+                }
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => duplicateCampaign(targetCampaign)}
+              >
+                复制
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => archiveCampaign(targetCampaign)}
+              >
+                归档
+              </button>
+              {targetCampaign.archivedAt && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => restoreCampaign(targetCampaign)}
+                >
+                  恢复
+                </button>
+              )}
+              <button
+                type="button"
+                className="danger secondary"
+                onClick={() => deleteCampaign(targetCampaign)}
+              >
+                删除
+              </button>
             </div>
           )}
           {targetCampaign && (
-            <div className="settings-form campaign-settings" data-testid="campaign-settings-form">
+            <div
+              className="settings-form campaign-settings"
+              data-testid="campaign-settings-form"
+            >
               <label>
                 店铺 / 品牌
                 <select
-                  value={normalizeStoreId(targetCampaign.storeId, targetCampaign.storeName)}
-                  onChange={(event) => assignCampaignStore(targetCampaign, event.target.value)}
+                  value={normalizeStoreId(
+                    targetCampaign.storeId,
+                    targetCampaign.storeName,
+                  )}
+                  onChange={(event) =>
+                    assignCampaignStore(targetCampaign, event.target.value)
+                  }
                 >
-                  {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label>
                 产品名称
                 <input
                   value={targetCampaign.productName}
-                  onChange={(event) => updateCampaignProductName(targetCampaign, event.target.value)}
+                  onChange={(event) =>
+                    updateCampaignProductName(
+                      targetCampaign,
+                      event.target.value,
+                    )
+                  }
                 />
               </label>
               <label>
                 必须展示内容
                 <textarea
                   value={listToText(targetCampaign.keyContentPoints)}
-                  onChange={(event) => updateCampaign({ keyContentPoints: normalizeListText(event.target.value) })}
+                  onChange={(event) =>
+                    updateCampaign({
+                      keyContentPoints: normalizeListText(event.target.value),
+                    })
+                  }
                   rows={5}
                 />
               </label>
@@ -3876,7 +4798,9 @@ function App() {
                 <textarea
                   aria-label="Campaign 产品卖点"
                   value={targetCampaign.sellingPoints}
-                  onChange={(event) => updateCampaign({ sellingPoints: event.target.value })}
+                  onChange={(event) =>
+                    updateCampaign({ sellingPoints: event.target.value })
+                  }
                   rows={3}
                 />
               </label>
@@ -3884,35 +4808,57 @@ function App() {
                 视频时长要求
                 <input
                   value={targetCampaign.videoLength}
-                  onChange={(event) => updateCampaign({ videoLength: event.target.value })}
+                  onChange={(event) =>
+                    updateCampaign({ videoLength: event.target.value })
+                  }
                 />
               </label>
               <label>
                 视频数量要求
                 <input
                   value={targetCampaign.videoCount}
-                  onChange={(event) => updateCampaign({ videoCount: event.target.value })}
+                  onChange={(event) =>
+                    updateCampaign({ videoCount: event.target.value })
+                  }
                 />
               </label>
               <div className="inline-actions">
-                <button type="button" className="secondary" onClick={() => syncCampaignVideoCount(targetCampaign)}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => syncCampaignVideoCount(targetCampaign)}
+                >
                   同步视频数量到达人记录
                 </button>
-                <span className="muted">会更新 0/2 → 0/1 等安全记录，并保留已发布视频数量。</span>
+                <span className="muted">
+                  会更新 0/2 → 0/1 等安全记录，并保留已发布视频数量。
+                </span>
               </div>
               <label>
                 不希望达人这样拍
                 <textarea
                   value={targetCampaign.avoidShots}
-                  onChange={(event) => updateCampaign({ avoidShots: event.target.value })}
+                  onChange={(event) =>
+                    updateCampaign({ avoidShots: event.target.value })
+                  }
                   rows={3}
                 />
               </label>
               <label>
                 挂车 / TikTok Shop 产品链接要求
                 <textarea
-                  value={[targetCampaign.tagRequirement, targetCampaign.productLink].filter(Boolean).join("\n")}
-                  onChange={(event) => updateCampaign({ tagRequirement: event.target.value, productLink: "" })}
+                  value={[
+                    targetCampaign.tagRequirement,
+                    targetCampaign.productLink,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                  onChange={(event) =>
+                    updateCampaign({
+                      tagRequirement: event.target.value,
+                      productLink: "",
+                    })
+                  }
                   rows={3}
                 />
               </label>
@@ -3920,12 +4866,17 @@ function App() {
                 参考视频链接
                 <textarea
                   value={listToText(targetCampaign.referenceLinks)}
-                  onChange={(event) => updateCampaign({ referenceLinks: normalizeListText(event.target.value) })}
+                  onChange={(event) =>
+                    updateCampaign({
+                      referenceLinks: normalizeListText(event.target.value),
+                    })
+                  }
                   rows={3}
                 />
               </label>
               <p className="ai-status">
-                产品项目设置会自动保存到 localStorage，并作为当前 Campaign 拍摄要求的唯一配置来源。
+                产品项目设置会自动保存到 localStorage，并作为当前 Campaign
+                拍摄要求的唯一配置来源。
               </p>
             </div>
           )}
@@ -3934,15 +4885,46 @@ function App() {
           <div className="section-heading">
             <div>
               <h2>店铺清理</h2>
-              <p className="muted">空的错别字店铺会在产品归档后从顶部下拉中隐藏；仍有关联产品或达人记录的店铺需要先迁移或合并。</p>
+              <p className="muted">
+                空的错别字店铺会在产品归档后从顶部下拉中隐藏；仍有关联产品或达人记录的店铺需要先迁移或合并。
+              </p>
             </div>
           </div>
           <div className="inline-actions">
             {stores.map((store) => {
-              const linkedCampaigns = mergedCampaigns.filter((campaign) => normalizeStoreId(campaign.storeId, campaign.storeName) === store.id && !campaign.archivedAt).length;
-              const linkedRows = rows.filter((row) => rowStoreId(row) === store.id).length;
+              const linkedCampaigns = mergedCampaigns.filter(
+                (campaign) =>
+                  normalizeStoreId(campaign.storeId, campaign.storeName) ===
+                    store.id && !campaign.archivedAt,
+              ).length;
+              const linkedRows = rows.filter(
+                (row) => rowStoreId(row) === store.id,
+              ).length;
               const canDeleteStore = linkedCampaigns === 0 && linkedRows === 0;
-              return <button key={store.id} type="button" className="secondary" onClick={() => setToast(canDeleteStore ? { tone: "success", text: `${store.name} 已无关联产品或达人记录，会从店铺下拉中隐藏。` } : { tone: "warning", text: "该店铺仍有关联产品或达人记录，请先迁移或合并后再删除。" })}>{canDeleteStore ? `隐藏空店铺：${store.name}` : `检查店铺：${store.name}`}</button>;
+              return (
+                <button
+                  key={store.id}
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    setToast(
+                      canDeleteStore
+                        ? {
+                            tone: "success",
+                            text: `${store.name} 已无关联产品或达人记录，会从店铺下拉中隐藏。`,
+                          }
+                        : {
+                            tone: "warning",
+                            text: "该店铺仍有关联产品或达人记录，请先迁移或合并后再删除。",
+                          },
+                    )
+                  }
+                >
+                  {canDeleteStore
+                    ? `隐藏空店铺：${store.name}`
+                    : `检查店铺：${store.name}`}
+                </button>
+              );
             })}
           </div>
         </section>
