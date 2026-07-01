@@ -501,14 +501,13 @@ describe("creator database redesigned table", () => {
     await goTo(user, /达人数据库/);
 
     const headers = within(screen.getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent ?? "");
-    expect(headers.slice(1, 19)).toEqual([
+    expect(headers.slice(1, 18)).toEqual([
       "达人账号",
       "主页链接",
       "联系渠道",
       "店铺 / 品牌",
       "产品",
       "合作状态",
-      "样品物流状态",
       "样品到货日期",
       "视频进度",
       "首条视频发布日期",
@@ -522,6 +521,30 @@ describe("creator database redesigned table", () => {
       "达人备注",
     ]);
     expect(screen.getByRole("table")).toHaveClass("spreadsheet-table");
+    expect(headers).not.toContain("样品物流状态");
+    expect(screen.queryByLabelText("样品物流状态")).not.toBeInTheDocument();
+    expect(screen.getByText("样品到货日期")).toBeInTheDocument();
+  });
+
+
+  it("hides legacy sample logistics data in the database table without crashing", async () => {
+    seedCreators([
+      creatorRow({
+        id: "legacy",
+        username: "legacy_creator",
+        currentStatus: "Sample Shipped",
+        sampleShippingStatus: "Not Shipped",
+        sampleDeliveredDate: "2026-06-10",
+      }),
+    ]);
+    render(<App />);
+    const user = userEvent.setup();
+    await goTo(user, /达人数据库/);
+
+    expect(screen.getByDisplayValue("legacy_creator")).toBeInTheDocument();
+    expect(screen.queryByText("样品物流状态")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Not Shipped")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("2026-06-10")).toBeInTheDocument();
   });
 
   it("supports search, status filtering, and editable table fields", async () => {
@@ -598,6 +621,12 @@ describe("creator database redesigned table", () => {
 
     render(<App />);
     await goTo(user, /达人数据库/);
+
+    expect(screen.getByRole("button", { name: "批量复制邀约话术" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "批量更新状态" })).toBeInTheDocument();
+    expect(
+      within(screen.getByText("已选择：0").closest(".sticky-action-bar") as HTMLElement).getByRole("combobox"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByLabelText("选择 alpha_creator"));
     await user.click(screen.getByLabelText("选择 beta_creator"));

@@ -3633,7 +3633,6 @@ function App() {
                     <th>店铺 / 品牌</th>
                     <th>产品</th>
                     <th>合作状态</th>
-                    <th>样品物流状态</th>
                     <th>样品到货日期</th>
                     <th>视频进度</th>
                     <th>首条视频发布日期</th>
@@ -3751,19 +3750,6 @@ function App() {
                             updateRow(
                               entry.row.id,
                               "currentStatus",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="样品物流状态"
-                          value={entry.row.sampleShippingStatus}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "sampleShippingStatus",
                               event.target.value,
                             )
                           }

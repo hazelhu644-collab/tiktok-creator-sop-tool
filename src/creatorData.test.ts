@@ -85,7 +85,9 @@ describe('editable creator data helpers', () => {
     ]);
 
     expect(csv.startsWith('\ufeff')).toBe(true);
-    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,店铺 / 品牌,产品,合作状态,样品物流状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复,达人备注,是否同达人多样品,同达人样品数量');
+    expect(csv.split('\n')[0]).toBe('\ufeff达人账号,主页链接,联系渠道,店铺 / 品牌,产品,合作状态,样品到货日期,视频进度,首条视频发布日期,最近联系日期,跟进次数,跟进状态,最近沟通动作,最近沟通渠道,下次跟进日期,达人回复,达人备注,是否同达人多样品,同达人样品数量');
+    expect(csv).not.toContain('样品物流状态');
+    expect(csv).not.toContain('Delivered');
     expect(csv).not.toContain('预计到货日期');
     expect(csv).not.toContain('实际到货日期');
     expect(csv).not.toContain('2 条记录');
@@ -141,6 +143,7 @@ describe('editable creator data helpers', () => {
       storeName: 'TerraPaw',
       product: '中文产品',
       currentStatus: '已完成',
+      sampleShippingStatus: 'Delivered',
       sampleDeliveredDate: '2026-06-01',
       lastContactDate: '2026-06-04',
       lastFollowUpCount: 2,
