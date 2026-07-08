@@ -1,0 +1,4 @@
+interface:
+  display_name: "TikTok Creator SOP"
+  short_description: "Build and operate TikTok Shop creator follow-up SOPs"
+  default_prompt: "Use $tiktok-creator-sop to plan, build, or improve a TikTok Shop creator follow-up workflow."
