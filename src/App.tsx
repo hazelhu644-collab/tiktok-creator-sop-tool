@@ -63,6 +63,12 @@ import type {
   CreatorDatabaseRowView,
   CreatorStatusOption,
 } from "./features/creators/creatorDatabaseTypes";
+import { CampaignSettingsPage } from "./features/campaigns/CampaignSettingsPage";
+import type {
+  CampaignSettingsOption,
+  CampaignSettingsTargetView,
+  CampaignStoreCleanupView,
+} from "./features/campaigns/campaignSettingsTypes";
 import "./styles.css";
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = "tiktokCreatorSop.filmingRequirements";
@@ -4329,288 +4335,114 @@ function App() {
       );
       setToast({ tone: "success", text: "该产品暂无关联数据，可以安全删除。" });
     };
+    const campaignSettingsTarget: CampaignSettingsTargetView | null =
+      targetCampaign
+        ? {
+            campaign: targetCampaign,
+            selectValue: campaignSelectValue(targetCampaign),
+            storeId: normalizeStoreId(
+              targetCampaign.storeId,
+              targetCampaign.storeName,
+            ),
+            keyContentPointsText: listToText(targetCampaign.keyContentPoints),
+            productLinkRequirementText: [
+              targetCampaign.tagRequirement,
+              targetCampaign.productLink,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            referenceLinksText: listToText(targetCampaign.referenceLinks),
+          }
+        : null;
+
+    const campaignSettingsOptions: CampaignSettingsOption[] = activeCampaigns.map(
+      (campaign) => ({
+        value: campaignSelectValue(campaign),
+        label: `${campaignLabel(campaign, showStoreLabels)}${
+          campaign.archivedAt ? "（已归档）" : ""
+        }`,
+      }),
+    );
+
+    const campaignStoreCleanupItems: CampaignStoreCleanupView[] = stores.map(
+      (store) => {
+        const linkedCampaigns = mergedCampaigns.filter(
+          (campaign) =>
+            normalizeStoreId(campaign.storeId, campaign.storeName) === store.id &&
+            !campaign.archivedAt,
+        ).length;
+        const linkedRows = rows.filter((row) => rowStoreId(row) === store.id).length;
+        return {
+          id: store.id,
+          name: store.name,
+          canHide: linkedCampaigns === 0 && linkedRows === 0,
+        };
+      },
+    );
     return (
       <>
-        {renderPageHeader(
-          "设置",
-          "管理产品项目、拍摄要求、提示词助手和本地数据。",
-        )}
-        <section className="panel sop-card">
-          <div className="section-heading">
-            <div>
-              <h2>产品项目设置</h2>
-              <p className="muted">
-                达人拍摄要求是 Campaign 核心配置。每个产品项目独立保存 8
-                个拍摄要求字段，供工作台、话术、DeepSeek 和内容审核调用。
-              </p>
-            </div>
-          </div>
-          <label className="campaign-picker">
-            选择产品 / Campaign
-            <select
-              value={
-                targetCampaign
-                  ? campaignSelectValue(targetCampaign)
-                  : ""
-              }
-              onChange={(event) => setSelectedCampaign(event.target.value)}
-            >
-              {activeCampaigns.map((campaign) => (
-                <option
-                  key={campaignOptionValue(campaign)}
-                  value={campaignSelectValue(campaign)}
-                >
-                  {campaignLabel(campaign, showStoreLabels)}
-                  {campaign.archivedAt ? "（已归档）" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={showArchivedProducts}
-              onChange={(event) =>
-                setShowArchivedProducts(event.target.checked)
-              }
-            />
-            显示已归档产品
-          </label>
-          {targetCampaign && (
-            <div className="inline-actions campaign-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={createCampaign}
-              >
-                新增产品
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() =>
-                  setToast({
-                    tone: "success",
-                    text: "可直接在下方编辑产品字段。",
-                  })
-                }
-              >
-                编辑
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => duplicateCampaign(targetCampaign)}
-              >
-                复制
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => archiveCampaign(targetCampaign)}
-              >
-                归档
-              </button>
-              {targetCampaign.archivedAt && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => restoreCampaign(targetCampaign)}
-                >
-                  恢复
-                </button>
-              )}
-              <button
-                type="button"
-                className="danger secondary"
-                onClick={() => deleteCampaign(targetCampaign)}
-              >
-                删除
-              </button>
-            </div>
-          )}
-          {targetCampaign && (
-            <div
-              className="settings-form campaign-settings"
-              data-testid="campaign-settings-form"
-            >
-              <label>
-                店铺 / 品牌
-                <select
-                  value={normalizeStoreId(
-                    targetCampaign.storeId,
-                    targetCampaign.storeName,
-                  )}
-                  onChange={(event) =>
-                    assignCampaignStore(targetCampaign, event.target.value)
-                  }
-                >
-                  {stores.map((store) => (
-                    <option key={store.id} value={store.id}>
-                      {store.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                产品名称
-                <input
-                  value={targetCampaign.productName}
-                  onChange={(event) =>
-                    updateCampaignProductName(
-                      targetCampaign,
-                      event.target.value,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                必须展示内容
-                <textarea
-                  value={listToText(targetCampaign.keyContentPoints)}
-                  onChange={(event) =>
-                    updateCampaign({
-                      keyContentPoints: normalizeListText(event.target.value),
-                    })
-                  }
-                  rows={5}
-                />
-              </label>
-              <label>
-                产品卖点
-                <textarea
-                  aria-label="Campaign 产品卖点"
-                  value={targetCampaign.sellingPoints}
-                  onChange={(event) =>
-                    updateCampaign({ sellingPoints: event.target.value })
-                  }
-                  rows={3}
-                />
-              </label>
-              <label>
-                视频时长要求
-                <input
-                  value={targetCampaign.videoLength}
-                  onChange={(event) =>
-                    updateCampaign({ videoLength: event.target.value })
-                  }
-                />
-              </label>
-              <label>
-                视频数量要求
-                <input
-                  value={targetCampaign.videoCount}
-                  onChange={(event) =>
-                    updateCampaign({ videoCount: event.target.value })
-                  }
-                />
-              </label>
-              <div className="inline-actions">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => syncCampaignVideoCount(targetCampaign)}
-                >
-                  同步视频数量到达人记录
-                </button>
-                <span className="muted">
-                  会更新 0/2 → 0/1 等安全记录，并保留已发布视频数量。
-                </span>
-              </div>
-              <label>
-                不希望达人这样拍
-                <textarea
-                  value={targetCampaign.avoidShots}
-                  onChange={(event) =>
-                    updateCampaign({ avoidShots: event.target.value })
-                  }
-                  rows={3}
-                />
-              </label>
-              <label>
-                挂车 / TikTok Shop 产品链接要求
-                <textarea
-                  value={[
-                    targetCampaign.tagRequirement,
-                    targetCampaign.productLink,
-                  ]
-                    .filter(Boolean)
-                    .join("\n")}
-                  onChange={(event) =>
-                    updateCampaign({
-                      tagRequirement: event.target.value,
-                      productLink: "",
-                    })
-                  }
-                  rows={3}
-                />
-              </label>
-              <label>
-                参考视频链接
-                <textarea
-                  value={listToText(targetCampaign.referenceLinks)}
-                  onChange={(event) =>
-                    updateCampaign({
-                      referenceLinks: normalizeListText(event.target.value),
-                    })
-                  }
-                  rows={3}
-                />
-              </label>
-              <p className="ai-status">
-                产品项目设置会自动保存到 localStorage，并作为当前 Campaign
-                拍摄要求的唯一配置来源。
-              </p>
-            </div>
-          )}
-        </section>
-        <section className="panel sop-card">
-          <div className="section-heading">
-            <div>
-              <h2>店铺清理</h2>
-              <p className="muted">
-                空的错别字店铺会在产品归档后从顶部下拉中隐藏；仍有关联产品或达人记录的店铺需要先迁移或合并。
-              </p>
-            </div>
-          </div>
-          <div className="inline-actions">
-            {stores.map((store) => {
-              const linkedCampaigns = mergedCampaigns.filter(
-                (campaign) =>
-                  normalizeStoreId(campaign.storeId, campaign.storeName) ===
-                    store.id && !campaign.archivedAt,
-              ).length;
-              const linkedRows = rows.filter(
-                (row) => rowStoreId(row) === store.id,
-              ).length;
-              const canDeleteStore = linkedCampaigns === 0 && linkedRows === 0;
-              return (
-                <button
-                  key={store.id}
-                  type="button"
-                  className="secondary"
-                  onClick={() =>
-                    setToast(
-                      canDeleteStore
-                        ? {
-                            tone: "success",
-                            text: `${store.name} 已无关联产品或达人记录，会从店铺下拉中隐藏。`,
-                          }
-                        : {
-                            tone: "warning",
-                            text: "该店铺仍有关联产品或达人记录，请先迁移或合并后再删除。",
-                          },
-                    )
-                  }
-                >
-                  {canDeleteStore
-                    ? `隐藏空店铺：${store.name}`
-                    : `检查店铺：${store.name}`}
-                </button>
+        <CampaignSettingsPage
+          data={{
+            target: campaignSettingsTarget,
+            campaignOptions: campaignSettingsOptions,
+            storeOptions: stores,
+            storeCleanupItems: campaignStoreCleanupItems,
+          }}
+          uiState={{ showArchivedProducts }}
+          actions={{
+            selectCampaign: setSelectedCampaign,
+            setShowArchivedProducts,
+            createCampaign,
+            announceEditable: () =>
+              setToast({ tone: "success", text: "可直接在下方编辑产品字段。" }),
+            duplicateCampaign: () => {
+              if (targetCampaign) duplicateCampaign(targetCampaign);
+            },
+            archiveCampaign: () => {
+              if (targetCampaign) archiveCampaign(targetCampaign);
+            },
+            restoreCampaign: () => {
+              if (targetCampaign) restoreCampaign(targetCampaign);
+            },
+            deleteCampaign: () => {
+              if (targetCampaign) deleteCampaign(targetCampaign);
+            },
+            assignStore: (storeId) => {
+              if (targetCampaign) assignCampaignStore(targetCampaign, storeId);
+            },
+            renameProduct: (productName) => {
+              if (targetCampaign) updateCampaignProductName(targetCampaign, productName);
+            },
+            updateKeyContentPoints: (value) =>
+              updateCampaign({ keyContentPoints: normalizeListText(value) }),
+            updateSellingPoints: (value) => updateCampaign({ sellingPoints: value }),
+            updateVideoLength: (value) => updateCampaign({ videoLength: value }),
+            updateVideoCount: (value) => updateCampaign({ videoCount: value }),
+            syncVideoCount: () => {
+              if (targetCampaign) syncCampaignVideoCount(targetCampaign);
+            },
+            updateAvoidShots: (value) => updateCampaign({ avoidShots: value }),
+            updateProductLinkRequirement: (value) =>
+              updateCampaign({ tagRequirement: value, productLink: "" }),
+            updateReferenceLinks: (value) =>
+              updateCampaign({ referenceLinks: normalizeListText(value) }),
+            inspectStore: (storeId) => {
+              const item = campaignStoreCleanupItems.find((entry) => entry.id === storeId);
+              if (!item) return;
+              setToast(
+                item.canHide
+                  ? {
+                      tone: "success",
+                      text: `${item.name} 已无关联产品或达人记录，会从店铺下拉中隐藏。`,
+                    }
+                  : {
+                      tone: "warning",
+                      text: "该店铺仍有关联产品或达人记录，请先迁移或合并后再删除。",
+                    },
               );
-            })}
-          </div>
-        </section>
+            },
+          }}
+        />
         <section className="panel prompt-helper">
           <div className="section-heading">
             <div>
