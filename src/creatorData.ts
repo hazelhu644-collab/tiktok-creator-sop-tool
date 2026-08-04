@@ -304,13 +304,6 @@ export function createBlankCreatorRow(
   };
 }
 
-export function deleteCreatorRow(
-  rows: CreatorRow[],
-  rowId: string,
-): CreatorRow[] {
-  return rows.filter((row) => row.id !== rowId);
-}
-
 export function saveCreatorRows(rows: CreatorRow[]): void {
   const storage = getBrowserStorage();
   if (!storage) return;

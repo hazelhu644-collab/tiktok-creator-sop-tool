@@ -16,7 +16,7 @@ export type VideoProgressNormalization = {
 
 export type FollowUpHistoryEntry = {
   date: string;
-  action: 'Message Sent' | 'Creator Replied' | 'No Reply' | 'Skipped Today' | 'Video Posted' | 'Completed' | 'Failed';
+  action: 'Message Sent' | 'Creator Replied' | 'No Reply' | 'Skipped Today' | 'Video Posted' | 'Completed' | 'Failed' | 'Archived' | 'Restored';
   channel?: Channel | string;
   scenario?: string;
   message?: string;

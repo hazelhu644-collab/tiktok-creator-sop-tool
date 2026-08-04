@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildDuplicateImportSummary, CREATOR_ROWS_STORAGE_KEY, createBlankCreatorRow, creatorRowsToCsv, deleteCreatorRow, getDuplicateCheck, loadCreatorRows, saveCreatorRows, updateCreatorField } from './creatorData';
+import { buildDuplicateImportSummary, CREATOR_ROWS_STORAGE_KEY, createBlankCreatorRow, creatorRowsToCsv, getDuplicateCheck, loadCreatorRows, saveCreatorRows, updateCreatorField } from './creatorData';
 import { normalizeRecord } from './fileParser';
 import type { CreatorRow } from './types';
 
@@ -55,12 +55,6 @@ describe('editable creator data helpers', () => {
       notes: '',
     });
     expect(blankRow.id).toMatch(/^manual-/);
-  });
-
-  it('deletes only the selected creator row', () => {
-    const rows = [row({ id: 'keep-1' }), row({ id: 'delete-me' }), row({ id: 'keep-2' })];
-
-    expect(deleteCreatorRow(rows, 'delete-me').map((creator) => creator.id)).toEqual(['keep-1', 'keep-2']);
   });
 
   it('preserves blank manually created rows during localStorage save and restore', () => {
