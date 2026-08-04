@@ -220,6 +220,53 @@ describe("operations workbench navigation and dashboard", () => {
     expect(screen.getByTestId("current-creator-panel")).toBeInTheDocument();
   });
 
+  it("shows and filters Highest work with approved reasons, actions, and ordering", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-05T12:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: "reply", username: "reply_creator", trackingStatus: "Reply Pending", lastCreatorResponse: "Friday works.", sampleShippingStatus: "", sampleDeliveredDate: "" }),
+      creatorRow({ id: "aged-two", username: "aged_two_creator", sampleDeliveredDate: "2026-06-03", videoProgress: "0 of 2" }),
+      creatorRow({ id: "aged-four", username: "aged_four_creator", sampleDeliveredDate: "2026-06-01", videoProgress: "0 of 2" }),
+      creatorRow({ id: "missing-date", username: "missing_date_creator", sampleDeliveredDate: "", videoProgress: "0 of 2" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+
+    expect(screen.getByText(/最高优先级 3/)).toBeInTheDocument();
+    const queueText = screen.getByTestId("creator-queue").textContent ?? "";
+    expect(queueText.indexOf("reply_creator")).toBeLessThan(queueText.indexOf("aged_four_creator"));
+    expect(queueText.indexOf("aged_four_creator")).toBeLessThan(queueText.indexOf("aged_two_creator"));
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("最高");
+
+    await user.selectOptions(screen.getByLabelText("紧急程度"), "Highest");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("reply_creator");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("aged_four_creator");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("aged_two_creator");
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("missing_date_creator");
+
+    await user.selectOptions(screen.getByLabelText("选择达人"), "aged-two");
+    expect(screen.getByText("产品已送达 2 天，视频进度仍为 0/2。")).toBeInTheDocument();
+    expect(screen.getByText("发送拍摄跟进，提醒达人按照达人拍摄要求完成 2 条视频。")).toBeInTheDocument();
+  });
+
+  it("keeps delivered work without a delivery date High and asks for the date", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-05T12:00:00Z"));
+    const user = userEvent.setup();
+    seedCreators([
+      creatorRow({ id: "missing-date", username: "missing_date_creator", sampleDeliveredDate: "", videoProgress: "0 of 9" }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人跟进中心/);
+
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("高");
+    expect(screen.getByText("已送达，但缺少到货日期。")).toBeInTheDocument();
+    expect(screen.getByText("补充到货日期并确认拍摄计划。")).toBeInTheDocument();
+  });
+
 
   it("counts actual over-delivered posted video numerators in dashboard and product overview", async () => {
     const user = userEvent.setup();
@@ -1512,8 +1559,8 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     await goTo(user, /达人跟进中心/);
 
     const selector = screen.getByLabelText("选择达人") as HTMLSelectElement;
-    const firstOption = within(selector).getByRole("option", { name: /@callie\.the\.weenie · 高 · 已发送待回复/ });
-    expect(firstOption).toHaveTextContent("@callie.the.weenie · 高 · 已发送待回复");
+    const firstOption = within(selector).getByRole("option", { name: /@callie\.the\.weenie · 最高 · 已发送待回复/ });
+    expect(firstOption).toHaveTextContent("@callie.the.weenie · 最高 · 已发送待回复");
     expect(firstOption).not.toHaveTextContent(longProduct);
     expect(firstOption).not.toHaveTextContent("发送第一次拍摄跟进");
     expect(firstOption).not.toHaveTextContent(longActionStatus);
@@ -1550,7 +1597,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     await goTo(user, /达人跟进中心/);
 
     expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("优先级原因");
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("达人已回复，需先处理对话。");
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("达人已回复，等待处理。");
   });
 
   it("generates follow-up copy and marks a message as sent", async () => {
@@ -1669,6 +1716,9 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "紧急程度最高",
+    );
     expect(
       screen.getByRole("button", { name: "今日暂不跟进" }),
     ).toBeInTheDocument();
@@ -1699,6 +1749,9 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       "当前筛选下暂无待处理达人。",
     );
     await user.click(screen.getByLabelText("显示今日已处理"));
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "skip_creator",
+    );
     expect(
       within(screen.getByTestId("creator-queue")).getByText(
         /今日已处理 · 今日已跳过 · 达人说周五发布/,
