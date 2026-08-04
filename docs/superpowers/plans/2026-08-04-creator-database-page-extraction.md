@@ -20,6 +20,7 @@
 - Do not remove or skip existing tests; the full suite must contain at least 176 tests.
 - Do not combine bug fixes, copy changes, formatting sweeps, or unused-code cleanup with this extraction.
 - Run verification with Node.js 22. Local Node.js 26 results are not accepted as the required CI signal.
+- Create the controlled component, wire it into `App.tsx`, and remove the old inline JSX before the first task review or commit. No committed intermediate state may contain duplicate page implementations or an unused extracted page.
 
 ---
 
@@ -125,7 +126,7 @@ export type CreatorDatabasePageProps = {
 
 ---
 
-### Task 1: Build the Controlled Page Contract and Focused Component Tests
+### Task 1: Build and Wire the Controlled Creator Database Page
 
 **Files:**
 
@@ -452,18 +453,13 @@ npm test -- src/features/creators/CreatorDatabasePage.test.tsx
 
 Expected: PASS with 3 tests.
 
-- [ ] **Step 8: Commit the isolated controlled component**
+- [ ] **Step 8: Keep the component changes uncommitted and continue directly to App wiring**
 
-```bash
-git add src/features/creators/creatorDatabaseTypes.ts \
-  src/features/creators/CreatorDatabasePage.tsx \
-  src/features/creators/CreatorDatabasePage.test.tsx
-git commit -m "Extract controlled creator database page"
-```
+Run `git status --short` and confirm the three new feature files are present. Do not commit yet: the component must be wired and the old inline JSX removed before the first reviewable commit.
 
 ---
 
-### Task 2: Wire App State and Existing Operations Into the New Page
+#### Task 1 continued: Wire App State and Existing Operations Into the New Page
 
 **Files:**
 
@@ -478,7 +474,7 @@ git commit -m "Extract controlled creator database page"
 - Consumes: `CreatorDatabasePage`, `CreatorDatabaseRowView`, and `CreatorStatusOption` from Task 1.
 - Produces: an `App` render path that supplies the controlled page contract while retaining all state and business operations in `App.tsx`.
 
-- [ ] **Step 1: Add imports without moving any domain helper**
+- [ ] **Step 9: Add imports without moving any domain helper**
 
 Add:
 
@@ -492,7 +488,7 @@ import type {
 
 Keep `getDuplicateCheck`, `downloadCreatorRowsCsv`, `EditableCreatorField`, `DEFAULT_STORE_NAME`, `displayName`, `isArchivedCollaboration`, `buildOutreachForRow`, and persistence functions in their current modules or `App.tsx`.
 
-- [ ] **Step 2: Build stable view data after `filteredRows`**
+- [ ] **Step 10: Build stable view data after `filteredRows`**
 
 Immediately after the existing `filteredRows` memo, add:
 
@@ -525,7 +521,7 @@ const creatorStatusOptions: CreatorStatusOption[] = creatorStatuses.map(
 
 Do not move filtering, inferred status calculation, duplicate detection, or archived matching into the page component.
 
-- [ ] **Step 3: Add narrow adapters for event-free component actions**
+- [ ] **Step 11: Add narrow adapters for event-free component actions**
 
 Keep existing domain operations unchanged. Add these adapters next to the corresponding handlers:
 
@@ -545,7 +541,7 @@ function copyCreatorOutreach(rowId: string) {
 
 Retain `toggleSelected`, `handleBulkStatusUpdate`, `handleBulkCopyOutreach`, `updateRow`, `archiveCreator`, and `restoreCreator` without behavioral edits. Remove the old `toggleSelectAll(event)` only after the new adapter is wired and tests pass.
 
-- [ ] **Step 4: Replace `renderCreatorDatabase` body with the controlled page**
+- [ ] **Step 12: Replace `renderCreatorDatabase` body with the controlled page**
 
 Replace the old inline implementation with:
 
@@ -620,7 +616,7 @@ function renderCreatorDatabase() {
 
 The two duplicate actions intentionally retain the current identical callback behavior. Do not treat that existing behavior as part of this refactor.
 
-- [ ] **Step 5: Run the existing Creator Database integration tests**
+- [ ] **Step 13: Run the existing Creator Database integration tests**
 
 Run:
 
@@ -630,7 +626,7 @@ npm test -- src/App.test.tsx -t "creator database redesigned table"
 
 Expected: all tests in the `creator database redesigned table` describe block PASS without changing assertions.
 
-- [ ] **Step 6: Run archive and historical-count regression tests**
+- [ ] **Step 14: Run archive and historical-count regression tests**
 
 Run:
 
@@ -640,7 +636,7 @@ npm test -- src/App.test.tsx -t "archive|archived|historical|product card totals
 
 Expected: matching archive, restore, historical visibility, and product total tests PASS.
 
-- [ ] **Step 7: Remove only now-unused inline rendering code**
+- [ ] **Step 15: Remove only now-unused inline rendering code**
 
 After Steps 5 and 6 pass:
 
@@ -650,7 +646,7 @@ After Steps 5 and 6 pass:
 - Remove `ChangeEvent` or `ReactNode` from the React import only if `rg "ChangeEvent|ReactNode" src/App.tsx` confirms the symbol is unused elsewhere.
 - Do not remove any other helper based on static graph suggestions.
 
-- [ ] **Step 8: Run type checking and both component/integration tests**
+- [ ] **Step 16: Run type checking and both component/integration tests**
 
 Run:
 
@@ -662,16 +658,19 @@ npm test -- src/App.test.tsx -t "creator database redesigned table"
 
 Expected: type check PASS; focused component tests PASS with 3 tests; Creator Database integration tests PASS.
 
-- [ ] **Step 9: Commit App wiring separately**
+- [ ] **Step 17: Commit the complete extraction as one reviewable unit**
 
 ```bash
-git add src/App.tsx
-git commit -m "Wire creator database page to App state"
+git add src/App.tsx \
+  src/features/creators/creatorDatabaseTypes.ts \
+  src/features/creators/CreatorDatabasePage.tsx \
+  src/features/creators/CreatorDatabasePage.test.tsx
+git commit -m "Extract controlled creator database page"
 ```
 
 ---
 
-### Task 3: Verify Behavior Preservation and Prepare the Pull Request
+### Task 2: Verify Behavior Preservation and Prepare the Pull Request
 
 **Files:**
 
@@ -683,7 +682,7 @@ git commit -m "Wire creator database page to App state"
 
 **Interfaces:**
 
-- Consumes: the complete controlled page and App wiring from Tasks 1 and 2.
+- Consumes: the complete controlled page and App wiring from Task 1.
 - Produces: a review-ready, independently revertible PR that contains no business or persistence change.
 
 - [ ] **Step 1: Confirm the diff contains only the intended extraction**
@@ -752,7 +751,7 @@ git status --short --branch
 git log --oneline main..HEAD
 ```
 
-Expected: clean working tree and exactly the focused extraction commits from Tasks 1 and 2.
+Expected: clean working tree and the single focused extraction commit from Task 1.
 
 Push the branch and create a PR with:
 
