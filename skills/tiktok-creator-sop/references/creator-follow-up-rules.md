@@ -23,26 +23,34 @@ Apply priority rules in this order.
 
 ### Highest Priority
 
-Conditions:
+Highest applies when either:
 
-- Sample shipping status is Delivered.
-- Video progress is `0/2`.
-- Sample delivered date is at least 2 days ago.
+1. The creator has replied and is waiting for operator handling; or
+2. The product is Delivered, normalized video progress is `0/N`, and the delivery date is at least two natural days ago.
 
-Reason: The product sample has already been delivered, but the creator has not posted any video.
+`N` is the current Campaign's positive required-video count. It has no fixed supported list or business upper limit. `Delivered`, 产品送到, and 已签收 have the same operational meaning, and delivery age is measured in natural days rather than exact 48-hour durations.
 
-Suggested action: Send the first filming follow-up and remind the creator to follow the brief.
+Reason: The creator has reopened the conversation, or the delivered product still has no posted video after the approved waiting period.
+
+Suggested action: Handle the creator reply first, or send the first filming follow-up and remind the creator to follow the brief.
+
+Priority precedence:
+
+- Handled-today, archived, completed, and failed records do not enter today's pending queue.
+- A pending creator reply overrides pause notes and future follow-up dates.
+- Without a pending reply, a pause note or future follow-up date suppresses automatic delivered-age Highest.
+- Delivered with a missing or invalid delivery date is High. Show `已送达，但缺少到货日期。` and suggest `补充到货日期并确认拍摄计划。`
 
 ### High Priority
 
 Conditions:
 
-- Video progress is `1/2`.
+- Normalized video progress is `X/N`, where `0 < X < N`.
 - First video posted date is not empty.
 
-Reason: The creator has posted only one video, but the collaboration requires two videos.
+Reason: The creator has posted only part of the required video commitment.
 
-Suggested action: Ask the creator to post the second video.
+Suggested action: Ask the creator to post the remaining required videos.
 
 ### Medium Priority
 
@@ -50,7 +58,7 @@ Conditions:
 
 - Current status is Followed Up.
 - Last contact date is at least 1 day ago.
-- Video progress is not `2/2`.
+- Video progress is incomplete.
 
 Reason: The seller already followed up, but the creator has not replied or completed the collaboration.
 
@@ -72,7 +80,7 @@ Suggested action: Send a light follow-up.
 
 Never automatically mark a creator as Failed. Only suggest “Failed Candidate” when one or more conditions match:
 
-1. Sample shipping status is Delivered, video progress is `0/2`, and sample delivered date is at least 7 days ago.
+1. Sample shipping status is Delivered, video progress is `0/N`, and sample delivered date is at least 7 natural days ago. Keep the task Highest and also show the warning.
 2. Last follow-up count is 2 or more, and the creator still has not replied or completed the collaboration.
 3. Video progress is `1/2`, and first video posted date is at least 5 days ago.
 4. Notes suggest long-time no reply, no filming plan, bad cooperation, or unwillingness to correct the video.

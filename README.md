@@ -114,7 +114,7 @@ The uploaded spreadsheet should include:
 * Last contact date
 * Notes
 
-Video progress can be entered as `0/2`, `1/2`, or `2/2`.
+Video progress uses `X/N`, where `N` is the current Campaign's positive required-video count. `N` is not limited to a fixed list or maximum.
 
 Spreadsheet software may auto-convert values like `1/2` into a date, so users can also use safer formats such as:
 
@@ -138,10 +138,12 @@ The system should generate:
 
 Priority order:
 
-1. Highest: sample delivered but video progress is still 0/2
-2. High: creator posted 1 video but has not posted the second video
+1. Highest: the creator has replied and is waiting for handling, or the product was delivered at least 2 natural days ago and video progress is still `0/N`
+2. High: the creator has posted some but not all required videos, or the product is delivered but its delivery date is missing
 3. Medium: creator was followed up, but has not replied after 1 day
 4. Low: creator was contacted, but has not replied after 2 days
+
+Handled-today, archived, completed, and failed work does not enter today's pending queue. A pending creator reply overrides pause notes and future follow-up dates. Without a pending reply, an explicit pause or future follow-up date suppresses the automatic delivered-age Highest rule.
 
 ---
 
@@ -151,7 +153,7 @@ The system should only suggest failure. The user makes the final decision.
 
 Suggest “Failed Candidate” when:
 
-* Sample was delivered 7 days ago and video progress is still 0/2
+* Sample was delivered 7 days ago and video progress is still `0/N`; the task remains Highest and also shows the warning
 * Creator was followed up twice and still has not replied
 * Creator posted only 1 video and has not posted the second video after 5 days
 * Creator has not replied for a long time and has no clear filming plan
