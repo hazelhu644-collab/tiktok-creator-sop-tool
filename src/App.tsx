@@ -3,7 +3,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type ReactNode,
 } from "react";
 import {
@@ -59,6 +58,11 @@ import type {
   GeneratedMessage,
   Task,
 } from "./types";
+import { CreatorDatabasePage } from "./features/creators/CreatorDatabasePage";
+import type {
+  CreatorDatabaseRowView,
+  CreatorStatusOption,
+} from "./features/creators/creatorDatabaseTypes";
 import "./styles.css";
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = "tiktokCreatorSop.filmingRequirements";
@@ -1318,6 +1322,31 @@ function App() {
     gmvFilter,
   ]);
 
+  const creatorDatabaseRows = useMemo<CreatorDatabaseRowView[]>(
+    () =>
+      filteredRows.map((entry) => {
+        const duplicate = getDuplicateCheck(entry.row, rows);
+        return {
+          row: entry.row,
+          displayName: displayName(entry.row),
+          archived: isArchivedCollaboration(entry.row),
+          canRestore:
+            isArchivedCollaboration(entry.row) &&
+            entry.row.archiveReason === "Manual",
+          duplicate: {
+            possibleDuplicate: duplicate.possibleDuplicate,
+            multiSample: duplicate.multiSample,
+            crossStoreCreator: duplicate.crossStoreCreator,
+          },
+        };
+      }),
+    [filteredRows, rows],
+  );
+
+  const creatorStatusOptions: CreatorStatusOption[] = creatorStatuses.map(
+    (status) => ({ value: status, label: displayStatus(status) }),
+  );
+
   const todayTodo = useMemo(
     () =>
       tasks
@@ -1790,9 +1819,9 @@ function App() {
     );
   }
 
-  function toggleSelectAll(event: ChangeEvent<HTMLInputElement>) {
+  function toggleAllFilteredCreators(checked: boolean) {
     setSelectedIds(
-      event.target.checked ? filteredRows.map((entry) => entry.row.id) : [],
+      checked ? filteredRows.map((entry) => entry.row.id) : [],
     );
   }
 
@@ -1834,6 +1863,12 @@ function App() {
     } catch {
       setToast({ tone: "warning", text: "复制失败，请手动复制。" });
     }
+  }
+
+  function copyCreatorOutreach(rowId: string) {
+    const row = rows.find((candidate) => candidate.id === rowId);
+    if (!row) return;
+    void copyText(buildOutreachForRow(row), "已复制邀约话术。");
   }
 
   function buildOutreachForRow(row: CreatorRow) {
@@ -2688,83 +2723,6 @@ function App() {
     );
   }
 
-  function renderImportCard() {
-    return (
-      <section className="panel compact-panel">
-        <div className="section-heading">
-          <div>
-            <h2>数据导入 / 导出</h2>
-            <p className="muted">
-              支持 Excel / CSV 导入导出，数据保存在当前浏览器。
-            </p>
-          </div>
-          <div className="inline-actions">
-            <label className="file-button">
-              导入 Excel / CSV
-              <input
-                type="file"
-                accept=".csv,.xls,.xlsx"
-                onChange={(event) => void handleFile(event.target.files?.[0])}
-              />
-            </label>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => downloadCreatorRowsCsv(rows)}
-              disabled={rows.length === 0}
-            >
-              导出 CSV
-            </button>
-            <button type="button" onClick={handleAddCreator}>
-              新增达人
-            </button>
-          </div>
-        </div>
-        {fileName && <p className="muted">已加载：{fileName}</p>}
-        {importSummary && <p className="warning-text">{importSummary}</p>}
-        {pendingDuplicateAdd && (
-          <div className="inline-warning duplicate-warning">
-            <strong>该达人已存在。你可以选择：</strong>
-            <span>
-              检测到该达人已存在。请确认这是重复录入，还是同一达人申请了不同样品。
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                addCreatorDraft(
-                  pendingDuplicateAdd.draft,
-                  pendingDuplicateAdd.existing,
-                )
-              }
-            >
-              继续新增为不同样品
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() =>
-                addCreatorDraft(
-                  pendingDuplicateAdd.draft,
-                  pendingDuplicateAdd.existing,
-                )
-              }
-            >
-              复制已有达人基础信息
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setPendingDuplicateAdd(null)}
-            >
-              取消新增
-            </button>
-          </div>
-        )}
-        {error && <p className="error">{error}</p>}
-      </section>
-    );
-  }
-
   function handleLocateCreator() {
     const normalized = followupSearch.trim().toLowerCase();
     if (!normalized) {
@@ -3572,482 +3530,69 @@ function App() {
   }
 
   function renderCreatorDatabase() {
-    const allSelected =
-      filteredRows.length > 0 &&
-      filteredRows.every((entry) => selectedIds.includes(entry.row.id));
     return (
-      <>
-        {renderPageHeader(
-          "达人数据库",
-          "管理达人信息、合作状态、物流状态、视频进度和跟进记录。",
-        )}
-        {renderImportCard()}
-        <section className="panel table-panel">
-          <div className="filters-bar">
-            <label>
-              搜索
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="搜索达人昵称 / 产品 / 状态"
-              />
-            </label>
-            <label>
-              合作状态
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as CreatorStatus | "All")
-                }
-              >
-                <option value="All">全部</option>
-                {creatorStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {displayStatus(status)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              达人类型
-              <select
-                value={creatorTypeFilter}
-                onChange={(event) => setCreatorTypeFilter(event.target.value)}
-              >
-                <option value="All">全部</option>
-                <option>Pet</option>
-                <option>UGC</option>
-                <option>Grooming</option>
-              </select>
-            </label>
-            <label>
-              粉丝量级
-              <select
-                value={followerFilter}
-                onChange={(event) => setFollowerFilter(event.target.value)}
-              >
-                <option value="All">全部</option>
-                <option>K</option>
-                <option>M</option>
-                <option>—</option>
-              </select>
-            </label>
-            <label>
-              平均播放
-              <select
-                value={avgViewsFilter}
-                onChange={(event) => setAvgViewsFilter(event.target.value)}
-              >
-                <option value="All">全部</option>
-                <option>K</option>
-                <option>M</option>
-                <option>—</option>
-              </select>
-            </label>
-            <label>
-              GMV 区间
-              <select
-                value={gmvFilter}
-                onChange={(event) => setGmvFilter(event.target.value)}
-              >
-                <option value="All">全部</option>
-                <option>$</option>
-                <option value="low">低</option>
-                <option value="mid">中</option>
-                <option value="high">高</option>
-                <option>—</option>
-              </select>
-            </label>
-          </div>
-          <label className="checkbox-field">
-            <input
-              aria-label="显示已归档合作"
-              type="checkbox"
-              checked={showArchivedCollaborations}
-              onChange={(event) =>
-                setShowArchivedCollaborations(event.target.checked)
-              }
-            />
-            显示归档达人
-          </label>
-          {!showArchivedCollaborations && archivedProductCount > 0 && (
-            <p className="ai-status">
-              当前显示 active records，已隐藏 {archivedProductCount}{" "}
-              条已归档合作；开启“显示归档达人”可查看和搜索这些历史记录。默认 CSV
-              导出包含所有历史记录。
-            </p>
-          )}
-          <div className="sticky-action-bar">
-            <span>当前产品总记录：{productTotalCount}</span>
-            <span>当前显示：{filteredRows.length}</span>
-            <span>已选择：{selectedIds.length}</span>
-            <span>已归档合作：{archivedProductCount}</span>
-            <button
-              type="button"
-              className="secondary"
-              onClick={handleBulkCopyOutreach}
-              disabled={selectedIds.length === 0}
-            >
-              批量复制邀约话术
-            </button>
-            <select
-              value={bulkStatus}
-              onChange={(event) =>
-                setBulkStatus(event.target.value as CreatorStatus)
-              }
-            >
-              {creatorStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {displayStatus(status)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleBulkStatusUpdate}
-              disabled={selectedIds.length === 0}
-            >
-              批量更新状态
-            </button>
-          </div>
-          {filteredRows.length === 0 ? (
-            <div className="empty-state">
-              <strong>
-                {archivedSearchMatches.length > 0
-                  ? "该达人存在于已归档合作中，可开启显示已归档合作查看。"
-                  : "没有匹配的达人。"}
-              </strong>
-              <span>下一步：清空筛选、导入 CSV / Excel，或点击 新增达人。</span>
-            </div>
-          ) : (
-            <div className="table-wrap spreadsheet-wrap">
-              <table className="ops-table spreadsheet-table">
-                <thead>
-                  <tr>
-                    <th>
-                      <input
-                        aria-label="全选达人"
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={toggleSelectAll}
-                      />
-                    </th>
-                    <th>达人账号</th>
-                    <th>主页链接</th>
-                    <th>联系渠道</th>
-                    <th>店铺 / 品牌</th>
-                    <th>产品</th>
-                    <th>合作状态</th>
-                    <th>样品到货日期</th>
-                    <th>视频进度</th>
-                    <th>首条视频发布日期</th>
-                    <th>最近联系日期</th>
-                    <th>跟进次数</th>
-                    <th>跟进状态</th>
-                    <th>最近沟通动作</th>
-                    <th>最近沟通渠道</th>
-                    <th>下次跟进日期</th>
-                    <th>达人回复</th>
-                    <th>达人备注</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((entry) => (
-                    <tr key={entry.row.id}>
-                      <td>
-                        <input
-                          aria-label={`选择 ${displayName(entry.row)}`}
-                          type="checkbox"
-                          checked={selectedIds.includes(entry.row.id)}
-                          onChange={() => toggleSelected(entry.row.id)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="达人账号"
-                          value={entry.row.username}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "username",
-                              event.target.value,
-                            )
-                          }
-                        />
-                        {isArchivedCollaboration(entry.row) && <span className="mini-badge">已归档</span>}
-                        {getDuplicateCheck(entry.row, rows).multiSample && (
-                          <span className="mini-badge">同店铺多样品</span>
-                        )}
-                        {getDuplicateCheck(entry.row, rows)
-                          .crossStoreCreator && (
-                          <span className="mini-badge">跨店铺达人</span>
-                        )}
-                        {getDuplicateCheck(entry.row, rows)
-                          .possibleDuplicate && (
-                          <small className="warning-text">
-                            该达人在当前店铺的同一产品项目下可能已重复录入，建议检查是否需要合并。
-                          </small>
-                        )}
-                      </td>
-                      <td>
-                        <input
-                          aria-label="主页链接"
-                          value={entry.row.profileLink}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "profileLink",
-                              event.target.value,
-                            )
-                          }
-                          placeholder="@账号或主页链接"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="联系渠道"
-                          value={entry.row.contactMethod}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "contactMethod",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="店铺 / 品牌"
-                          value={entry.row.storeName || DEFAULT_STORE_NAME}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "storeName",
-                              event.target.value,
-                            )
-                          }
-                        />
-                        {getDuplicateCheck(entry.row, rows)
-                          .crossStoreCreator && (
-                          <span className="mini-badge">跨店铺达人</span>
-                        )}
-                      </td>
-                      <td>
-                        <input
-                          aria-label="产品名称"
-                          value={entry.row.product}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "product",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="合作状态"
-                          value={entry.row.currentStatus}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "currentStatus",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="样品到货日期"
-                          type="date"
-                          value={entry.row.sampleDeliveredDate}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "sampleDeliveredDate",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="视频进度"
-                          value={entry.row.videoProgress}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "videoProgress",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="首条视频发布日期"
-                          type="date"
-                          value={entry.row.firstVideoPostedDate}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "firstVideoPostedDate",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="最近联系日期"
-                          type="date"
-                          value={entry.row.lastContactDate}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "lastContactDate",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="跟进次数"
-                          type="number"
-                          min="0"
-                          value={entry.row.lastFollowUpCount}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "lastFollowUpCount",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="跟进状态"
-                          value={entry.row.trackingStatus ?? ""}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "trackingStatus",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="最近沟通动作"
-                          value={entry.row.lastMessageScenario ?? ""}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "lastMessageScenario",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="最近沟通渠道"
-                          value={entry.row.lastMessageChannel ?? ""}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "lastMessageChannel",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label="下次跟进日期"
-                          type="date"
-                          value={entry.row.nextFollowUpDate ?? ""}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "nextFollowUpDate",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <textarea
-                          aria-label="达人回复"
-                          value={entry.row.lastCreatorResponse ?? ""}
-                          onChange={(event) =>
-                            updateRow(
-                              entry.row.id,
-                              "lastCreatorResponse",
-                              event.target.value,
-                            )
-                          }
-                          rows={1}
-                        />
-                      </td>
-                      <td>
-                        <textarea
-                          aria-label="达人备注"
-                          value={entry.row.notes}
-                          onChange={(event) =>
-                            updateRow(entry.row.id, "notes", event.target.value)
-                          }
-                          rows={1}
-                        />
-                      </td>
-                      <td className="row-actions">
-                        <button
-                          type="button"
-                          className="secondary compact-button"
-                          onClick={() =>
-                            void copyText(
-                              buildOutreachForRow(entry.row),
-                              "已复制邀约话术。",
-                            )
-                          }
-                        >
-                          复制英文话术
-                        </button>
-                        <button
-                          type="button"
-                          className={`${isArchivedCollaboration(entry.row) ? "" : "danger "}secondary compact-button`}
-                          onClick={() =>
-                            isArchivedCollaboration(entry.row)
-                              ? restoreCreator(entry.row.id)
-                              : archiveCreator(entry.row.id)
-                          }
-                          disabled={
-                            isArchivedCollaboration(entry.row) &&
-                            entry.row.archiveReason !== "Manual"
-                          }
-                        >
-                          {isArchivedCollaboration(entry.row)
-                            ? entry.row.archiveReason === "Manual"
-                              ? "恢复达人"
-                              : "已归档"
-                            : "归档达人"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </>
+      <CreatorDatabasePage
+        data={{
+          rows: creatorDatabaseRows,
+          statusOptions: creatorStatusOptions,
+          productTotalCount,
+          archivedProductCount,
+          archivedSearchMatchCount: archivedSearchMatches.length,
+          defaultStoreName: DEFAULT_STORE_NAME,
+        }}
+        uiState={{
+          search,
+          statusFilter,
+          creatorTypeFilter,
+          followerFilter,
+          avgViewsFilter,
+          gmvFilter,
+          selectedIds,
+          showArchivedCollaborations,
+          bulkStatus,
+          fileName,
+          importSummary,
+          error,
+          pendingDuplicate: pendingDuplicateAdd,
+        }}
+        actions={{
+          setSearch,
+          setStatusFilter: (value) =>
+            setStatusFilter(value as CreatorStatus | "All"),
+          setCreatorTypeFilter,
+          setFollowerFilter,
+          setAvgViewsFilter,
+          setGmvFilter,
+          setShowArchivedCollaborations,
+          setBulkStatus: (value) => setBulkStatus(value as CreatorStatus),
+          toggleSelected,
+          toggleSelectAll: toggleAllFilteredCreators,
+          updateRow,
+          bulkCopyOutreach: handleBulkCopyOutreach,
+          bulkUpdateStatus: handleBulkStatusUpdate,
+          copyOutreach: copyCreatorOutreach,
+          archiveCreator,
+          restoreCreator,
+          importFile: (file) => handleFile(file),
+          exportCsv: () => downloadCreatorRowsCsv(rows),
+          addCreator: handleAddCreator,
+          continueDuplicate: () => {
+            if (!pendingDuplicateAdd) return;
+            addCreatorDraft(
+              pendingDuplicateAdd.draft,
+              pendingDuplicateAdd.existing,
+            );
+          },
+          copyDuplicateBase: () => {
+            if (!pendingDuplicateAdd) return;
+            addCreatorDraft(
+              pendingDuplicateAdd.draft,
+              pendingDuplicateAdd.existing,
+            );
+          },
+          cancelDuplicate: () => setPendingDuplicateAdd(null),
+        }}
+      />
     );
   }
 
