@@ -300,6 +300,42 @@ describe('MVP SOP rules', () => {
     expect(tasks.find((task) => task.id === 'invited')).toMatchObject({ priority: 'Medium' });
   });
 
+  it('sorts Highest replies first, then older delivery, follow-up count, and username', () => {
+    const tasks = analyzeCreators([
+      row({ id: 'delivery-b', username: 'bravo', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastFollowUpCount: 1 }),
+      row({ id: 'reply-z', username: 'zulu', trackingStatus: 'Reply Pending', lastCreatorResponse: 'Reply' }),
+      row({ id: 'delivery-a', username: 'alpha', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastFollowUpCount: 1 }),
+      row({ id: 'reply-a', username: 'alpha-reply', trackingStatus: 'Reply Pending', lastCreatorResponse: 'Reply' }),
+      row({ id: 'delivery-followups', username: 'charlie', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastFollowUpCount: 3 }),
+      row({ id: 'delivery-newer', username: 'newer', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-02', lastFollowUpCount: 9 }),
+    ], today, 2);
+
+    expect(tasks.map((task) => task.id)).toEqual([
+      'reply-a',
+      'reply-z',
+      'delivery-followups',
+      'delivery-a',
+      'delivery-b',
+      'delivery-newer',
+    ]);
+  });
+
+  it('keeps seven-day zero-progress work Highest and separately warns Failed Candidate', () => {
+    const [task] = analyzeCreators([
+      row({
+        currentStatus: 'Delivered / Waiting for Video',
+        sampleShippingStatus: 'Delivered',
+        sampleDeliveredDate: '2026-05-28',
+        videoProgress: '0/13',
+      }),
+    ], today, 13);
+
+    expect(task.priority).toBe('Highest');
+    expect(task.failedWarnings[0]).toContain('样品已到货 8 天');
+    expect(task.currentStatus).toBe('Delivered / Waiting for Video');
+    expect(buildSummary([task])).toMatchObject({ highest: 1, high: 0 });
+  });
+
   it('lowers processed, skipped, pause-note, and future-follow-up creators', () => {
     const tasks = analyzeCreators([
       row({ id: 'processed', username: 'processed', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastHandledDate: '2026-06-05' }),

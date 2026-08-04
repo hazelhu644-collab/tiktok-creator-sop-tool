@@ -425,16 +425,45 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
   };
 }
 
+export function compareTasks(a: Task, b: Task, today = new Date()): number {
+  const stageOrder = a.stageRank - b.stageRank;
+  if (stageOrder !== 0) return stageOrder;
+
+  const priorityOrder = a.priorityRank - b.priorityRank;
+  if (priorityOrder !== 0) return priorityOrder;
+
+  if (a.priority === 'Highest' && b.priority === 'Highest') {
+    if (a.stageRank === 2 && b.stageRank === 2) {
+      const aDeliveredDays = daysSince(a.sampleDeliveredDate, today) ?? -1;
+      const bDeliveredDays = daysSince(b.sampleDeliveredDate, today) ?? -1;
+      const deliveredOrder = bDeliveredDays - aDeliveredDays;
+      if (deliveredOrder !== 0) return deliveredOrder;
+
+      const followUpOrder = b.lastFollowUpCount - a.lastFollowUpCount;
+      if (followUpOrder !== 0) return followUpOrder;
+    }
+    return a.username.localeCompare(b.username);
+  }
+
+  if (a.stageRank === 5 && b.stageRank === 5) {
+    const arrivalOrder =
+      (arrivalDateDeltaDays(a.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY)
+      - (arrivalDateDeltaDays(b.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY);
+    if (arrivalOrder !== 0) return arrivalOrder;
+  }
+
+  return (daysSince(b.lastContactDate, today) ?? -1)
+      - (daysSince(a.lastContactDate, today) ?? -1)
+    || b.lastFollowUpCount - a.lastFollowUpCount
+    || (parseDate(a.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
+      - (parseDate(b.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
+    || a.username.localeCompare(b.username);
+}
+
 export function analyzeCreators(rows: CreatorRow[], today = new Date(), requiredVideos = DEFAULT_REQUIRED_VIDEOS): Task[] {
   return rows
     .map((row) => analyzeCreator(row, today, requiredVideos))
-    .sort((a, b) => a.stageRank - b.stageRank
-      || a.priorityRank - b.priorityRank
-      || (a.stageRank === 5 && b.stageRank === 5 ? (arrivalDateDeltaDays(a.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY) - (arrivalDateDeltaDays(b.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY) : 0)
-      || (daysSince(b.lastContactDate, today) ?? -1) - (daysSince(a.lastContactDate, today) ?? -1)
-      || b.lastFollowUpCount - a.lastFollowUpCount
-      || (parseDate(a.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY) - (parseDate(b.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
-      || a.username.localeCompare(b.username));
+    .sort((a, b) => compareTasks(a, b, today));
 }
 
 export function buildSummary(tasks: Task[]): Summary {
