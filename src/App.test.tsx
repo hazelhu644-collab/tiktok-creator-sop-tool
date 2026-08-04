@@ -255,6 +255,90 @@ describe("operations workbench navigation and dashboard", () => {
     expect(campaignCards.some((card) => card.textContent?.includes("已发布视频 7"))).toBe(true);
   });
 
+  it("keeps historical cumulative published videos aligned between Dashboard, Campaign, and drill-down", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "history-campaign",
+        productName: "History Product",
+        sellingPoints: "",
+        requirements: ["每位达人 2 条视频"],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "每位达人 2 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      creatorRow({
+        id: "history-active",
+        username: "history_active_creator",
+        product: "History Product",
+        campaignId: "history-campaign",
+        videoProgress: "1/2",
+        currentStatus: "Posted",
+      }),
+      creatorRow({
+        id: "history-completed",
+        username: "history_completed_creator",
+        product: "History Product",
+        campaignId: "history-campaign",
+        videoProgress: "2/2",
+        currentStatus: "Completed",
+        trackingStatus: "合作完成",
+        archivedAt: "2026-06-10",
+        archiveReason: "Completed",
+      }),
+      creatorRow({
+        id: "history-failed",
+        username: "history_failed_creator",
+        product: "History Product",
+        campaignId: "history-campaign",
+        videoProgress: "0/2",
+        currentStatus: "Lost",
+        trackingStatus: "合作失败",
+        archivedAt: "2026-06-10",
+        archiveReason: "Failed",
+      }),
+    ]);
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: /已发布视频数量3/ })).toBeInTheDocument();
+    const campaignCard = screen.getByRole("button", { name: /History Product3 位达人/ });
+    expect(campaignCard).toHaveTextContent("已发布视频 3");
+
+    await user.click(screen.getByRole("button", { name: /已发布视频数量3/ }));
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_active_creator");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_completed_creator");
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("history_failed_creator");
+    await user.click(screen.getByRole("button", { name: "生成话术" }));
+    const historicalPanel = await screen.findByTestId("reply-handling-panel");
+    [
+      "标记为已发送",
+      "标记达人已回复",
+      "标记未回复",
+      "发布 1 条视频",
+      "手动更新视频进度",
+      "合作完成",
+      "合作失败",
+      "今日暂不跟进",
+    ].forEach((name) =>
+      expect(within(historicalPanel).getByRole("button", { name })).toBeDisabled(),
+    );
+
+    await user.click(screen.getByRole("button", { name: /合作完成数量1/ }));
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_completed_creator");
+
+    await user.click(screen.getByRole("button", { name: /合作失败数量1/ }));
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_failed_creator");
+  });
+
   it.each([
     ["2/1", "two_of_one"],
     ["3/2", "three_of_two"],
@@ -685,7 +769,8 @@ describe("creator database redesigned table", () => {
     );
   });
 
-  it("adds and deletes creators from the redesigned database page", async () => {
+  it("adds and archives creators from the redesigned database page", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
     seedCreators([creatorRow({ id: "alpha", username: "alpha_creator" })]);
     vi.spyOn(window, "prompt").mockReturnValueOnce("").mockReturnValueOnce("智能宠物饮水机");
@@ -696,12 +781,50 @@ describe("creator database redesigned table", () => {
 
     expect(screen.getAllByLabelText("达人账号")).toHaveLength(2);
 
-    await user.click(screen.getAllByRole("button", { name: "删除达人" })[0]);
+    const alphaRow = screen.getByDisplayValue("alpha_creator").closest("tr");
+    expect(alphaRow).not.toBeNull();
+    await user.click(within(alphaRow as HTMLElement).getByRole("button", { name: "归档达人" }));
     await waitFor(() => {
       const saved = JSON.parse(
         window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
       ) as CreatorRow[];
-      expect(saved).toHaveLength(1);
+      expect(saved).toHaveLength(2);
+      expect(saved.find((row) => row.id === "alpha")).toMatchObject({
+        archivedAt: "2026-06-11",
+        archiveReason: "Manual",
+        nextFollowUpDate: "",
+      });
+      const history = saved.find((row) => row.id === "alpha")?.followUpHistory ?? [];
+      expect(history[history.length - 1]).toMatchObject({
+        date: "2026-06-11",
+        action: "Archived",
+        note: "从达人数据库手动归档。",
+      });
+    });
+    expect(screen.queryByDisplayValue("alpha_creator")).not.toBeInTheDocument();
+
+    const archiveToggles = screen.getAllByLabelText("显示已归档合作");
+    await user.click(archiveToggles[archiveToggles.length - 1]);
+    const archivedAlphaRow = screen.getByDisplayValue("alpha_creator").closest("tr");
+    expect(archivedAlphaRow).not.toBeNull();
+    await user.click(
+      within(archivedAlphaRow as HTMLElement).getByRole("button", {
+        name: "恢复达人",
+      }),
+    );
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      const restored = saved.find((row) => row.id === "alpha");
+      expect(restored?.archivedAt).toBeUndefined();
+      expect(restored?.archiveReason).toBeUndefined();
+      const history = restored?.followUpHistory ?? [];
+      expect(history[history.length - 1]).toMatchObject({
+        date: "2026-06-11",
+        action: "Restored",
+        note: "从达人数据库恢复到 active workflow。",
+      });
     });
   });
 
@@ -1002,6 +1125,101 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       });
     });
     expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
+  });
+
+  it("uses the row per-campaign video requirement when editing progress in the database", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "database-one-video",
+        productName: "Database One Video Product",
+        sellingPoints: "",
+        requirements: ["每位达人 1 条视频"],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "每位达人 1 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      creatorRow({
+        id: "database-one-video-row",
+        username: "database_one_video_creator",
+        product: "Database One Video Product",
+        campaignId: "database-one-video",
+        videoProgress: "0/1",
+        nextFollowUpDate: "2026-06-20",
+      }),
+    ]);
+
+    render(<App />);
+    await goTo(user, /达人数据库/);
+    fireEvent.change(screen.getByDisplayValue("0/1"), { target: { value: "1/1" } });
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved[0]).toMatchObject({
+        videoProgress: "1/1",
+        currentStatus: "合作完成",
+        trackingStatus: "合作完成",
+        nextFollowUpDate: "",
+      });
+    });
+  });
+
+  it("uses the row per-campaign video requirement for manual workbench progress", async () => {
+    vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
+    const user = userEvent.setup();
+    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
+      {
+        id: "manual-one-video",
+        productName: "Manual One Video Product",
+        sellingPoints: "",
+        requirements: ["每位达人 1 条视频"],
+        keyContentPoints: [],
+        avoidShots: "",
+        videoCount: "每位达人 1 条视频",
+        videoLength: "",
+        tagRequirement: "必须挂 TikTok Shop 产品链接",
+        productLink: "",
+        referenceLinks: [],
+        defaultMessageSetting: "",
+        notes: "",
+      },
+    ]));
+    seedCreators([
+      creatorRow({
+        id: "manual-one-video-row",
+        username: "manual_one_video_creator",
+        product: "Manual One Video Product",
+        campaignId: "manual-one-video",
+        videoProgress: "0/1",
+        nextFollowUpDate: "2026-06-20",
+      }),
+    ]);
+    vi.spyOn(window, "prompt")
+      .mockReturnValueOnce("1/1")
+      .mockReturnValueOnce("2026-06-11")
+      .mockReturnValueOnce("2026-06-11")
+      .mockReturnValueOnce("Campaign complete");
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "手动更新视频进度" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      expect(saved[0]).toMatchObject({
+        videoProgress: "1/1",
+        currentStatus: "合作完成",
+        trackingStatus: "合作完成",
+        nextFollowUpDate: "",
+      });
+    });
   });
 
   it("allows manual progress to preserve a valid 2/1 actual published count", async () => {
