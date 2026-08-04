@@ -12,7 +12,6 @@ import {
   copyCreatorBaseFields,
   countActiveCreatorSamples,
   createBlankCreatorRow,
-  deleteCreatorRow,
   downloadCreatorRowsCsv,
   getDuplicateCheck,
   normalizeCreatorRowStore,
@@ -100,7 +99,7 @@ type WorkbenchFilterKey =
   | "follow_up_today"
   | "processed_today"
   | "delivered_waiting_video"
-  | "remaining_video"
+  | "published_video"
   | "posted_this_week"
   | "completed"
   | "failed"
@@ -814,19 +813,17 @@ function App() {
     () => parseRequiredVideos(activeFilmingRequirements),
     [activeFilmingRequirements],
   );
-  const visibleRows = useMemo(
+  const scopedRows = useMemo(
     () =>
       selectedCampaign === "ALL"
         ? rows.filter(
             (row) =>
               rowMatchesStore(row, selectedStore) &&
-              (showArchivedCollaborations || !isArchivedCollaboration(row)) &&
               (showArchivedProducts || !campaignForRow(row)?.archivedAt),
           )
         : rows.filter((row) =>
             activeCampaign
-              ? rowMatchesCampaign(row, activeCampaign) &&
-                (showArchivedCollaborations || !isArchivedCollaboration(row))
+              ? rowMatchesCampaign(row, activeCampaign)
               : false,
           ),
     [
@@ -834,10 +831,17 @@ function App() {
       selectedStore,
       selectedCampaign,
       activeCampaign,
-      showArchivedCollaborations,
       showArchivedProducts,
       mergedCampaigns,
     ],
+  );
+  const visibleRows = useMemo(
+    () =>
+      scopedRows.filter(
+        (row) =>
+          showArchivedCollaborations || !isArchivedCollaboration(row),
+      ),
+    [scopedRows, showArchivedCollaborations],
   );
   const dailyQueueRows = useMemo(
     () =>
@@ -858,6 +862,18 @@ function App() {
         ),
     [dailyQueueRows, mergedCampaigns, activeFilmingRequirements],
   );
+  const historicalTasks = useMemo(
+    () =>
+      scopedRows.flatMap((row) =>
+        analyzeCreators([row], undefined, requiredVideosForRow(row)),
+      ),
+    [scopedRows, mergedCampaigns, activeFilmingRequirements],
+  );
+  const usesHistoricalTaskSource =
+    workbenchFilter?.key === "published_video" ||
+    workbenchFilter?.key === "completed" ||
+    workbenchFilter?.key === "failed";
+  const workbenchTasks = usesHistoricalTaskSource ? historicalTasks : tasks;
   const tasksById = useMemo(
     () => new Map(tasks.map((task) => [task.id, task])),
     [tasks],
@@ -892,12 +908,8 @@ function App() {
           isSampleDeliveredForVideo(task, taskRequiredVideos) &&
           (progress.postedCount ?? 0) === 0
         );
-      case "remaining_video":
-        return (
-          (progress.postedCount ?? 0) > 0 &&
-          (progress.postedCount ?? 0) <
-            (progress.requiredVideos ?? taskRequiredVideos)
-        );
+      case "published_video":
+        return (progress.postedCount ?? 0) > 0;
       case "posted_this_week":
         return (
           isCurrentWeek(task.firstVideoPostedDate) ||
@@ -955,7 +967,7 @@ function App() {
 
   const filteredTasks = useMemo(() => {
     const normalized = followupSearch.trim().toLowerCase();
-    return tasks
+    return workbenchTasks
       .filter((task) => {
         const urgencyLabel =
           task.priority === "High"
@@ -979,7 +991,9 @@ function App() {
           .join(" ")
           .toLowerCase();
         return (
-          (showProcessedToday || !isHandledToday(task)) &&
+          (showProcessedToday ||
+            usesHistoricalTaskSource ||
+            !isHandledToday(task)) &&
           (!workbenchFilter ||
             matchesWorkbenchFilter(task, workbenchFilter.key)) &&
           (followupUrgency === "All" || task.priority === followupUrgency) &&
@@ -990,17 +1004,18 @@ function App() {
         (a, b) => a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
       );
   }, [
-    tasks,
+    workbenchTasks,
     followupSearch,
     followupUrgency,
     workbenchFilter,
     requiredVideos,
     tasksById,
     showProcessedToday,
+    usesHistoricalTaskSource,
   ]);
   const selectedTask =
     (selectedCreatorId &&
-      tasks.find((task) => task.id === selectedCreatorId)) ||
+      workbenchTasks.find((task) => task.id === selectedCreatorId)) ||
     filteredTasks[0];
   const selectedTemplateCreator =
     visibleRows.find((row) => row.id === templateCreatorId) ??
@@ -1055,7 +1070,7 @@ function App() {
     setDeepSeekRecommendedTrackingStatus("");
     setIsTranslationEditing(false);
     setMessageSource("local");
-    const selected = tasks.find((task) => task.id === creatorId);
+    const selected = workbenchTasks.find((task) => task.id === creatorId);
     setMessage(selected ? buildLocalMessageForTask(selected) : null);
     scrollToCurrentCreator();
   }
@@ -1212,26 +1227,7 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const databaseRows = useMemo(
-    () =>
-      selectedCampaign === "ALL"
-        ? rows.filter(
-            (row) =>
-              rowMatchesStore(row, selectedStore) &&
-              (showArchivedProducts || !campaignForRow(row)?.archivedAt),
-          )
-        : rows.filter((row) =>
-            activeCampaign ? rowMatchesCampaign(row, activeCampaign) : false,
-          ),
-    [
-      rows,
-      selectedStore,
-      selectedCampaign,
-      activeCampaign,
-      showArchivedProducts,
-      mergedCampaigns,
-    ],
-  );
+  const databaseRows = scopedRows;
   const productTotalCount = databaseRows.length;
   const archivedProductCount = databaseRows.filter(
     isArchivedCollaboration,
@@ -1362,12 +1358,12 @@ function App() {
       isSampleDeliveredForVideo(entry.row, rowRequiredVideos) && posted === 0
     );
   }).length;
-  const postedVideoCount = enrichedRows.reduce(
-    (sum, entry) =>
+  const postedVideoCount = scopedRows.reduce(
+    (sum, row) =>
       sum +
       videoProgressCounts(
-        entry.row,
-        requiredVideosForRow(entry.row),
+        row,
+        requiredVideosForRow(row),
       ).posted,
     0,
   );
@@ -1404,7 +1400,7 @@ function App() {
     {
       label: "已发布视频数量",
       value: postedVideoCount,
-      filterKey: "remaining_video",
+      filterKey: "published_video",
     },
     {
       label: "本周发布数量",
@@ -1431,7 +1427,10 @@ function App() {
     {
       label: "样品运输中数量",
       value: activeEnrichedRows.filter((entry) =>
-        isSampleInTransitForDaily(entry.row, requiredVideos),
+        isSampleInTransitForDaily(
+          entry.row,
+          requiredVideosForRow(entry.row),
+        ),
       ).length,
       filterKey: "sample_shipped",
     },
@@ -1474,7 +1473,13 @@ function App() {
     setRows((currentRows) =>
       currentRows.map((row) => {
         if (row.id !== rowId) return row;
-        let updated = updateCreatorField(row, field, value, requiredVideos);
+        const rowRequiredVideos = requiredVideosForRow(row);
+        let updated = updateCreatorField(
+          row,
+          field,
+          value,
+          rowRequiredVideos,
+        );
         if (field === "storeName") {
           const storeName = normalizeStoreName(value);
           const storeId = normalizeStoreId(undefined, storeName);
@@ -1522,7 +1527,7 @@ function App() {
           );
           const progress = normalizeVideoProgress(
             row.videoProgress,
-            requiredVideos,
+            rowRequiredVideos,
           );
           if ((progress.postedCount ?? 0) === 0) {
             updated = {
@@ -1569,6 +1574,56 @@ function App() {
     setMessageSource("local");
   }
 
+  function archiveCreator(rowId: string) {
+    const today = todayString();
+    setRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              archivedAt: today,
+              archiveReason: "Manual",
+              nextFollowUpDate: "",
+              followUpHistory: [
+                ...(row.followUpHistory ?? []),
+                {
+                  date: today,
+                  action: "Archived",
+                  note: "从达人数据库手动归档。",
+                },
+              ],
+            }
+          : row,
+      ),
+    );
+    setSelectedIds((current) => current.filter((id) => id !== rowId));
+    setToast({ tone: "success", text: "达人合作已归档，历史记录仍会保留。" });
+  }
+
+  function restoreCreator(rowId: string) {
+    const today = todayString();
+    setRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              archivedAt: undefined,
+              archiveReason: undefined,
+              followUpHistory: [
+                ...(row.followUpHistory ?? []),
+                {
+                  date: today,
+                  action: "Restored",
+                  note: "从达人数据库恢复到 active workflow。",
+                },
+              ],
+            }
+          : row,
+      ),
+    );
+    setToast({ tone: "success", text: "达人合作已恢复到 active workflow。" });
+  }
+
   function handleDashboardCardClick(card: (typeof dashboardCards)[number]) {
     setActiveModule("dashboard");
     setWorkbenchFilter({ key: card.filterKey, label: card.label });
@@ -1577,7 +1632,13 @@ function App() {
     setShowProcessedToday(card.filterKey === "processed_today");
     setOnlyCurrentCreator(false);
     setIsQueueExpanded(true);
-    const firstMatch = tasks.find((task) =>
+    const cardTaskSource =
+      card.filterKey === "published_video" ||
+      card.filterKey === "completed" ||
+      card.filterKey === "failed"
+        ? historicalTasks
+        : tasks;
+    const firstMatch = cardTaskSource.find((task) =>
       matchesWorkbenchFilter(task, card.filterKey),
     );
     setSelectedCreatorId(firstMatch?.id ?? "");
@@ -2212,10 +2273,11 @@ function App() {
 
   function handleManualVideoProgressUpdate() {
     if (!selectedTask) return;
+    const selectedRequiredVideos = requiredVideosForRow(selectedTask);
     const progress = window.prompt(
       "视频进度：可填 0/1、1/1、0/2、1/2 或自定义",
       selectedTask.videoProgress ||
-        `0/${parseRequiredVideos(selectedTaskCampaignRequirements(selectedTask))}`,
+        `0/${selectedRequiredVideos}`,
     );
     if (progress === null) return;
     const firstDate = window.prompt(
@@ -2231,6 +2293,10 @@ function App() {
     const note =
       window.prompt("视频进度备注（可留空）", "手动更新视频进度。") ?? "";
     const today = todayString();
+    const normalizedProgress = normalizeVideoProgress(
+      progress,
+      selectedRequiredVideos,
+    );
     setRows((currentRows) =>
       currentRows.map((row) => {
         if (row.id !== selectedTask.id) return row;
@@ -2238,7 +2304,7 @@ function App() {
           row,
           "videoProgress",
           progress,
-          requiredVideos,
+          selectedRequiredVideos,
         );
         return {
           ...updated,
@@ -2246,7 +2312,8 @@ function App() {
           latestVideoPostedDate: latestDate,
           lastHandledDate: today,
           nextFollowUpDate:
-            normalizeVideoProgress(progress, requiredVideos).postedCount === 2
+            typeof normalizedProgress.postedCount === "number" &&
+            normalizedProgress.postedCount >= selectedRequiredVideos
               ? ""
               : row.nextFollowUpDate,
           followUpHistory: [
@@ -2738,6 +2805,10 @@ function App() {
     const selectedStatus = selectedTask
       ? inferStatus(selectedTask, requiredVideosForRow(selectedTask))
       : "Not Contacted";
+    const isHistoricalReadOnly = Boolean(
+      selectedTask &&
+        (usesHistoricalTaskSource || isArchivedCollaboration(selectedTask)),
+    );
 
     return (
       <>
@@ -2962,6 +3033,11 @@ function App() {
                   <p className="muted">
                     先确认状态，再生成 / 复制英文话术，发送后回到工具标记。
                   </p>
+                  {isHistoricalReadOnly && (
+                    <p className="ai-status">
+                      当前为历史统计下钻，只读展示；如需继续合作，请先恢复达人。
+                    </p>
+                  )}
                 </div>
                 {nextTask && (
                   <button
@@ -3147,6 +3223,7 @@ function App() {
                     处理备注 / 达人备注
                     <textarea
                       value={selectedTask.notes}
+                      disabled={isHistoricalReadOnly}
                       onChange={(event) =>
                         updateRow(selectedTask.id, "notes", event.target.value)
                       }
@@ -3386,13 +3463,18 @@ function App() {
                         >
                           复制英文话术
                         </button>
-                        <button type="button" onClick={handleMarkMessageSent}>
+                        <button
+                          type="button"
+                          onClick={handleMarkMessageSent}
+                          disabled={isHistoricalReadOnly}
+                        >
                           标记为已发送
                         </button>
                         <button
                           type="button"
                           className="secondary"
                           onClick={handleMarkCreatorReplied}
+                          disabled={isHistoricalReadOnly}
                         >
                           标记达人已回复
                         </button>
@@ -3400,6 +3482,7 @@ function App() {
                           type="button"
                           className="secondary"
                           onClick={markCreatorNoReply}
+                          disabled={isHistoricalReadOnly}
                         >
                           标记未回复
                         </button>
@@ -3407,6 +3490,7 @@ function App() {
                           type="button"
                           className="secondary"
                           onClick={markVideoProgress}
+                          disabled={isHistoricalReadOnly}
                         >
                           发布 1 条视频
                         </button>
@@ -3417,6 +3501,7 @@ function App() {
                               type="button"
                               className="secondary"
                               onClick={handleManualVideoProgressUpdate}
+                              disabled={isHistoricalReadOnly}
                             >
                               手动更新视频进度
                             </button>
@@ -3424,6 +3509,7 @@ function App() {
                               type="button"
                               className="secondary"
                               onClick={() => markCreatorOutcome("Completed")}
+                              disabled={isHistoricalReadOnly}
                             >
                               合作完成
                             </button>
@@ -3431,6 +3517,7 @@ function App() {
                               type="button"
                               className="danger secondary"
                               onClick={() => markCreatorOutcome("Failed")}
+                              disabled={isHistoricalReadOnly}
                             >
                               合作失败
                             </button>
@@ -3442,6 +3529,7 @@ function App() {
                           type="button"
                           className="secondary"
                           onClick={markCreatorSkippedToday}
+                          disabled={isHistoricalReadOnly}
                         >
                           今日暂不跟进
                         </button>
@@ -3934,14 +4022,22 @@ function App() {
                         </button>
                         <button
                           type="button"
-                          className="danger secondary compact-button"
+                          className={`${isArchivedCollaboration(entry.row) ? "" : "danger "}secondary compact-button`}
                           onClick={() =>
-                            setRows((currentRows) =>
-                              deleteCreatorRow(currentRows, entry.row.id),
-                            )
+                            isArchivedCollaboration(entry.row)
+                              ? restoreCreator(entry.row.id)
+                              : archiveCreator(entry.row.id)
+                          }
+                          disabled={
+                            isArchivedCollaboration(entry.row) &&
+                            entry.row.archiveReason !== "Manual"
                           }
                         >
-                          删除达人
+                          {isArchivedCollaboration(entry.row)
+                            ? entry.row.archiveReason === "Manual"
+                              ? "恢复达人"
+                              : "已归档"
+                            : "归档达人"}
                         </button>
                       </td>
                     </tr>
@@ -4188,7 +4284,7 @@ function App() {
                     <td>{parseNumberFromNotes(row.notes, ["shipped date"])}</td>
                     <td>{row.sampleDeliveredDate || "—"}</td>
                     <td>{daysDelivered(row) ?? "—"}</td>
-                    <td>{sampleHint(row, requiredVideos)}</td>
+                    <td>{sampleHint(row, requiredVideosForRow(row))}</td>
                   </tr>
                 ))}
               </tbody>
