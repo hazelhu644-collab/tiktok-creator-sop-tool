@@ -22,6 +22,7 @@ import {
 import { parseCreatorFile } from "./fileParser";
 import {
   analyzeCreators,
+  compareTasks,
   daysSince,
   isDeliveredLogisticsStatus,
   isInTransitLogisticsStatus,
@@ -284,11 +285,13 @@ function displayStatus(status: CreatorStatus): string {
 }
 
 function priorityLabel(task: Task): string {
-  return task.priority === "High"
-    ? "高"
-    : task.priority === "Medium"
-      ? "中"
-      : "低";
+  return task.priority === "Highest"
+    ? "最高"
+    : task.priority === "High"
+      ? "高"
+      : task.priority === "Medium"
+        ? "中"
+        : "低";
 }
 
 function compactCreatorLabel(task: Task): string {
@@ -301,6 +304,7 @@ function queueStatusLabelText(task: Task): string {
     return "今日已处理";
   if (task.priority === "Low" && task.triggerReason.includes("暂不催"))
     return "暂不催";
+  if (task.priority === "Highest") return "必须处理";
   if (task.priority === "High") return "待跟进";
   if (task.priority === "Medium") return "轻跟进";
   return "稍后复查";
@@ -678,7 +682,7 @@ function App() {
   const [templateCreatorId, setTemplateCreatorId] = useState("");
   const [followupSearch, setFollowupSearch] = useState("");
   const [followupUrgency, setFollowupUrgency] = useState<
-    "All" | "High" | "Medium" | "Low"
+    "All" | "Highest" | "High" | "Medium" | "Low"
   >("All");
   const [replyFocus, setReplyFocus] = useState("");
   const [replyRelationshipNote, setReplyRelationshipNote] = useState("");
@@ -868,8 +872,7 @@ function App() {
           analyzeCreators([row], undefined, requiredVideosForRow(row)),
         )
         .sort(
-          (a, b) =>
-            a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
+          (a, b) => compareTasks(a, b),
         ),
     [dailyQueueRows, mergedCampaigns, activeFilmingRequirements],
   );
@@ -885,6 +888,9 @@ function App() {
     workbenchFilter?.key === "completed" ||
     workbenchFilter?.key === "failed";
   const workbenchTasks = usesHistoricalTaskSource ? historicalTasks : tasks;
+  const highestPendingCount = workbenchTasks.filter(
+    (task) => task.priority === "Highest" && !isHandledToday(task),
+  ).length;
   const tasksById = useMemo(
     () => new Map(tasks.map((task) => [task.id, task])),
     [tasks],
@@ -981,11 +987,13 @@ function App() {
     return workbenchTasks
       .filter((task) => {
         const urgencyLabel =
-          task.priority === "High"
-            ? "高"
-            : task.priority === "Medium"
-              ? "中"
-              : "低";
+          task.priority === "Highest"
+            ? "最高"
+            : task.priority === "High"
+              ? "高"
+              : task.priority === "Medium"
+                ? "中"
+                : "低";
         const haystack = [
           task.username,
           task.profileLink,
@@ -1012,7 +1020,7 @@ function App() {
         );
       })
       .sort(
-        (a, b) => a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
+        (a, b) => compareTasks(a, b),
       );
   }, [
     workbenchTasks,
@@ -2819,6 +2827,7 @@ function App() {
                 」过滤{workbenchFilter ? ` · ${workbenchFilter.label}` : ""}
                 。选择达人后会自动收起长队列，直接进入处理区。
               </p>
+              <p className="muted">最高优先级 {highestPendingCount}</p>
             </div>
             <div className="inline-actions">
               <button
@@ -2893,6 +2902,7 @@ function App() {
                 }
               >
                 <option value="All">全部</option>
+                <option value="Highest">最高</option>
                 <option value="High">高</option>
                 <option value="Medium">中</option>
                 <option value="Low">低</option>

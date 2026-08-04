@@ -1,7 +1,7 @@
 import type { CreatorRow, Priority, Summary, Task, VideoProgressNormalization } from './types';
 
 export const PRIORITY_RANK: Record<Priority, number> = {
-  Highest: 1,
+  Highest: 0,
   High: 1,
   Medium: 3,
   Low: 4,
@@ -251,6 +251,7 @@ function isHandledToday(row: CreatorRow, today: Date): boolean {
 
 function hasPauseNote(row: CreatorRow): boolean {
   return includesAny(normalizeText(row.notes), [
+    '暂不催',
     '不要每天催',
     '周五后再跟进',
     '等她恢复',
@@ -346,26 +347,30 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
     priority = 'Low';
     triggerReason = '合作已失败或归档，默认低优先级复盘。';
     suggestedAction = '合作失败归档。';
+  } else if (hasPendingCreatorReply) {
+    priority = 'Highest';
+    triggerReason = '达人已回复，等待处理。';
+    suggestedAction = '生成「回复达人消息」话术，基于达人回复内容给出下一步回应。';
   } else if ((pauseNote || futureFollowUp) && !dueFollowUp && !isShippedOrInTransit(row)) {
     priority = 'Low';
     triggerReason = pauseNote ? '备注显示暂不催，已降低优先级。' : '下次跟进日期未到，暂不进入今日高优先级。';
     suggestedAction = '按备注或下次跟进日期复查。';
-  } else if (hasPendingCreatorReply) {
-    priority = 'High';
-    triggerReason = '达人已回复，需先处理对话。';
-    suggestedAction = '生成「回复达人消息」话术，基于达人回复内容给出下一步回应。';
   } else if (hasPostedAnyVideo && isIncomplete) {
     priority = 'High';
     triggerReason = `已发布 ${progress.postedCount} 条，剩余 ${missingVideos ?? 1} 条待履约。`;
     suggestedAction = missingVideos === null ? '提醒达人确认剩余视频发布计划。' : `提醒达人继续发布剩余 ${missingVideos} 条视频。`;
   } else if (hasDeliveredEvidence(row) && progress.postedCount === 0) {
-    if (deliveredDays !== null && deliveredDays >= 3) {
+    if (deliveredDays === null) {
       priority = 'High';
-      triggerReason = '样品已签收但仍未发布视频。';
+      triggerReason = '已送达，但缺少到货日期。';
+      suggestedAction = '补充到货日期并确认拍摄计划。';
+    } else if (deliveredDays >= 2) {
+      priority = 'Highest';
+      triggerReason = `产品已送达 ${deliveredDays} 天，视频进度仍为 0/${requiredVideos}。`;
       suggestedAction = `发送拍摄跟进，提醒达人按照达人拍摄要求完成 ${requiredVideos} 条视频。`;
     } else {
       priority = 'High';
-      triggerReason = '样品近期签收，需确认拍摄计划。';
+      triggerReason = '产品近期送达，需确认拍摄计划。';
       suggestedAction = '轻提醒达人确认收货和预计发布时间。';
     }
   } else if (row.lastFollowUpCount >= 2 && deliveredOrDeliverable && isIncomplete) {
@@ -420,23 +425,52 @@ export function analyzeCreator(row: CreatorRow, today = new Date(), requiredVide
   };
 }
 
+export function compareTasks(a: Task, b: Task, today = new Date()): number {
+  const stageOrder = a.stageRank - b.stageRank;
+  if (stageOrder !== 0) return stageOrder;
+
+  const priorityOrder = a.priorityRank - b.priorityRank;
+  if (priorityOrder !== 0) return priorityOrder;
+
+  if (a.priority === 'Highest' && b.priority === 'Highest') {
+    if (a.stageRank === 2 && b.stageRank === 2) {
+      const aDeliveredDays = daysSince(a.sampleDeliveredDate, today) ?? -1;
+      const bDeliveredDays = daysSince(b.sampleDeliveredDate, today) ?? -1;
+      const deliveredOrder = bDeliveredDays - aDeliveredDays;
+      if (deliveredOrder !== 0) return deliveredOrder;
+
+      const followUpOrder = b.lastFollowUpCount - a.lastFollowUpCount;
+      if (followUpOrder !== 0) return followUpOrder;
+    }
+    return a.username.localeCompare(b.username);
+  }
+
+  if (a.stageRank === 5 && b.stageRank === 5) {
+    const arrivalOrder =
+      (arrivalDateDeltaDays(a.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY)
+      - (arrivalDateDeltaDays(b.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY);
+    if (arrivalOrder !== 0) return arrivalOrder;
+  }
+
+  return (daysSince(b.lastContactDate, today) ?? -1)
+      - (daysSince(a.lastContactDate, today) ?? -1)
+    || b.lastFollowUpCount - a.lastFollowUpCount
+    || (parseDate(a.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
+      - (parseDate(b.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
+    || a.username.localeCompare(b.username);
+}
+
 export function analyzeCreators(rows: CreatorRow[], today = new Date(), requiredVideos = DEFAULT_REQUIRED_VIDEOS): Task[] {
   return rows
     .map((row) => analyzeCreator(row, today, requiredVideos))
-    .sort((a, b) => a.stageRank - b.stageRank
-      || a.priorityRank - b.priorityRank
-      || (a.stageRank === 5 && b.stageRank === 5 ? (arrivalDateDeltaDays(a.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY) - (arrivalDateDeltaDays(b.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY) : 0)
-      || (daysSince(b.lastContactDate, today) ?? -1) - (daysSince(a.lastContactDate, today) ?? -1)
-      || b.lastFollowUpCount - a.lastFollowUpCount
-      || (parseDate(a.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY) - (parseDate(b.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
-      || a.username.localeCompare(b.username));
+    .sort((a, b) => compareTasks(a, b, today));
 }
 
 export function buildSummary(tasks: Task[]): Summary {
   return {
     totalCreators: tasks.length,
     needsFollowUp: tasks.filter((task) => task.needsFollowUp).length,
-    highest: 0,
+    highest: tasks.filter((task) => task.priority === 'Highest').length,
     high: tasks.filter((task) => task.priority === 'High').length,
     medium: tasks.filter((task) => task.priority === 'Medium').length,
     low: tasks.filter((task) => task.priority === 'Low').length,

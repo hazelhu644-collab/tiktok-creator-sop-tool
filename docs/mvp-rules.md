@@ -49,13 +49,12 @@ Use these status options:
 
 ## Video Progress Format
 
-Video progress should use this format:
+Video progress should use `X/N`, where `N` is the current Campaign's positive required-video count.
 
-* 0/2
-* 1/2
-* 2/2
-
-For the first MVP, assume every creator should deliver 2 videos.
+* `N` may be any positive integer, without a fixed supported list or business upper limit.
+* `0/N` means no required videos have been posted.
+* `0 < X < N` means partial completion.
+* `X >= N` means complete; over-delivery remains recorded and is not capped.
 
 ## Priority Rules
 
@@ -63,34 +62,42 @@ The system should calculate task priority in this order:
 
 ### Highest Priority
 
-Condition:
+Highest applies when either:
 
-* Sample shipping status is Delivered
-* Video progress is 0/2
-* Sample delivered date is at least 2 days ago
+1. The creator has replied and is waiting for operator handling; or
+2. The product is Delivered, normalized video progress is `0/N`, and the delivery date is at least two natural days ago.
+
+`Delivered`, 产品送到, and 已签收 have the same operational meaning. Calendar-day differences are used; the system does not require an exact 48-hour duration.
 
 Reason:
 
-The product sample has already been delivered, but the creator has not posted any video.
+The creator has reopened the conversation, or the delivered product still has no posted video after the approved waiting period.
 
 Suggested action:
 
-Send first filming follow-up and remind the creator to follow the brief.
+Handle the creator reply first, or send the first filming follow-up and remind the creator to follow the brief.
+
+### Priority Precedence
+
+* Handled-today, archived, completed, and failed records do not enter today's pending queue.
+* A pending creator reply overrides pause notes and future follow-up dates.
+* Without a pending reply, a pause note or future follow-up date suppresses automatic delivered-age Highest.
+* Delivered with a missing or invalid delivery date is High. Show `已送达，但缺少到货日期。` and suggest `补充到货日期并确认拍摄计划。`
 
 ### High Priority
 
 Condition:
 
-* Video progress is 1/2
+* Normalized video progress is `X/N`, where `0 < X < N`
 * First video posted date is not empty
 
 Reason:
 
-The creator has posted only one video, but the collaboration requires two videos.
+The creator has posted only part of the required video commitment.
 
 Suggested action:
 
-Ask the creator to post the second video.
+Ask the creator to post the remaining required videos.
 
 ### Medium Priority
 
@@ -98,7 +105,7 @@ Condition:
 
 * Current status is Followed Up
 * Last contact date is at least 1 day ago
-* Video progress is not 2/2
+* Video progress is incomplete
 
 Reason:
 
@@ -132,7 +139,7 @@ It should only suggest “Failed Candidate” when one of these conditions is me
 
 ### Rule 1
 
-Sample shipping status is Delivered, video progress is 0/2, and sample delivered date is at least 7 days ago.
+Sample shipping status is Delivered, video progress is `0/N`, and sample delivered date is at least 7 natural days ago. The task remains Highest while also showing the Failed Candidate warning.
 
 ### Rule 2
 
