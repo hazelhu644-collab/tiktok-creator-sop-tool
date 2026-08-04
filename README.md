@@ -16,8 +16,9 @@ Built with ChatGPT + Codex for creator collaboration operations.
 * AI-assisted creator message generation
 * SOP-based collaboration status management
 * Multi-stage creator pipeline
-* Demo Mode with fake data
-* Local/free mode without required API keys
+* Local creator workflow and message generation without required API keys
+* Optional DeepSeek integration for creator reply translation and personalized replies
+* Optional OpenAI integration for filming-requirement drafts
 
 ---
 
@@ -87,16 +88,21 @@ Content priority:
 
 ## Creator Status Options
 
-* To Contact
-* Contacted
-* In Communication / No Reply
-* Sample Pending
-* In Transit
-* Delivered / Waiting for Video
-* Followed Up
-* Posted 1 Video / Waiting for 2nd Video
+* Not Contacted
+* Invited
+* Replied
+* Sample Requested
+* Sample Approved
+* Sample Shipped
+* Delivered
+* Waiting Video
+* Posted
+* Need Revision
+* Product Tag Missing
+* Ready for Ads
+* Spark Ads Requested
 * Completed
-* Failed
+* Lost
 
 ---
 
@@ -229,10 +235,11 @@ Please use it in your own GitHub, Vercel, and browser environment. Do not reuse 
 
 ### 2. Use Local / Free Mode by Default
 
-* This tool can run in local/free mode without any paid API.
-* Uploaded and test data is stored in your browser `localStorage`.
+* API keys are optional. The app's core local features remain available without DeepSeek or OpenAI configuration.
+* Local features include Excel / CSV import and export, browser-based creator data management, daily task analysis, status tracking, and local message templates.
+* Uploaded data and local settings are stored in the current browser's `localStorage`.
 * `localStorage` data does not automatically sync to GitHub, Vercel, or other user accounts.
-* To reset local data, clear browser site data or use the in-app reset function if available.
+* To reset local data, clear browser site data or use the available in-app reset controls.
 
 ### 3. Deploy to Your Own Vercel
 
@@ -245,27 +252,31 @@ Please use it in your own GitHub, Vercel, and browser environment. Do not reuse 
 
 ### 4. Optional API Environment Variables
 
-API usage is optional. Local/free message generation works without an API key.
-
-If you want to enable DeepSeek API, configure your own key in `.env.local` or Vercel environment variables:
+Both API integrations are optional. Configure only the services you want to use in `.env.local` or your Vercel environment variables:
 
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
 DEEPSEEK_MODEL=deepseek-chat
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-4o-mini
 ```
 
-Notes:
+API responsibilities:
 
-* `DEEPSEEK_API_KEY`: your own DeepSeek API key.
-* `DEEPSEEK_MODEL`: optional model name. If unsure, use `deepseek-chat`.
-* Without an API key, the app can still use local/free mode for testing and basic message generation.
+* DeepSeek translates creator replies into Chinese and generates personalized creator-facing English replies.
+* OpenAI generates filming-requirement drafts through the filming-requirements API endpoint.
+* Without either API key, local spreadsheet processing, creator management, task analysis, status tracking, and local message generation remain available.
+* Never commit real API keys to the repository.
 
-### 5. Demo Mode
+The current Settings-page ChatGPT helper produces a copyable prompt and does not directly call the OpenAI endpoint yet.
 
-* Use **Demo Mode** for testing and demos.
-* Demo Mode uses fake data.
-* Demo data is safe for screenshots, testing, and public walkthroughs.
-* Demo Mode does not expose real creator data.
+### 5. Public Demo Safety
+
+Safe Demo Mode has not been merged into the current `main` branch.
+
+Do not import real creator data, private collaboration records, production spreadsheets, or real credentials when using the app for public demonstrations, screenshots, or shared walkthroughs.
+
+Until a dedicated safe demo mode is implemented, use manually prepared fake data in a separate browser profile or isolated deployment.
 
 ---
 
@@ -275,18 +286,33 @@ Notes:
 * Do not commit `.env`, `.env.local`, `.env.production`, or other environment files.
 * Do not commit API keys, tokens, passwords, cookies, or private credentials.
 * Do not share production `localStorage` data, because it may contain real creator workflow information.
-* Demo data is fake and safe for testing.
+* The current `main` branch does not provide an isolated safe demo mode.
+* Do not use real creator data in public or shared demonstrations.
 
 ---
 
 ## Roadmap
 
+### Implemented
+
+* Excel / CSV creator data import and export
+* Browser-local creator and campaign data storage
+* Daily task analysis and follow-up queues
+* Creator database search, filtering, status management, and archiving
+* Local creator message templates and follow-up message generation
+* Optional DeepSeek reply translation and personalized reply generation
+* OpenAI-backed filming-requirements draft API endpoint
+* Content review workflow and ad-ready asset tracking
+* Multi-store and multi-product campaign configuration
+
+### Planned
+
+* Safe Demo Mode with isolated fake data
+* Direct in-app OpenAI filming-requirements draft generation
 * Browser automation support
 * TikTok Shop workflow integration
-* Creator CRM dashboard
 * Campaign performance tracking
-* Multi-product collaboration templates
-* Team collaboration mode
+* Team collaboration features
 
 ---
 

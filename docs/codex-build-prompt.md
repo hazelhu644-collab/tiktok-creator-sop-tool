@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **Historical document — early MVP build prompt**
+>
+> This document records the original MVP construction brief. It is retained for historical context and does not represent the current product specification, implemented feature set, or configuration.
+>
+> See [`README.md`](../README.md) for the current features, limitations, and optional DeepSeek and OpenAI configuration.
+
 # Codex Build Prompt
 
 Build a lightweight deployable web MVP for the project: TikTok Creator SOP Tool.

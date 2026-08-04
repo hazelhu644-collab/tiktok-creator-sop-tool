@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **Historical MVP rules**
+>
+> These rules document an earlier MVP design and are retained for historical reference. Actual runtime behavior is defined by [`src/sopRules.ts`](../src/sopRules.ts) and the current automated tests.
+>
+> Do not treat this file as the authoritative specification for current business rules.
+
 # MVP Logic Rules
 
 ## Goal
