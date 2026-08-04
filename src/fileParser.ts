@@ -1,8 +1,8 @@
 import type { CreatorRow } from './types';
 import { normalizeText, normalizeVideoProgress } from './sopRules';
-import { DEFAULT_STORE_NAME, normalizeStoreId, normalizeStoreName, campaignIdFromName } from './campaignData';
+import { DEFAULT_STORE_NAME, normalizeStoreId, normalizeStoreName, campaignIdFromName, productIdForCampaign } from './campaignData';
 
-const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'storeId' | 'campaignId' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory' | 'archivedAt' | 'archiveReason'>, string[]> = {
+const COLUMN_ALIASES: Record<keyof Omit<CreatorRow, 'id' | 'storeId' | 'campaignId' | 'productId' | 'lastFollowUpCount' | 'videoProgressWarning' | 'followUpHistory' | 'archivedAt' | 'archiveReason'>, string[]> = {
   username: ['creator username', 'username', 'creator', 'creator handle', '达人账号'],
   profileLink: ['creator profile link', 'profile link', 'creator link', 'profile', '主页链接'],
   contactMethod: ['contact method', 'contact', 'channel', '联系渠道'],
@@ -44,16 +44,19 @@ export function normalizeRecord(record: Record<string, unknown>, index: number, 
   const lastMessageSentAt = pickValue(record, COLUMN_ALIASES.lastMessageSentAt);
   const lastContactDate = pickValue(record, COLUMN_ALIASES.lastContactDate) || lastMessageSentAt;
   const storeName = normalizeStoreName(pickValue(record, COLUMN_ALIASES.storeName) || fallbackStoreName);
+  const storeId = normalizeStoreId(undefined, storeName);
   const product = pickValue(record, COLUMN_ALIASES.product);
+  const campaignId = campaignIdFromName(product);
 
   return {
     id: `${index}-${pickValue(record, COLUMN_ALIASES.username) || 'creator'}`,
     username: pickValue(record, COLUMN_ALIASES.username) || `Creator ${index + 1}`,
     profileLink: pickValue(record, COLUMN_ALIASES.profileLink),
     contactMethod: pickValue(record, COLUMN_ALIASES.contactMethod),
-    storeId: normalizeStoreId(undefined, storeName),
+    storeId,
     storeName,
-    campaignId: campaignIdFromName(product),
+    campaignId,
+    productId: productIdForCampaign(storeId, campaignId),
     product,
     currentStatus: pickValue(record, COLUMN_ALIASES.currentStatus),
     sampleShippingStatus: pickValue(record, COLUMN_ALIASES.sampleShippingStatus),

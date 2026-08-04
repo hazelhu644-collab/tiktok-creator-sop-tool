@@ -47,6 +47,8 @@ import {
   createCampaignFromName,
   loadCampaigns,
   mergeDetectedCampaigns,
+  productIdForCampaign,
+  rowMatchesCampaignIdentity,
   saveCampaigns,
   normalizeStoreId,
   normalizeStoreName,
@@ -329,10 +331,6 @@ function campaignRequiredVideoCount(
   );
 }
 
-function normalizedProductKey(value: string): string {
-  return value.trim().toLowerCase();
-}
-
 function campaignOptionValue(campaign: Campaign): string {
   return campaignIdentity(
     normalizeStoreId(campaign.storeId, campaign.storeName),
@@ -340,16 +338,8 @@ function campaignOptionValue(campaign: Campaign): string {
   );
 }
 
-function campaignSelectValue(
-  campaign: Campaign,
-  campaigns: Campaign[],
-): string {
-  const sameProduct = campaigns.filter(
-    (item) => item.productName === campaign.productName,
-  );
-  return sameProduct.length === 1
-    ? campaign.productName
-    : campaignOptionValue(campaign);
+function campaignSelectValue(campaign: Campaign): string {
+  return campaignOptionValue(campaign);
 }
 
 function campaignLabel(campaign: Campaign, showStore = true): string {
@@ -367,13 +357,7 @@ function rowMatchesStore(row: CreatorRow, selectedStore: string): boolean {
 }
 
 function rowMatchesCampaign(row: CreatorRow, campaign: Campaign): boolean {
-  if (rowStoreId(row) !== campaign.storeId) return false;
-  const rowCampaignId = row.campaignId;
-  if (rowCampaignId && rowCampaignId === campaign.id) return true;
-  return (
-    normalizedProductKey(row.product) ===
-    normalizedProductKey(campaign.productName)
-  );
+  return rowMatchesCampaignIdentity(row, campaign);
 }
 
 function hasAny(value: string, terms: string[]) {
@@ -447,6 +431,11 @@ function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
   )
     return "Product Tag Missing";
   if (hasAny(status, ["revision", "revise", "修改"])) return "Need Revision";
+  if (
+    typeof progress.postedCount === "number" &&
+    progress.postedCount >= requiredVideos
+  )
+    return "Completed";
   if ((progress.postedCount ?? 0) > 0 || hasAny(status, ["posted"]))
     return "Posted";
   if (hasAny(status, ["waiting video", "waiting for video"]))
@@ -808,12 +797,15 @@ function App() {
       : (activeCampaigns.find(
           (campaign) => campaignOptionValue(campaign) === selectedCampaign,
         ) ??
-        activeCampaigns.find(
-          (campaign) => campaign.productName === selectedCampaign,
-        ) ??
         mergedCampaigns.find(
           (campaign) => campaignOptionValue(campaign) === selectedCampaign,
         ));
+  const selectedCampaignName =
+    selectedCampaign === "ALL"
+      ? "全部产品"
+      : activeCampaign
+        ? campaignLabel(activeCampaign, showStoreLabels)
+        : "产品项目不可用";
   const activeFilmingRequirements = useMemo(
     () => campaignToFilmingRequirements(activeCampaign, filmingRequirements),
     [activeCampaign, filmingRequirements],
@@ -850,13 +842,21 @@ function App() {
   const dailyQueueRows = useMemo(
     () =>
       visibleRows.filter((row) =>
-        isActiveDailyCollaboration(row, requiredVideosForProduct(row.product)),
+        isActiveDailyCollaboration(row, requiredVideosForRow(row)),
       ),
     [visibleRows, mergedCampaigns, activeFilmingRequirements],
   );
   const tasks = useMemo(
-    () => analyzeCreators(dailyQueueRows, undefined, requiredVideos),
-    [dailyQueueRows, requiredVideos],
+    () =>
+      dailyQueueRows
+        .flatMap((row) =>
+          analyzeCreators([row], undefined, requiredVideosForRow(row)),
+        )
+        .sort(
+          (a, b) =>
+            a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
+        ),
+    [dailyQueueRows, mergedCampaigns, activeFilmingRequirements],
   );
   const tasksById = useMemo(
     () => new Map(tasks.map((task) => [task.id, task])),
@@ -870,9 +870,13 @@ function App() {
     [rows],
   );
   const matchesWorkbenchFilter = (task: Task, key: WorkbenchFilterKey) => {
-    const status = inferStatus(task, requiredVideos);
+    const taskRequiredVideos = requiredVideosForRow(task);
+    const status = inferStatus(task, taskRequiredVideos);
     const taskMeta = tasksById.get(task.id);
-    const progress = normalizeVideoProgress(task.videoProgress, requiredVideos);
+    const progress = normalizeVideoProgress(
+      task.videoProgress,
+      taskRequiredVideos,
+    );
     switch (key) {
       case "follow_up_today":
         return (
@@ -882,17 +886,17 @@ function App() {
       case "processed_today":
         return isHandledToday(task);
       case "sample_shipped":
-        return isSampleInTransitForDaily(task, requiredVideos);
+        return isSampleInTransitForDaily(task, taskRequiredVideos);
       case "delivered_waiting_video":
         return (
-          isSampleDeliveredForVideo(task, requiredVideos) &&
+          isSampleDeliveredForVideo(task, taskRequiredVideos) &&
           (progress.postedCount ?? 0) === 0
         );
       case "remaining_video":
         return (
           (progress.postedCount ?? 0) > 0 &&
           (progress.postedCount ?? 0) <
-            (progress.requiredVideos ?? requiredVideos)
+            (progress.requiredVideos ?? taskRequiredVideos)
         );
       case "posted_this_week":
         return (
@@ -1135,8 +1139,7 @@ function App() {
       selectedCampaign !== "ALL" &&
       !activeCampaigns.some(
         (campaign) =>
-          campaignOptionValue(campaign) === selectedCampaign ||
-          campaign.productName === selectedCampaign,
+          campaignOptionValue(campaign) === selectedCampaign,
       )
     ) {
       setSelectedCampaign("ALL");
@@ -1246,7 +1249,7 @@ function App() {
       databaseVisibleRows.map((row) => ({
         row,
         task: tasksById.get(row.id),
-        status: inferStatus(row, requiredVideosForProduct(row.product)),
+        status: inferStatus(row, requiredVideosForRow(row)),
         creatorType: creatorType(row),
         followers: followerCount(row),
         avgViews: avgViews(row),
@@ -1326,15 +1329,16 @@ function App() {
           (task) =>
             task.needsFollowUp ||
             task.failedWarnings.length > 0 ||
-            inferStatus(task, requiredVideos) === "Product Tag Missing" ||
-            inferStatus(task, requiredVideos) === "Ready for Ads",
+            inferStatus(task, requiredVideosForRow(task)) ===
+              "Product Tag Missing" ||
+            inferStatus(task, requiredVideosForRow(task)) === "Ready for Ads",
         )
         .sort(
           (a, b) =>
             a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
         )
         .slice(0, 12),
-    [tasks, requiredVideos],
+    [tasks, mergedCampaigns, activeFilmingRequirements],
   );
 
   const processedTodayCount = tasks.filter((task) =>
@@ -1347,23 +1351,23 @@ function App() {
   const activeEnrichedRows = enrichedRows.filter((entry) =>
     isActiveDailyCollaboration(
       entry.row,
-      requiredVideosForProduct(entry.row.product),
+      requiredVideosForRow(entry.row),
     ),
   );
 
   const deliveredWaitingVideoCount = activeEnrichedRows.filter((entry) => {
-    const rowRequiredVideos = requiredVideosForProduct(entry.row.product);
+    const rowRequiredVideos = requiredVideosForRow(entry.row);
     const { posted } = videoProgressCounts(entry.row, rowRequiredVideos);
     return (
       isSampleDeliveredForVideo(entry.row, rowRequiredVideos) && posted === 0
     );
   }).length;
-  const postedVideoCount = activeEnrichedRows.reduce(
+  const postedVideoCount = enrichedRows.reduce(
     (sum, entry) =>
       sum +
       videoProgressCounts(
         entry.row,
-        requiredVideosForProduct(entry.row.product),
+        requiredVideosForRow(entry.row),
       ).posted,
     0,
   );
@@ -1411,7 +1415,7 @@ function App() {
       label: "合作完成数量",
       value: databaseRows.filter(
         (row) =>
-          inferStatus(row, requiredVideosForProduct(row.product)) ===
+          inferStatus(row, requiredVideosForRow(row)) ===
           "Completed",
       ).length,
       filterKey: "completed",
@@ -1420,7 +1424,7 @@ function App() {
       label: "合作失败数量",
       value: databaseRows.filter(
         (row) =>
-          inferStatus(row, requiredVideosForProduct(row.product)) === "Lost",
+          inferStatus(row, requiredVideosForRow(row)) === "Lost",
       ).length,
       filterKey: "failed",
     },
@@ -1473,18 +1477,46 @@ function App() {
         let updated = updateCreatorField(row, field, value, requiredVideos);
         if (field === "storeName") {
           const storeName = normalizeStoreName(value);
+          const storeId = normalizeStoreId(undefined, storeName);
+          const matchedCampaign = mergedCampaigns.find(
+            (campaign) =>
+              normalizeStoreId(campaign.storeId, campaign.storeName) ===
+                storeId && campaign.productName === updated.product,
+          );
+          const campaignId =
+            matchedCampaign?.id ?? campaignIdFromName(updated.product);
           updated = {
             ...updated,
             storeName,
-            storeId: normalizeStoreId(undefined, storeName),
+            storeId,
+            campaignId,
+            productId:
+              matchedCampaign?.productId ??
+              productIdForCampaign(storeId, campaignId),
           };
         }
         if (field === "product") {
+          const storeId = normalizeStoreId(
+            updated.storeId,
+            updated.storeName,
+          );
+          const matchedCampaign = mergedCampaigns.find(
+            (campaign) =>
+              normalizeStoreId(campaign.storeId, campaign.storeName) ===
+                storeId && campaign.productName === value,
+          );
+          const campaignId =
+            matchedCampaign?.id ?? campaignIdFromName(value);
+          updated = {
+            ...updated,
+            campaignId,
+            productId:
+              matchedCampaign?.productId ??
+              productIdForCampaign(storeId, campaignId),
+          };
           const newRequirement = parseRequiredVideos(
             campaignToFilmingRequirements(
-              mergedCampaigns.find((campaign) =>
-                rowMatchesCampaign({ ...updated, product: value }, campaign),
-              ),
+              matchedCampaign,
               filmingRequirements,
             ),
           );
@@ -1656,9 +1688,14 @@ function App() {
         productRequirement,
         storeId,
         storeName,
+        matchedCampaign?.id ?? campaignIdFromName(productName),
+        matchedCampaign?.productId ??
+          productIdForCampaign(
+            storeId,
+            matchedCampaign?.id ?? campaignIdFromName(productName),
+          ),
       ),
       username: creatorName,
-      campaignId: matchedCampaign?.id ?? campaignIdFromName(productName),
     };
     const duplicate = getDuplicateCheck(draft, rows);
     if (creatorName && duplicate.duplicateCreator && duplicate.matchingRows[0]) {
@@ -1858,33 +1895,10 @@ function App() {
   }
 
   function campaignForRow(
-    row: Pick<CreatorRow, "storeId" | "storeName" | "product" | "campaignId">,
+    row: Pick<CreatorRow, "storeId" | "storeName" | "product" | "campaignId" | "productId">,
   ): Campaign | undefined {
-    const storeId = normalizeStoreId(row.storeId, row.storeName);
-    return mergedCampaigns.find(
-      (campaign) =>
-        campaign.storeId === storeId &&
-        ((row.campaignId && campaign.id === row.campaignId) ||
-          campaign.productName === row.product),
-    );
-  }
-
-  function campaignForProduct(product: string): Campaign | undefined {
-    return mergedCampaigns.find(
-      (campaign) =>
-        (selectedStore === ALL_STORES ||
-          normalizeStoreId(campaign.storeId, campaign.storeName) ===
-            selectedStore) &&
-        campaign.productName === product,
-    );
-  }
-
-  function requiredVideosForProduct(product: string): number {
-    return parseRequiredVideos(
-      campaignToFilmingRequirements(
-        campaignForProduct(product),
-        activeFilmingRequirements,
-      ),
+    return mergedCampaigns.find((campaign) =>
+      rowMatchesCampaignIdentity(row, campaign),
     );
   }
 
@@ -1972,7 +1986,8 @@ function App() {
       productLinkRequirement: requirements.productLinkRequirement,
       referenceVideoLinks: requirements.referenceVideoLinks,
       currentStatus:
-        task.currentStatus || displayStatus(inferStatus(task, requiredVideos)),
+        task.currentStatus ||
+        displayStatus(inferStatus(task, requiredVideosForRow(task))),
       campaignContext: buildCampaignContext(task),
       chineseUnderstanding: deepSeekChineseTranslation,
     };
@@ -2051,7 +2066,7 @@ function App() {
           ? {
               ...row,
               currentStatus:
-                inferStatus(row, requiredVideos) === "Not Contacted"
+                inferStatus(row, requiredVideosForRow(row)) === "Not Contacted"
                   ? "Invited"
                   : row.currentStatus,
               lastContactDate: today,
@@ -2458,7 +2473,7 @@ function App() {
             {activeCampaigns.map((campaign) => (
               <option
                 key={campaignOptionValue(campaign)}
-                value={campaignSelectValue(campaign, activeCampaigns)}
+                value={campaignSelectValue(campaign)}
               >
                 {campaignLabel(campaign, showStoreLabels)}
                 {campaign.archivedAt ? "（已归档）" : ""}
@@ -2559,7 +2574,7 @@ function App() {
             return (
               <button
                 type="button"
-                key={campaign.id}
+                key={campaignOptionValue(campaign)}
                 className="campaign-card"
                 aria-label={`${campaignLabel(campaign, showStoreLabels)}${stats.creatorCount} 位达人`}
                 onClick={() =>
@@ -2721,7 +2736,7 @@ function App() {
     );
     const priorityText = priorityLabel;
     const selectedStatus = selectedTask
-      ? inferStatus(selectedTask, requiredVideos)
+      ? inferStatus(selectedTask, requiredVideosForRow(selectedTask))
       : "Not Contacted";
 
     return (
@@ -2745,7 +2760,7 @@ function App() {
               <span>{card.label}</span>
               <strong>{card.value}</strong>
               <small>
-                {selectedCampaign === "ALL" ? "全部产品" : selectedCampaign}
+                {selectedCampaignName}
               </small>
             </button>
           ))}
@@ -2759,7 +2774,7 @@ function App() {
               <h2>今日待处理达人队列</h2>
               <p className="muted">
                 当前队列已按「
-                {selectedCampaign === "ALL" ? "全部产品" : selectedCampaign}
+                {selectedCampaignName}
                 」过滤{workbenchFilter ? ` · ${workbenchFilter.label}` : ""}
                 。选择达人后会自动收起长队列，直接进入处理区。
               </p>
@@ -2914,7 +2929,9 @@ function App() {
                         : ""}
                       {task.product || "缺少产品名称"} ·{" "}
                       {task.currentStatus ||
-                        displayStatus(inferStatus(task, requiredVideos))}
+                        displayStatus(
+                          inferStatus(task, requiredVideosForRow(task)),
+                        )}
                     </span>
                   </button>
                 ))
@@ -4021,7 +4038,7 @@ function App() {
               当前产品项目
               <input
                 value={
-                  selectedCampaign === "ALL" ? "全部产品" : selectedCampaign
+                  selectedCampaignName
                 }
                 readOnly
               />
@@ -4152,9 +4169,13 @@ function App() {
                     <td>{row.product || "—"}</td>
                     <td>
                       <span
-                        className={statusTone(inferStatus(row, requiredVideos))}
+                        className={statusTone(
+                          inferStatus(row, requiredVideosForRow(row)),
+                        )}
                       >
-                        {displayStatus(inferStatus(row, requiredVideos))}
+                        {displayStatus(
+                          inferStatus(row, requiredVideosForRow(row)),
+                        )}
                       </span>
                     </td>
                     <td>{parseNumberFromNotes(row.notes, ["carrier"])}</td>
@@ -4210,8 +4231,14 @@ function App() {
             <article className="review-card" key={row.id}>
               <div>
                 <h3>{displayName(row)}</h3>
-                <span className={statusTone(inferStatus(row, requiredVideos))}>
-                  {displayStatus(inferStatus(row, requiredVideos))}
+                <span
+                  className={statusTone(
+                    inferStatus(row, requiredVideosForRow(row)),
+                  )}
+                >
+                  {displayStatus(
+                    inferStatus(row, requiredVideosForRow(row)),
+                  )}
                 </span>
               </div>
               {reviewChecklistForRow(row).map((item) => (
@@ -4280,7 +4307,7 @@ function App() {
                 {visibleRows
                   .filter((row) =>
                     ["Ready for Ads", "Spark Ads Requested", "Posted"].includes(
-                      inferStatus(row, requiredVideos),
+                      inferStatus(row, requiredVideosForRow(row)),
                     ),
                   )
                   .map((row) => (
@@ -4298,7 +4325,7 @@ function App() {
                       <td>{parseNumberFromNotes(row.notes, ["engagement"])}</td>
                       <td>{parseNumberFromNotes(row.notes, ["potential"])}</td>
                       <td>
-                        {inferStatus(row, requiredVideos) ===
+                        {inferStatus(row, requiredVideosForRow(row)) ===
                         "Spark Ads Requested"
                           ? "已申请"
                           : "未申请"}
@@ -4354,7 +4381,18 @@ function App() {
         });
         return;
       }
-      updateCampaign({ productName, id: campaignIdFromName(productName) });
+      const linkedRows = rows.filter((row) =>
+        rowMatchesCampaign(row, campaign),
+      );
+      updateCampaign({ productName });
+      if (linkedRows.length > 0) {
+        const linkedIds = new Set(linkedRows.map((row) => row.id));
+        setRows(
+          rows.map((row) =>
+            linkedIds.has(row.id) ? { ...row, product: productName } : row,
+          ),
+        );
+      }
     };
     const campaignFieldsDiffer = (source: Campaign, target: Campaign) => {
       const serialize = (value: unknown) =>
@@ -4426,6 +4464,12 @@ function App() {
                 storeId: normalizeStoreId(target.storeId, target.storeName),
                 storeName: normalizeStoreName(target.storeName),
                 campaignId: target.id,
+                productId:
+                  target.productId ||
+                  productIdForCampaign(
+                    normalizeStoreId(target.storeId, target.storeName),
+                    target.id,
+                  ),
                 product: target.productName,
               }
             : row,
@@ -4541,7 +4585,9 @@ function App() {
       rows.filter((row) => rowMatchesCampaign(row, campaign)).length;
     const syncCampaignVideoCount = (campaign: Campaign) => {
       const latestCampaign =
-        mergedCampaigns.find((item) => item.id === campaign.id) ?? campaign;
+        mergedCampaigns.find(
+          (item) => campaignOptionValue(item) === campaignOptionValue(campaign),
+        ) ?? campaign;
       const targetRequiredVideos = campaignRequiredVideoCount(
         latestCampaign,
         activeFilmingRequirements,
@@ -4590,9 +4636,12 @@ function App() {
       });
     };
     const duplicateCampaign = (campaign: Campaign) => {
+      const id = `${campaign.id}-copy-${Date.now()}`;
+      const storeId = normalizeStoreId(campaign.storeId, campaign.storeName);
       const copy = {
         ...campaign,
-        id: `${campaign.id}-copy-${Date.now()}`,
+        id,
+        productId: productIdForCampaign(storeId, id),
         productName: `${campaign.productName} Copy`,
         archivedAt: undefined,
       };
@@ -4602,7 +4651,7 @@ function App() {
     const archiveCampaign = (campaign: Campaign) => {
       setCampaigns(
         mergedCampaigns.map((item) =>
-          item.id === campaign.id
+          campaignOptionValue(item) === campaignOptionValue(campaign)
             ? { ...item, archivedAt: todayString() }
             : item,
         ),
@@ -4615,7 +4664,9 @@ function App() {
     const restoreCampaign = (campaign: Campaign) => {
       setCampaigns(
         mergedCampaigns.map((item) =>
-          item.id === campaign.id ? { ...item, archivedAt: undefined } : item,
+          campaignOptionValue(item) === campaignOptionValue(campaign)
+            ? { ...item, archivedAt: undefined }
+            : item,
         ),
       );
       setToast({ tone: "success", text: "已恢复产品。" });
@@ -4629,7 +4680,11 @@ function App() {
         });
         return;
       }
-      setCampaigns(mergedCampaigns.filter((item) => item.id !== campaign.id));
+      setCampaigns(
+        mergedCampaigns.filter(
+          (item) => campaignOptionValue(item) !== campaignOptionValue(campaign),
+        ),
+      );
       setToast({ tone: "success", text: "该产品暂无关联数据，可以安全删除。" });
     };
     return (
@@ -4653,7 +4708,7 @@ function App() {
             <select
               value={
                 targetCampaign
-                  ? campaignSelectValue(targetCampaign, activeCampaigns)
+                  ? campaignSelectValue(targetCampaign)
                   : ""
               }
               onChange={(event) => setSelectedCampaign(event.target.value)}
@@ -4661,7 +4716,7 @@ function App() {
               {activeCampaigns.map((campaign) => (
                 <option
                   key={campaignOptionValue(campaign)}
-                  value={campaignSelectValue(campaign, activeCampaigns)}
+                  value={campaignSelectValue(campaign)}
                 >
                   {campaignLabel(campaign, showStoreLabels)}
                   {campaign.archivedAt ? "（已归档）" : ""}

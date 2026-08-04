@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { campaignIdentity, campaignIdFromName, campaignToFilmingRequirements, createCampaignFromName, detectCampaignNames, mergeDetectedCampaigns } from './campaignData';
+import { campaignIdentity, campaignIdFromName, campaignToFilmingRequirements, createCampaignFromName, detectCampaignNames, mergeDetectedCampaigns, productIdForCampaign, rowMatchesCampaignIdentity } from './campaignData';
 import { defaultCreatorFilmingRequirements } from './messageGenerator';
 import type { CreatorRow } from './types';
 
@@ -12,6 +12,7 @@ function row(product: string, storeName = '默认店铺', storeId = 'default-sto
     storeId,
     storeName,
     campaignId: campaignIdFromName(product),
+    productId: productIdForCampaign(storeId, campaignIdFromName(product)),
     product,
     currentStatus: 'Delivered',
     sampleShippingStatus: 'Delivered',
@@ -55,6 +56,23 @@ describe('campaign data helpers', () => {
       'pinepaw::pet-dental-wipes',
       'terrapaw::pet-dental-wipes',
     ]);
+    expect(new Set(campaigns.map((campaign) => campaign.productId)).size).toBe(2);
+    expect(campaigns.every((campaign) => Boolean(campaign.productId))).toBe(true);
+  });
+
+  it('uses stable ids instead of a matching product name when a row has explicit identity', () => {
+    const campaign = {
+      ...createCampaignFromName('Pet Brush', defaultCreatorFilmingRequirements, 'TerraPaw', 'terrapaw'),
+      id: 'campaign-a',
+      productId: 'product-a',
+    };
+    const otherCampaignRow = {
+      ...row('Pet Brush', 'TerraPaw', 'terrapaw'),
+      campaignId: 'campaign-b',
+      productId: 'product-b',
+    };
+
+    expect(rowMatchesCampaignIdentity(otherCampaignRow, campaign)).toBe(false);
   });
 
   it('converts a campaign into isolated filming requirements for message generation', () => {

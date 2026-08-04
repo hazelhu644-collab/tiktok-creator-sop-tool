@@ -35,6 +35,7 @@ export type CreatorRow = {
   storeId?: string;
   storeName?: string;
   campaignId?: string;
+  productId?: string;
   username: string;
   profileLink: string;
   contactMethod: string;
@@ -111,6 +112,7 @@ export type GeneratedMessage = {
 
 export type Campaign = {
   id: string;
+  productId?: string;
   storeId?: string;
   storeName?: string;
   productName: string;

@@ -5,6 +5,7 @@ import {
   normalizeStoreId,
   normalizeStoreName,
   campaignIdFromName,
+  productIdForCampaign,
 } from "./campaignData";
 import { normalizeText, normalizeVideoProgress } from "./sopRules";
 
@@ -76,7 +77,8 @@ export function normalizeCreatorRowStore(row: CreatorRow): CreatorRow {
   const storeName = normalizeStoreName(row.storeName);
   const storeId = normalizeStoreId(row.storeId, storeName);
   const campaignId = row.campaignId || campaignIdFromName(row.product);
-  return { ...row, storeId, storeName, campaignId };
+  const productId = row.productId || productIdForCampaign(storeId, campaignId);
+  return { ...row, storeId, storeName, campaignId, productId };
 }
 
 function sameStore(a: CreatorRow, b: CreatorRow): boolean {
@@ -265,6 +267,8 @@ export function createBlankCreatorRow(
   requiredVideos = 1,
   storeId = DEFAULT_STORE_ID,
   storeName = DEFAULT_STORE_NAME,
+  campaignId = campaignIdFromName(productName.trim()),
+  productId = productIdForCampaign(storeId, campaignId),
 ): CreatorRow {
   const safeRequiredVideos =
     Number.isFinite(requiredVideos) && requiredVideos > 0
@@ -278,7 +282,8 @@ export function createBlankCreatorRow(
     contactMethod: "",
     storeId,
     storeName,
-    campaignId: campaignIdFromName(productName.trim()),
+    campaignId,
+    productId,
     product: productName.trim(),
     currentStatus: "To Contact",
     sampleShippingStatus: "Not Shipped",

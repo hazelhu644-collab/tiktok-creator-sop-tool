@@ -255,6 +255,27 @@ describe("operations workbench navigation and dashboard", () => {
     expect(campaignCards.some((card) => card.textContent?.includes("已发布视频 7"))).toBe(true);
   });
 
+  it.each([
+    ["2/1", "two_of_one"],
+    ["3/2", "three_of_two"],
+  ])("treats %s as completed and removes it from active follow-up", async (videoProgress, username) => {
+    seedCreators([
+      creatorRow({
+        id: username,
+        username,
+        product: "Completion Product",
+        videoProgress,
+        currentStatus: "",
+        trackingStatus: "",
+      }),
+    ]);
+
+    render(<App />);
+
+    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain(username);
+    expect(screen.getByRole("button", { name: /合作完成数量1/ })).toBeInTheDocument();
+  });
+
   it("keeps overview card clicks on 今日工作台 and reveals processed creators from the processed card", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
@@ -983,7 +1004,7 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
   });
 
-  it("allows 发布 1 条视频 to increment 1/1 into valid 2/1", async () => {
+  it("allows manual progress to preserve a valid 2/1 actual published count", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
     window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
@@ -1015,19 +1036,15 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     ]);
 
     render(<App />);
-    await goTo(user, /达人跟进中心/);
-    await user.selectOptions(screen.getByLabelText("选择达人"), "over-click");
-    await user.click(screen.getByRole("button", { name: "发布 1 条视频" }));
+    await goTo(user, /达人数据库/);
+    const progressInput = screen.getByDisplayValue("1/1");
+    fireEvent.change(progressInput, { target: { value: "2/1" } });
 
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
       const updated = saved.find((row) => row.id === "over-click");
       expect(updated?.videoProgress).toBe("2/1");
-      expect(updated?.videoProgressWarning).toBeUndefined();
-      expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
-        action: "Video Posted",
-        note: "已记录达人发布 1 条视频，当前进度 2/1。",
-      });
+      expect(updated?.videoProgressWarning).toBe("超额发布");
     });
   });
 
@@ -2140,7 +2157,7 @@ describe("settings and prompt helper", () => {
 
     render(<App />);
     await goTo(user, /设置/);
-    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "Cat Scratching Patches");
+    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "default-store::cat-patches");
     await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
 
     await waitFor(() => {
@@ -2183,7 +2200,7 @@ describe("settings and prompt helper", () => {
 
     render(<App />);
     await goTo(user, /设置/);
-    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "Cat Scratching Patches");
+    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "default-store::cat-patches");
     const videoCountInput = screen.getByLabelText("视频数量要求");
     await user.clear(videoCountInput);
     await user.type(videoCountInput, "1");
@@ -2227,7 +2244,7 @@ describe("settings and prompt helper", () => {
 
     render(<App />);
     await goTo(user, /设置/);
-    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "Cat Scratching Patches");
+    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "default-store::cat-patches-stable");
     await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
 
     await waitFor(() => {
