@@ -45,6 +45,7 @@ function createProps(
           },
         },
       ],
+      exportableRowCount: 1,
       statusOptions: [
         { value: "Invited", label: "已邀约" },
         { value: "Sample Approved", label: "样品已通过" },
@@ -204,5 +205,22 @@ describe("CreatorDatabasePage", () => {
     expect(screen.getByText("已归档")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "恢复达人" }));
     expect(props.actions.restoreCreator).toHaveBeenCalledWith("creator-1");
+  });
+
+  it("keeps export available when filtered display rows are empty", async () => {
+    const user = userEvent.setup();
+    const props = createProps({
+      data: {
+        ...createProps().data,
+        rows: [],
+        exportableRowCount: 1,
+      },
+    });
+    render(<CreatorDatabasePage {...props} />);
+
+    const exportButton = screen.getByRole("button", { name: "导出 CSV" });
+    expect(exportButton).toBeEnabled();
+    await user.click(exportButton);
+    expect(props.actions.exportCsv).toHaveBeenCalledTimes(1);
   });
 });

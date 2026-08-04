@@ -25,6 +25,7 @@ export type PendingDuplicateView = {
 
 export type CreatorDatabaseData = {
   rows: CreatorDatabaseRowView[];
+  exportableRowCount: number;
   statusOptions: CreatorStatusOption[];
   productTotalCount: number;
   archivedProductCount: number;

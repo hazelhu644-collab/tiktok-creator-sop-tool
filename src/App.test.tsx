@@ -939,6 +939,18 @@ describe("creator database redesigned table", () => {
     expect(csv).toContain("complete_export");
     expect(csv).toContain("failed_export");
   });
+
+  it("keeps CSV export enabled when search hides existing creator history", async () => {
+    const user = userEvent.setup();
+    seedCreators([creatorRow({ id: "history", username: "history_creator" })]);
+
+    render(<App />);
+    await goTo(user, /达人数据库/);
+    await user.type(screen.getByLabelText("搜索"), "no matching creator");
+
+    expect(screen.getByText("没有匹配的达人。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出 CSV" })).toBeEnabled();
+  });
 });
 
 describe("templates, follow-up, samples, review, and ads modules", () => {

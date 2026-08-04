@@ -3534,6 +3534,7 @@ function App() {
       <CreatorDatabasePage
         data={{
           rows: creatorDatabaseRows,
+          exportableRowCount: rows.length,
           statusOptions: creatorStatusOptions,
           productTotalCount,
           archivedProductCount,

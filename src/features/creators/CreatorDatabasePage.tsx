@@ -39,7 +39,7 @@ export function CreatorDatabasePage({
               type="button"
               className="secondary"
               onClick={actions.exportCsv}
-              disabled={data.rows.length === 0}
+              disabled={data.exportableRowCount === 0}
             >
               导出 CSV
             </button>
