@@ -72,6 +72,30 @@ describe('editable creator data helpers', () => {
     expect(loadCreatorRows()).toEqual([{ ...blankRow, followUpHistory: [] }]);
   });
 
+  it('preserves archived collaboration history and stable identity in localStorage', () => {
+    const archived = row({
+      id: 'archived-collaboration',
+      storeId: 'terrapaw',
+      storeName: 'TerraPaw',
+      campaignId: 'campaign-archive',
+      productId: 'product-archive',
+      currentStatus: 'Completed',
+      trackingStatus: '合作完成',
+      archivedAt: '2026-06-11',
+      archiveReason: 'Completed',
+    });
+
+    saveCreatorRows([archived]);
+
+    expect(loadCreatorRows()).toContainEqual(expect.objectContaining({
+      id: 'archived-collaboration',
+      storeId: 'terrapaw',
+      campaignId: 'campaign-archive',
+      productId: 'product-archive',
+      archivedAt: '2026-06-11',
+    }));
+  });
+
   it('exports the current rows with UTF-8 BOM, Chinese headers, and compact tracking counts', () => {
     const csv = creatorRowsToCsv([
       row({

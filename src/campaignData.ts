@@ -69,11 +69,38 @@ export function campaignIdentity(storeId: string, campaignId: string): string {
   return `${storeId}::${campaignId}`;
 }
 
-export function createCampaignFromName(name: string, fallback: CreatorFilmingRequirements = defaultCreatorFilmingRequirements, storeName = DEFAULT_STORE_NAME, storeId = normalizeStoreId(undefined, storeName)): Campaign {
+export function productIdForCampaign(storeId: string, campaignId: string): string {
+  return `product::${storeId}::${campaignId}`;
+}
+
+export function rowMatchesCampaignIdentity(
+  row: Pick<CreatorRow, 'storeId' | 'storeName' | 'campaignId' | 'productId' | 'product'>,
+  campaign: Campaign,
+): boolean {
+  const storeId = normalizeStoreId(row.storeId, row.storeName);
+  const campaignStoreId = normalizeStoreId(campaign.storeId, campaign.storeName);
+  if (storeId !== campaignStoreId) return false;
+
+  const campaignProductId = campaign.productId || productIdForCampaign(campaignStoreId, campaign.id);
+  if (row.campaignId) {
+    if (row.campaignId === campaign.id && (!row.productId || row.productId === campaignProductId)) return true;
+    const legacyCampaignId = campaignIdFromName(row.product);
+    const legacyProductId = productIdForCampaign(storeId, legacyCampaignId);
+    const isLegacyIdentity = row.campaignId === legacyCampaignId
+      && (!row.productId || row.productId === legacyProductId);
+    return isLegacyIdentity
+      && normalizeName(row.product).toLowerCase() === normalizeName(campaign.productName).toLowerCase();
+  }
+  if (row.productId) return row.productId === campaignProductId;
+  return normalizeName(row.product).toLowerCase() === normalizeName(campaign.productName).toLowerCase();
+}
+
+export function createCampaignFromName(name: string, fallback: CreatorFilmingRequirements = defaultCreatorFilmingRequirements, storeName = DEFAULT_STORE_NAME, storeId = normalizeStoreId(undefined, storeName), campaignId = campaignIdFromName(name), productId = productIdForCampaign(storeId, campaignId)): Campaign {
   const productName = normalizeName(name) || fallback.productName;
   const preset = PRESET_REQUIREMENTS[productName] ?? {};
   return {
-    id: campaignIdFromName(productName),
+    id: campaignId,
+    productId,
     storeId,
     storeName: normalizeStoreName(storeName),
     productName,
@@ -91,14 +118,16 @@ export function createCampaignFromName(name: string, fallback: CreatorFilmingReq
   };
 }
 
-export function detectCampaignNames(rows: CreatorRow[]): Array<{ storeId: string; storeName: string; productName: string }> {
-  const byIdentity = new Map<string, { storeId: string; storeName: string; productName: string }>();
+export function detectCampaignNames(rows: CreatorRow[]): Array<{ storeId: string; storeName: string; campaignId: string; productId: string; productName: string }> {
+  const byIdentity = new Map<string, { storeId: string; storeName: string; campaignId: string; productId: string; productName: string }>();
   rows.forEach((row) => {
     const productName = row.product.trim();
     if (!productName) return;
     const storeName = normalizeStoreName(row.storeName);
     const storeId = normalizeStoreId(row.storeId, storeName);
-    byIdentity.set(campaignIdentity(storeId, campaignIdFromName(productName)), { storeId, storeName, productName });
+    const campaignId = row.campaignId || campaignIdFromName(productName);
+    const productId = row.productId || productIdForCampaign(storeId, campaignId);
+    byIdentity.set(campaignIdentity(storeId, campaignId), { storeId, storeName, campaignId, productId, productName });
   });
   return Array.from(byIdentity.values());
 }
@@ -112,7 +141,9 @@ export function loadCampaigns(): Campaign[] {
     return parsed.filter((item) => item?.productName).map((item) => {
       const storeName = normalizeStoreName(item.storeName);
       const storeId = normalizeStoreId(item.storeId, storeName);
-      return ({ ...createCampaignFromName(item.productName, defaultCreatorFilmingRequirements, storeName, storeId), ...item, storeId, storeName, id: item.id || campaignIdFromName(item.productName) });
+      const campaignId = item.id || campaignIdFromName(item.productName);
+      const productId = item.productId || productIdForCampaign(storeId, campaignId);
+      return ({ ...createCampaignFromName(item.productName, defaultCreatorFilmingRequirements, storeName, storeId, campaignId, productId), ...item, storeId, storeName, id: campaignId, productId });
     });
   } catch {
     storage()?.removeItem(CAMPAIGNS_STORAGE_KEY);
@@ -130,12 +161,20 @@ export function mergeDetectedCampaigns(saved: Campaign[], rows: CreatorRow[], fa
   const byIdentity = new Map<string, Campaign>(saved.map((campaign) => {
     const storeName = normalizeStoreName(campaign.storeName);
     const storeId = normalizeStoreId(campaign.storeId, storeName);
-    const normalized = { ...campaign, storeId, storeName, id: campaign.id || campaignIdFromName(campaign.productName) };
+    const id = campaign.id || campaignIdFromName(campaign.productName);
+    const productId = campaign.productId || productIdForCampaign(storeId, id);
+    const normalized = { ...campaign, storeId, storeName, id, productId };
     return [campaignIdentity(storeId, normalized.id), normalized] as const;
   }));
-  detectCampaignNames(rows).forEach(({ storeId, storeName, productName }) => {
-    const key = campaignIdentity(storeId, campaignIdFromName(productName));
-    if (!byIdentity.has(key)) byIdentity.set(key, createCampaignFromName(productName, fallback, storeName, storeId));
+  detectCampaignNames(rows).forEach(({ storeId, storeName, campaignId, productId, productName }) => {
+    const key = campaignIdentity(storeId, campaignId);
+    const isLegacyIdentity = campaignId === campaignIdFromName(productName)
+      && productId === productIdForCampaign(storeId, campaignId);
+    const matchingSavedCampaign = Array.from(byIdentity.values()).find((campaign) =>
+      normalizeStoreId(campaign.storeId, campaign.storeName) === storeId
+      && campaign.productName.trim().toLowerCase() === productName.trim().toLowerCase());
+    if (isLegacyIdentity && matchingSavedCampaign) return;
+    if (!byIdentity.has(key)) byIdentity.set(key, createCampaignFromName(productName, fallback, storeName, storeId, campaignId, productId));
   });
   if (byIdentity.size === 0) byIdentity.set(campaignIdentity(DEFAULT_STORE_ID, campaignIdFromName(fallback.productName)), createCampaignFromName(fallback.productName, fallback));
   return Array.from(byIdentity.values());

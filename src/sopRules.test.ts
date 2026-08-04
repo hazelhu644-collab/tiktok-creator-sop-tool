@@ -79,6 +79,18 @@ describe('video progress normalization', () => {
     });
   });
 
+  it.each([
+    ['2/1', 1],
+    ['3/2', 2],
+  ])('treats %s as completed against a %i-video campaign requirement', (videoProgress, requiredVideos) => {
+    const [task] = analyzeCreators([
+      row({ id: videoProgress, videoProgress }),
+    ], today, requiredVideos);
+
+    expect(task.needsFollowUp).toBe(false);
+    expect(task.triggerReason).toContain('合作已完成');
+  });
+
   it('generates dynamic hints without a hard-coded 2-video list', () => {
     expect(buildVideoProgressHint(1)).toBe('视频进度建议填写 0 of 1、1 of 1，避免 Excel 自动转成日期。');
     expect(buildVideoProgressHint(3)).toBe('视频进度建议填写 0 of 3、1 of 3、2 of 3、3 of 3，避免 Excel 自动转成日期。');
