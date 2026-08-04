@@ -69,6 +69,7 @@ import type {
   CampaignSettingsTargetView,
   CampaignStoreCleanupView,
 } from "./features/campaigns/campaignSettingsTypes";
+import { MessageComposer } from "./features/messaging/MessageComposer";
 import "./styles.css";
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = "tiktokCreatorSop.filmingRequirements";
@@ -2773,6 +2774,11 @@ function App() {
       selectedTask &&
         (usesHistoricalTaskSource || isArchivedCollaboration(selectedTask)),
     );
+    const deepSeekDisplayError = deepSeekError
+      ? deepSeekError.includes("DEEPSEEK_API_KEY")
+        ? "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。"
+        : "DeepSeek 调用失败，请检查 API Key 或稍后重试。"
+      : "";
 
     return (
       <>
@@ -3153,382 +3159,66 @@ function App() {
             </div>
           )}
           {shouldShowReplyBlock && selectedTask && (
-            <section className="reply-panel" data-testid="reply-handling-panel">
-              <div className="section-heading">
-                <div>
-                  <h2>达人回复处理</h2>
-                  <p className="muted">
-                    默认只保留日常 BD 必填信息；高级策略字段已折叠。
-                  </p>
-                </div>
-              </div>
-              <div className="reply-two-column">
-                <div className="reply-column">
-                  <h3>达人回复</h3>
-                  <label>
-                    达人回复原文
-                    <textarea
-                      value={currentCreatorReply(selectedTask)}
-                      onChange={(event) =>
-                        updateCurrentCreatorReply(
-                          selectedTask,
-                          event.target.value,
-                        )
-                      }
-                      placeholder="可粘贴或手动修正达人原始回复"
-                      rows={4}
-                    />
-                  </label>
-                  <p className="muted compact-helper">
-                    可粘贴或手动修正达人原始回复，DeepSeek
-                    会基于这里的内容翻译和生成回复。
-                  </p>
-                  <label>
-                    处理备注 / 达人备注
-                    <textarea
-                      value={selectedTask.notes}
-                      disabled={isHistoricalReadOnly}
-                      onChange={(event) =>
-                        updateRow(selectedTask.id, "notes", event.target.value)
-                      }
-                      placeholder="例如：周末发布 / 回复慢，不要每天催 / 脚受伤，周五后再跟进 / 已沟通，等待剪辑 / 今天不催"
-                      rows={3}
-                    />
-                  </label>
-                  <div className="inline-actions deepseek-near-focus">
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() =>
-                        void callDeepSeek("generate_personalized_reply")
-                      }
-                      disabled={deepSeekLoadingAction !== null}
-                    >
-                      根据上方重点生成英文回复
-                    </button>
-                  </div>
-                  <div className="inline-actions">
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() =>
-                        void callDeepSeek("translate_creator_reply")
-                      }
-                      disabled={deepSeekLoadingAction !== null}
-                    >
-                      DeepSeek 翻译达人回复
-                    </button>
-                  </div>
-                  <div
-                    className={`translation-card ${isTranslationExpanded ? "expanded" : ""}`}
-                    data-testid="translation-card"
-                  >
-                    <div className="translation-card-header">
-                      <h3>中文翻译</h3>
-                      {deepSeekChineseTranslation && (
-                        <button
-                          type="button"
-                          className="link-button"
-                          onClick={() =>
-                            void copyText(
-                              deepSeekChineseTranslation,
-                              "已复制中文翻译。",
-                            )
-                          }
-                        >
-                          复制翻译
-                        </button>
-                      )}
-                    </div>
-                    {isTranslationEditing ? (
-                      <textarea
-                        aria-label="编辑中文翻译"
-                        value={deepSeekChineseTranslation}
-                        onChange={(event) =>
-                          setDeepSeekChineseTranslation(event.target.value)
-                        }
-                        rows={3}
-                      />
-                    ) : (
-                      <p className="translation-text">
-                        {deepSeekChineseTranslation ||
-                          "点击 DeepSeek 翻译达人回复后，这里只显示直译中文。"}
-                      </p>
-                    )}
-                    {deepSeekChineseTranslation && (
-                      <div className="inline-actions compact-actions">
-                        <button
-                          type="button"
-                          className="link-button"
-                          onClick={() =>
-                            setIsTranslationExpanded((value) => !value)
-                          }
-                        >
-                          {isTranslationExpanded ? "收起" : "展开全文"}
-                        </button>
-                        <button
-                          type="button"
-                          className="link-button"
-                          onClick={() =>
-                            setIsTranslationEditing((value) => !value)
-                          }
-                        >
-                          {isTranslationEditing ? "完成编辑" : "编辑翻译"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  {deepSeekLoadingAction === "translate_creator_reply" && (
-                    <p className="ai-status" role="status">
-                      DeepSeek 生成中…
-                    </p>
-                  )}
-                  {deepSeekError && (
-                    <p className="error" role="alert">
-                      {deepSeekError.includes("DEEPSEEK_API_KEY")
-                        ? "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。"
-                        : "DeepSeek 调用失败，请检查 API Key 或稍后重试。"}
-                    </p>
-                  )}
-                </div>
-                <div className="reply-column">
-                  <h3>生成英文回复</h3>
-                  <label>
-                    我想回复的重点
-                    <textarea
-                      value={replyFocus}
-                      onChange={(event) => setReplyFocus(event.target.value)}
-                      placeholder="例如：表示理解，确认具体发布时间，方便安排投流"
-                      rows={3}
-                    />
-                  </label>
-                  <div className="inline-actions deepseek-near-focus">
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() =>
-                        void callDeepSeek("generate_personalized_reply")
-                      }
-                      disabled={deepSeekLoadingAction !== null}
-                    >
-                      根据上方重点生成英文回复
-                    </button>
-                  </div>
-                  <div className="reply-inline-fields">
-                    <p className="readonly-channel">当前联系渠道：{channel}</p>
-                    <label>
-                      回复语气
-                      <select
-                        value={replyTone}
-                        onChange={(event) =>
-                          setReplyTone(event.target.value as ReplyTone)
-                        }
-                      >
-                        <option>中立专业</option>
-                        <option>友好一点</option>
-                        <option>坚定推进</option>
-                        <option>最后确认</option>
-                      </select>
-                    </label>
-                  </div>
-                  <details
-                    className="advanced-reply-settings"
-                    open={isAdvancedReplyOpen}
-                    onToggle={(event) =>
-                      setIsAdvancedReplyOpen(event.currentTarget.open)
-                    }
-                  >
-                    <summary>高级设置</summary>
-                    <div className="reply-fields">
-                      <label>
-                        达人关系备注（可选）
-                        <textarea
-                          value={replyRelationshipNote}
-                          onChange={(event) =>
-                            setReplyRelationshipNote(event.target.value)
-                          }
-                          placeholder="例如：她之前视频质量不错 / 沟通比较慢"
-                        />
-                      </label>
-                      <label>
-                        这次回复目标（可选）
-                        <textarea
-                          value={replyGoal}
-                          onChange={(event) => setReplyGoal(event.target.value)}
-                          placeholder="例如：确认发布时间 / 推进剩余视频"
-                        />
-                      </label>
-                      <label>
-                        可接受让步（可选）
-                        <textarea
-                          value={replyConcession}
-                          onChange={(event) =>
-                            setReplyConcession(event.target.value)
-                          }
-                          placeholder="例如：可以周五发布 / 不能不挂车"
-                        />
-                      </label>
-                    </div>
-                  </details>
-                  <p className="muted compact-helper">
-                    默认先使用本地专业话术。DeepSeek
-                    仅用于复杂回复或需要个性化优化时。
-                  </p>
-                  <p className="muted compact-helper">
-                    DeepSeek 翻译只做直译；英文回复会把你的中文重点准确转成
-                    creator-facing English。
-                  </p>
-                  {message && (
-                    <div ref={messageAreaRef} className="message-output">
-                      <h3>场景 / 沟通动作</h3>
-                      <p>
-                        {message.scenario} · {message.communicationAction}
-                      </p>
-                      <h3>英文话术</h3>
-                      <p className="message-source-label">
-                        {messageSource === "deepseek"
-                          ? "DeepSeek 优化版"
-                          : "免费本地话术"}
-                      </p>
-                      <label
-                        className="sr-only"
-                        htmlFor="generated-english-message"
-                      >
-                        英文话术
-                      </label>
-                      <textarea
-                        id="generated-english-message"
-                        value={message.english}
-                        onChange={(event) =>
-                          updateGeneratedEnglishMessage(event.target.value)
-                        }
-                        rows={7}
-                      />
-                      {deepSeekLoadingAction ===
-                        "generate_personalized_reply" && (
-                        <p className="ai-status" role="status">
-                          DeepSeek 生成中…
-                        </p>
-                      )}
-                      <h3>中文对照 / 中文解释</h3>
-                      <span className="sr-only">中文解释</span>
-                      <p>
-                        {deepSeekChineseExplanation ||
-                          message.chineseExplanation}
-                      </p>
-                      <h3>发送后追踪</h3>
-                      <p>
-                        发送后请点击「标记为已发送」，系统会更新最近联系日期、跟进次数和下一次跟进日期。
-                      </p>
-                      <div className="inline-actions">
-                        <button
-                          type="button"
-                          onClick={() => void handleCopyGeneratedMessage()}
-                        >
-                          复制英文话术
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleMarkMessageSent}
-                          disabled={isHistoricalReadOnly}
-                        >
-                          标记为已发送
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={handleMarkCreatorReplied}
-                          disabled={isHistoricalReadOnly}
-                        >
-                          标记达人已回复
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={markCreatorNoReply}
-                          disabled={isHistoricalReadOnly}
-                        >
-                          标记未回复
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={markVideoProgress}
-                          disabled={isHistoricalReadOnly}
-                        >
-                          发布 1 条视频
-                        </button>
-                        <details className="advanced-actions">
-                          <summary>更多操作 / 高级操作</summary>
-                          <div className="inline-actions">
-                            <button
-                              type="button"
-                              className="secondary"
-                              onClick={handleManualVideoProgressUpdate}
-                              disabled={isHistoricalReadOnly}
-                            >
-                              手动更新视频进度
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary"
-                              onClick={() => markCreatorOutcome("Completed")}
-                              disabled={isHistoricalReadOnly}
-                            >
-                              合作完成
-                            </button>
-                            <button
-                              type="button"
-                              className="danger secondary"
-                              onClick={() => markCreatorOutcome("Failed")}
-                              disabled={isHistoricalReadOnly}
-                            >
-                              合作失败
-                            </button>
-                          </div>
-                        </details>
-                      </div>
-                      <div className="skip-today-control">
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={markCreatorSkippedToday}
-                          disabled={isHistoricalReadOnly}
-                        >
-                          今日暂不跟进
-                        </button>
-                      </div>
-                      {trackingStatus && (
-                        <p className="tracking-status">{trackingStatus}</p>
-                      )}
-                      {showNextCreatorPrompt && (
-                        <div className="next-creator-prompt">
-                          <strong>
-                            {lastProcessingResult || "已记录处理结果。"}
-                          </strong>
-                          <div className="inline-actions">
-                            <button
-                              type="button"
-                              onClick={handleProcessNextCreator}
-                              disabled={!nextTask}
-                            >
-                              处理下一个达人
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary"
-                              onClick={() => setShowNextCreatorPrompt(false)}
-                            >
-                              留在当前达人
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
+            <MessageComposer
+              data={{
+                creatorReply: currentCreatorReply(selectedTask),
+                notes: selectedTask.notes,
+                channel,
+                chineseTranslation: deepSeekChineseTranslation,
+                errorMessage: deepSeekDisplayError,
+                message,
+                messageSource,
+                chineseExplanation: deepSeekChineseExplanation,
+                trackingStatus,
+                lastProcessingResult,
+                hasNextTask: Boolean(nextTask),
+              }}
+              uiState={{
+                historicalReadOnly: isHistoricalReadOnly,
+                loadingAction: deepSeekLoadingAction,
+                translationExpanded: isTranslationExpanded,
+                translationEditing: isTranslationEditing,
+                advancedReplyOpen: isAdvancedReplyOpen,
+                replyFocus,
+                relationshipNote: replyRelationshipNote,
+                replyTone,
+                replyGoal,
+                replyConcession,
+                showNextCreatorPrompt,
+                messageOutputRef: messageAreaRef,
+              }}
+              actions={{
+                updateCreatorReply: (value) =>
+                  updateCurrentCreatorReply(selectedTask, value),
+                updateNotes: (value) => updateRow(selectedTask.id, "notes", value),
+                generateDeepSeekReply: () =>
+                  void callDeepSeek("generate_personalized_reply"),
+                translateCreatorReply: () =>
+                  void callDeepSeek("translate_creator_reply"),
+                copyTranslation: () =>
+                  void copyText(deepSeekChineseTranslation, "已复制中文翻译。"),
+                updateTranslation: setDeepSeekChineseTranslation,
+                setTranslationExpanded: setIsTranslationExpanded,
+                setTranslationEditing: setIsTranslationEditing,
+                setReplyFocus,
+                setReplyTone,
+                setAdvancedReplyOpen: setIsAdvancedReplyOpen,
+                setRelationshipNote: setReplyRelationshipNote,
+                setReplyGoal,
+                setReplyConcession,
+                updateEnglishMessage: updateGeneratedEnglishMessage,
+                copyEnglishMessage: () => void handleCopyGeneratedMessage(),
+                markMessageSent: handleMarkMessageSent,
+                markCreatorReplied: handleMarkCreatorReplied,
+                markCreatorNoReply,
+                markVideoProgress,
+                updateVideoProgressManually: handleManualVideoProgressUpdate,
+                markCreatorOutcome,
+                markCreatorSkippedToday,
+                processNextCreator: handleProcessNextCreator,
+                stayOnCurrentCreator: () => setShowNextCreatorPrompt(false),
+              }}
+            />
           )}
         </section>
       </>
