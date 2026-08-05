@@ -73,7 +73,10 @@ import type {
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { exitDemoModeUrl, isDemoMode } from "./demoMode";
-import type { SettingsPromptHelperField } from "./features/settings/settingsTypes";
+import type {
+  SettingsAiDraft,
+  SettingsPromptHelperField,
+} from "./features/settings/settingsTypes";
 import type {
   DashboardCampaignCardView,
   DashboardCreatorView,
@@ -730,6 +733,10 @@ function App() {
   });
   const [generatedChatGptPrompt, setGeneratedChatGptPrompt] = useState("");
   const [promptCopyStatus, setPromptCopyStatus] = useState("");
+  const [aiDraft, setAiDraft] = useState<SettingsAiDraft | null>(null);
+  const [aiDraftLoading, setAiDraftLoading] = useState(false);
+  const [aiDraftError, setAiDraftError] = useState("");
+  const [aiDraftAppliedTo, setAiDraftAppliedTo] = useState("");
   const [deepSeekLoadingAction, setDeepSeekLoadingAction] =
     useState<DeepSeekAction | null>(null);
   const [deepSeekError, setDeepSeekError] = useState("");
@@ -821,6 +828,13 @@ function App() {
         mergedCampaigns.find(
           (campaign) => campaignOptionValue(campaign) === selectedCampaign,
         ));
+  /**
+   * The campaign the Settings page edits, and the one an AI draft is generated
+   * for and written back to. Generation and apply must agree on this, otherwise
+   * the draft describes one product and lands on another.
+   */
+  const settingsTargetCampaign =
+    activeCampaign ?? activeCampaigns[0] ?? mergedCampaigns[0];
   const selectedCampaignName =
     selectedCampaign === "ALL"
       ? "全部产品"
@@ -2690,6 +2704,88 @@ function App() {
     return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。\n\n【产品信息】\n- 产品名称：${activeFilmingRequirements.productName}\n- 产品卖点：${promptHelperForm.sellingPoints || "请补充"}\n- 目标视频数量：${promptHelperForm.videoCount || requiredVideos}\n- 单条视频时长要求：${promptHelperForm.durationRequirement || "40s+"}\n- 目标宠物 / 使用场景：${promptHelperForm.targetPetOrScene || "真实宠物使用场景"}\n- 必须展示的画面：${promptHelperForm.mustShowShots || "开箱、使用过程、CTA"}\n- 不希望达人这样拍：${promptHelperForm.avoidShots || "避免违规表述"}\n- 对标视频链接（可选）：${promptHelperForm.referenceLinks || "无"}\n\n请按以下结构输出，全部使用简体中文：\n1. 产品名称\n2. 达人拍摄要求\n3. 重点拍摄内容`;
   }
 
+  async function generateFilmingRequirementsWithAi() {
+    setAiDraftLoading(true);
+    setAiDraftError("");
+    setAiDraftAppliedTo("");
+    try {
+      const response = await fetch("/api/generate-filming-requirements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName:
+            settingsTargetCampaign?.productName ||
+            activeFilmingRequirements.productName,
+          sellingPoints: promptHelperForm.sellingPoints,
+          videoCount: promptHelperForm.videoCount || String(requiredVideos),
+          durationRequirement: promptHelperForm.durationRequirement,
+          targetPetOrScene: promptHelperForm.targetPetOrScene,
+          mustShowShots: promptHelperForm.mustShowShots,
+          avoidShots: promptHelperForm.avoidShots,
+          referenceLinks: promptHelperForm.referenceLinks,
+        }),
+      });
+      // The endpoint is a serverless function, so a misconfigured deployment
+      // (or `vite dev`, which does not serve /api) answers with HTML or an
+      // empty body. Parse defensively so the user sees an actionable message
+      // instead of a raw JSON.parse failure.
+      const rawBody = await response.text();
+      let result: Partial<SettingsAiDraft & { error: string }> = {};
+      try {
+        result = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            `AI 生成失败：接口返回 ${response.status}。请确认部署环境已启用 /api 接口并配置 OPENAI_API_KEY。`,
+        );
+      }
+      if (!result.requirements?.length || !result.priorities?.length) {
+        throw new Error("AI 生成失败：返回内容缺少拍摄要求或重点内容。");
+      }
+      setAiDraft({
+        productName:
+          result.productName || activeFilmingRequirements.productName,
+        requirements: result.requirements,
+        priorities: result.priorities,
+      });
+    } catch (error) {
+      setAiDraft(null);
+      setAiDraftError(
+        error instanceof Error ? error.message : "AI 生成失败：请稍后重试。",
+      );
+    } finally {
+      setAiDraftLoading(false);
+    }
+  }
+
+  function applyAiDraftToCampaign() {
+    const target = settingsTargetCampaign;
+    if (!aiDraft || !target) return;
+
+    const targetIdentity = campaignOptionValue(target);
+    setCampaigns(
+      mergedCampaigns.map((campaign) =>
+        campaignOptionValue(campaign) === targetIdentity
+          ? {
+              ...campaign,
+              requirements: aiDraft.requirements,
+              keyContentPoints: aiDraft.priorities,
+            }
+          : campaign,
+      ),
+    );
+    setAiDraft(null);
+    setAiDraftAppliedTo(target.productName);
+    setToast({
+      tone: "success",
+      text: `已把 AI 草稿写入「${target.productName}」的拍摄要求和重点内容。`,
+    });
+  }
+
   function renderPageHeader(
     title: string,
     description: string,
@@ -3379,8 +3475,7 @@ function App() {
   }
 
   function renderSettings() {
-    const targetCampaign =
-      activeCampaign ?? activeCampaigns[0] ?? mergedCampaigns[0];
+    const targetCampaign = settingsTargetCampaign;
     const targetCampaignIdentity = targetCampaign
       ? campaignOptionValue(targetCampaign)
       : "";
@@ -3834,14 +3929,15 @@ function App() {
           },
           generatedPrompt: generatedChatGptPrompt,
           promptCopyStatus,
+          aiDraft,
+          aiDraftLoading,
+          aiDraftError,
+          canApplyAiDraft: Boolean(targetCampaign),
+          aiDraftAppliedTo,
         }}
         uiState={{
           promptHelperOpen: isPromptHelperOpen,
-          promptHelperForm: {
-            sellingPoints: promptHelperForm.sellingPoints,
-            durationRequirement: promptHelperForm.durationRequirement,
-            referenceLinks: promptHelperForm.referenceLinks,
-          },
+          promptHelperForm,
         }}
         actions={{
           togglePromptHelper: () =>
@@ -3860,6 +3956,12 @@ function App() {
             void copyText(generatedChatGptPrompt, "已复制提示词。").then(() =>
               setPromptCopyStatus("已复制提示词。"),
             ),
+          generateDraftWithAi: () => void generateFilmingRequirementsWithAi(),
+          applyAiDraft: applyAiDraftToCampaign,
+          dismissAiDraft: () => {
+            setAiDraft(null);
+            setAiDraftError("");
+          },
           clearLocalCreatorData: () => {
             clearSavedCreatorRows();
             setRows([]);

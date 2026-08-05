@@ -2,7 +2,11 @@ import type { CampaignSettingsPageProps } from "../campaigns/campaignSettingsTyp
 
 export type SettingsPromptHelperField =
   | "sellingPoints"
+  | "videoCount"
   | "durationRequirement"
+  | "targetPetOrScene"
+  | "mustShowShots"
+  | "avoidShots"
   | "referenceLinks";
 
 export type SettingsPromptHelperForm = Record<
@@ -10,10 +14,23 @@ export type SettingsPromptHelperForm = Record<
   string
 >;
 
+/** Shape returned by `POST /api/generate-filming-requirements`. */
+export type SettingsAiDraft = {
+  productName: string;
+  requirements: string[];
+  priorities: string[];
+};
+
 export type SettingsData = {
   campaignSettingsProps: CampaignSettingsPageProps;
   generatedPrompt: string;
   promptCopyStatus: string;
+  aiDraft: SettingsAiDraft | null;
+  aiDraftLoading: boolean;
+  aiDraftError: string;
+  /** False when there is no campaign to write the draft into. */
+  canApplyAiDraft: boolean;
+  aiDraftAppliedTo: string;
 };
 
 export type SettingsUiState = {
@@ -29,6 +46,9 @@ export type SettingsActions = {
   ) => void;
   generatePrompt: () => void;
   copyPrompt: () => void;
+  generateDraftWithAi: () => void;
+  applyAiDraft: () => void;
+  dismissAiDraft: () => void;
   clearLocalCreatorData: () => void;
 };
 

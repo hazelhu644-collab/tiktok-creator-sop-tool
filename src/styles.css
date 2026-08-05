@@ -174,3 +174,31 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
     align-items: flex-start;
   }
 }
+
+.ai-draft {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #b8d9d2;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #f4fbf8, #fffaf1);
+}
+
+.ai-draft h3 {
+  margin: 0;
+  color: #123c43;
+}
+
+.ai-draft strong {
+  color: #17665d;
+  font-size: 0.88rem;
+}
+
+.ai-draft ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  color: #334155;
+  font-size: 0.9rem;
+}
