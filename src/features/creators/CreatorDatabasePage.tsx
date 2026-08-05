@@ -32,7 +32,9 @@ export function CreatorDatabasePage({
               <input
                 type="file"
                 accept=".csv,.xls,.xlsx"
-                onChange={(event) => void actions.importFile(event.target.files?.[0])}
+                onChange={(event) =>
+                  void actions.importFile(event.target.files?.[0])
+                }
               />
             </label>
             <button
@@ -48,8 +50,12 @@ export function CreatorDatabasePage({
             </button>
           </div>
         </div>
-        {uiState.fileName && <p className="muted">已加载：{uiState.fileName}</p>}
-        {uiState.importSummary && <p className="warning-text">{uiState.importSummary}</p>}
+        {uiState.fileName && (
+          <p className="muted">已加载：{uiState.fileName}</p>
+        )}
+        {uiState.importSummary && (
+          <p className="warning-text">{uiState.importSummary}</p>
+        )}
         {uiState.pendingDuplicate && (
           <div className="inline-warning duplicate-warning">
             <strong>该达人已存在。你可以选择：</strong>
@@ -105,7 +111,9 @@ export function CreatorDatabasePage({
             达人类型
             <select
               value={uiState.creatorTypeFilter}
-              onChange={(event) => actions.setCreatorTypeFilter(event.target.value)}
+              onChange={(event) =>
+                actions.setCreatorTypeFilter(event.target.value)
+              }
             >
               <option value="All">全部</option>
               <option>Pet</option>
@@ -117,7 +125,9 @@ export function CreatorDatabasePage({
             粉丝量级
             <select
               value={uiState.followerFilter}
-              onChange={(event) => actions.setFollowerFilter(event.target.value)}
+              onChange={(event) =>
+                actions.setFollowerFilter(event.target.value)
+              }
             >
               <option value="All">全部</option>
               <option>K</option>
@@ -129,7 +139,9 @@ export function CreatorDatabasePage({
             平均播放
             <select
               value={uiState.avgViewsFilter}
-              onChange={(event) => actions.setAvgViewsFilter(event.target.value)}
+              onChange={(event) =>
+                actions.setAvgViewsFilter(event.target.value)
+              }
             >
               <option value="All">全部</option>
               <option>K</option>
@@ -163,13 +175,14 @@ export function CreatorDatabasePage({
           />
           显示归档达人
         </label>
-        {!uiState.showArchivedCollaborations && data.archivedProductCount > 0 && (
-          <p className="ai-status">
-            当前显示 active records，已隐藏 {data.archivedProductCount}{" "}
-            条已归档合作；开启“显示归档达人”可查看和搜索这些历史记录。默认 CSV
-            导出包含所有历史记录。
-          </p>
-        )}
+        {!uiState.showArchivedCollaborations &&
+          data.archivedProductCount > 0 && (
+            <p className="ai-status">
+              当前显示 active records，已隐藏 {data.archivedProductCount}{" "}
+              条已归档合作；开启“显示归档达人”可查看和搜索这些历史记录。默认 CSV
+              导出包含所有历史记录。
+            </p>
+          )}
         <div className="sticky-action-bar">
           <span>当前产品总记录：{data.productTotalCount}</span>
           <span>当前显示：{data.rows.length}</span>
@@ -220,7 +233,9 @@ export function CreatorDatabasePage({
                       aria-label="全选达人"
                       type="checkbox"
                       checked={allSelected}
-                      onChange={(event) => actions.toggleSelectAll(event.target.checked)}
+                      onChange={(event) =>
+                        actions.toggleSelectAll(event.target.checked)
+                      }
                     />
                   </th>
                   <th>达人账号</th>
@@ -259,10 +274,16 @@ export function CreatorDatabasePage({
                         aria-label="达人账号"
                         value={entry.row.username}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "username", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "username",
+                            event.target.value,
+                          )
                         }
                       />
-                      {entry.archived && <span className="mini-badge">已归档</span>}
+                      {entry.archived && (
+                        <span className="mini-badge">已归档</span>
+                      )}
                       {entry.duplicate.multiSample && (
                         <span className="mini-badge">同店铺多样品</span>
                       )}
@@ -280,7 +301,11 @@ export function CreatorDatabasePage({
                         aria-label="主页链接"
                         value={entry.row.profileLink}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "profileLink", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "profileLink",
+                            event.target.value,
+                          )
                         }
                         placeholder="@账号或主页链接"
                       />
@@ -290,7 +315,11 @@ export function CreatorDatabasePage({
                         aria-label="联系渠道"
                         value={entry.row.contactMethod}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "contactMethod", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "contactMethod",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -299,7 +328,11 @@ export function CreatorDatabasePage({
                         aria-label="店铺 / 品牌"
                         value={entry.row.storeName || data.defaultStoreName}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "storeName", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "storeName",
+                            event.target.value,
+                          )
                         }
                       />
                       {entry.duplicate.crossStoreCreator && (
@@ -311,7 +344,11 @@ export function CreatorDatabasePage({
                         aria-label="产品名称"
                         value={entry.row.product}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "product", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "product",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -320,7 +357,11 @@ export function CreatorDatabasePage({
                         aria-label="合作状态"
                         value={entry.row.currentStatus}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "currentStatus", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "currentStatus",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -330,7 +371,11 @@ export function CreatorDatabasePage({
                         type="date"
                         value={entry.row.sampleDeliveredDate}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "sampleDeliveredDate", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "sampleDeliveredDate",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -339,7 +384,11 @@ export function CreatorDatabasePage({
                         aria-label="视频进度"
                         value={entry.row.videoProgress}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "videoProgress", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "videoProgress",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -349,7 +398,11 @@ export function CreatorDatabasePage({
                         type="date"
                         value={entry.row.firstVideoPostedDate}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "firstVideoPostedDate", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "firstVideoPostedDate",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -359,7 +412,11 @@ export function CreatorDatabasePage({
                         type="date"
                         value={entry.row.lastContactDate}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "lastContactDate", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "lastContactDate",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -370,7 +427,11 @@ export function CreatorDatabasePage({
                         min="0"
                         value={entry.row.lastFollowUpCount}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "lastFollowUpCount", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "lastFollowUpCount",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -379,7 +440,11 @@ export function CreatorDatabasePage({
                         aria-label="跟进状态"
                         value={entry.row.trackingStatus ?? ""}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "trackingStatus", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "trackingStatus",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -388,7 +453,11 @@ export function CreatorDatabasePage({
                         aria-label="最近沟通动作"
                         value={entry.row.lastMessageScenario ?? ""}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "lastMessageScenario", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "lastMessageScenario",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -397,7 +466,11 @@ export function CreatorDatabasePage({
                         aria-label="最近沟通渠道"
                         value={entry.row.lastMessageChannel ?? ""}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "lastMessageChannel", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "lastMessageChannel",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -407,7 +480,11 @@ export function CreatorDatabasePage({
                         type="date"
                         value={entry.row.nextFollowUpDate ?? ""}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "nextFollowUpDate", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "nextFollowUpDate",
+                            event.target.value,
+                          )
                         }
                       />
                     </td>
@@ -416,7 +493,11 @@ export function CreatorDatabasePage({
                         aria-label="达人回复"
                         value={entry.row.lastCreatorResponse ?? ""}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "lastCreatorResponse", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "lastCreatorResponse",
+                            event.target.value,
+                          )
                         }
                         rows={1}
                       />
@@ -426,7 +507,11 @@ export function CreatorDatabasePage({
                         aria-label="达人备注"
                         value={entry.row.notes}
                         onChange={(event) =>
-                          actions.updateRow(entry.row.id, "notes", event.target.value)
+                          actions.updateRow(
+                            entry.row.id,
+                            "notes",
+                            event.target.value,
+                          )
                         }
                         rows={1}
                       />

@@ -21,32 +21,32 @@ The English message should sound like a US brand communicating with a creator.
 
 Tone requirements:
 
-* Professional but warm
-* Clear and direct
-* Not too humble
-* Not overly excited
-* Not pushy
-* Not like a translated Chinese message
-* No excessive compliments
-* No begging language
-* Suitable for TikTok Shop creator collaboration
+- Professional but warm
+- Clear and direct
+- Not too humble
+- Not overly excited
+- Not pushy
+- Not like a translated Chinese message
+- No excessive compliments
+- No begging language
+- Suitable for TikTok Shop creator collaboration
 
 Avoid phrases like:
 
-* Please please
-* We really really hope
-* You are amazing and perfect
-* We are begging you
-* Sorry to bother you so much
+- Please please
+- We really really hope
+- You are amazing and perfect
+- We are begging you
+- Sorry to bother you so much
 
 Preferred style:
 
-* Thanks for the update.
-* Just checking in.
-* Could you focus more on...
-* This helps viewers understand the product better.
-* Please let us know your expected posting date.
-* If you are no longer able to move forward, please let us know so we can update the campaign status.
+- Thanks for the update.
+- Just checking in.
+- Could you focus more on...
+- This helps viewers understand the product better.
+- Please let us know your expected posting date.
+- If you are no longer able to move forward, please let us know so we can update the campaign status.
 
 ## Channel Rules
 
@@ -56,14 +56,14 @@ Use short and natural messages.
 
 Length:
 
-* 2 to 4 short sentences
+- 2 to 4 short sentences
 
 Style:
 
-* Conversational
-* Direct
-* Easy to read
-* No long paragraphs
+- Conversational
+- Direct
+- Easy to read
+- No long paragraphs
 
 ### TikTok Shop Affiliate Message
 
@@ -71,14 +71,14 @@ Use a medium-length message.
 
 Length:
 
-* 4 to 6 sentences
+- 4 to 6 sentences
 
 Style:
 
-* Clear
-* Professional
-* Includes collaboration context
-* Includes next action
+- Clear
+- Professional
+- Includes collaboration context
+- Includes next action
 
 ### Email
 
@@ -86,11 +86,11 @@ Use a more structured message.
 
 Structure:
 
-* Greeting
-* Short context
-* Clear request
-* Next step
-* Closing
+- Greeting
+- Short context
+- Clear request
+- Next step
+- Closing
 
 ### WhatsApp
 
@@ -106,10 +106,10 @@ Steam Grooming Brush
 
 Each creator should deliver:
 
-* 2 videos
-* Each video should be 60 seconds or longer
-* Must tag the brand account
-* Must add the TikTok Shop product link
+- 2 videos
+- Each video should be 60 seconds or longer
+- Must tag the brand account
+- Must add the TikTok Shop product link
 
 ### Video 1 Direction
 
@@ -159,14 +159,14 @@ The most important shots are:
 
 Creators should avoid:
 
-* Only filming unboxing
-* Only filming the product on a table
-* Not showing the pet using the product
-* Not showing the mist
-* Not showing the loose hair collected
-* Making the video look like a hard ad
-* Forgetting to tag the brand account
-* Forgetting to add the product link
+- Only filming unboxing
+- Only filming the product on a table
+- Not showing the pet using the product
+- Not showing the mist
+- Not showing the loose hair collected
+- Making the video look like a hard ad
+- Forgetting to tag the brand account
+- Forgetting to add the product link
 
 ## Reference Video Links
 
@@ -191,9 +191,9 @@ The tool should support these message scenarios:
 
 Used when:
 
-* Creator was contacted 2 days ago
-* No reply yet
-* No sample has been sent
+- Creator was contacted 2 days ago
+- No reply yet
+- No sample has been sent
 
 Goal:
 
@@ -203,8 +203,8 @@ Check whether the creator is interested.
 
 Used when:
 
-* Sample has been delivered
-* No video has been posted yet
+- Sample has been delivered
+- No video has been posted yet
 
 Goal:
 
@@ -214,8 +214,8 @@ Remind the creator to film based on the brief.
 
 Used when:
 
-* The seller already followed up
-* Creator still has not replied
+- The seller already followed up
+- Creator still has not replied
 
 Goal:
 
@@ -225,8 +225,8 @@ Ask for a clear update.
 
 Used when:
 
-* Creator posted 1 video
-* Collaboration requires 2 videos
+- Creator posted 1 video
+- Collaboration requires 2 videos
 
 Goal:
 
@@ -236,9 +236,9 @@ Ask the creator to post the second video.
 
 Used when:
 
-* Sample was already sent or delivered
-* Creator has not replied after multiple follow-ups
-* Collaboration may need to be marked as failed
+- Sample was already sent or delivered
+- Creator has not replied after multiple follow-ups
+- Collaboration may need to be marked as failed
 
 Goal:
 

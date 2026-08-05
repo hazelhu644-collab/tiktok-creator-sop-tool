@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   buildDuplicateImportSummary,
   clearSavedCreatorRows,
@@ -858,9 +852,7 @@ function App() {
               (showArchivedProducts || !campaignForRow(row)?.archivedAt),
           )
         : rows.filter((row) =>
-            activeCampaign
-              ? rowMatchesCampaign(row, activeCampaign)
-              : false,
+            activeCampaign ? rowMatchesCampaign(row, activeCampaign) : false,
           ),
     [
       rows,
@@ -874,8 +866,7 @@ function App() {
   const visibleRows = useMemo(
     () =>
       scopedRows.filter(
-        (row) =>
-          showArchivedCollaborations || !isArchivedCollaboration(row),
+        (row) => showArchivedCollaborations || !isArchivedCollaboration(row),
       ),
     [scopedRows, showArchivedCollaborations],
   );
@@ -892,9 +883,7 @@ function App() {
         .flatMap((row) =>
           analyzeCreators([row], undefined, requiredVideosForRow(row)),
         )
-        .sort(
-          (a, b) => compareTasks(a, b),
-        ),
+        .sort((a, b) => compareTasks(a, b)),
     [dailyQueueRows, mergedCampaigns, activeFilmingRequirements],
   );
   const historicalTasks = useMemo(
@@ -1040,9 +1029,7 @@ function App() {
           (!normalized || haystack.includes(normalized))
         );
       })
-      .sort(
-        (a, b) => compareTasks(a, b),
-      );
+      .sort((a, b) => compareTasks(a, b));
   }, [
     workbenchTasks,
     followupSearch,
@@ -1193,8 +1180,7 @@ function App() {
     if (
       selectedCampaign !== "ALL" &&
       !activeCampaigns.some(
-        (campaign) =>
-          campaignOptionValue(campaign) === selectedCampaign,
+        (campaign) => campaignOptionValue(campaign) === selectedCampaign,
       )
     ) {
       setSelectedCampaign("ALL");
@@ -1410,10 +1396,7 @@ function App() {
   ).length;
 
   const activeEnrichedRows = enrichedRows.filter((entry) =>
-    isActiveDailyCollaboration(
-      entry.row,
-      requiredVideosForRow(entry.row),
-    ),
+    isActiveDailyCollaboration(entry.row, requiredVideosForRow(entry.row)),
   );
 
   const deliveredWaitingVideoCount = activeEnrichedRows.filter((entry) => {
@@ -1425,11 +1408,7 @@ function App() {
   }).length;
   const postedVideoCount = scopedRows.reduce(
     (sum, row) =>
-      sum +
-      videoProgressCounts(
-        row,
-        requiredVideosForRow(row),
-      ).posted,
+      sum + videoProgressCounts(row, requiredVideosForRow(row)).posted,
     0,
   );
   const postedThisWeekCount = activeEnrichedRows.reduce((count, entry) => {
@@ -1471,27 +1450,21 @@ function App() {
     {
       label: "合作完成数量",
       value: databaseRows.filter(
-        (row) =>
-          inferStatus(row, requiredVideosForRow(row)) ===
-          "Completed",
+        (row) => inferStatus(row, requiredVideosForRow(row)) === "Completed",
       ).length,
       filterKey: "completed",
     },
     {
       label: "合作失败数量",
       value: databaseRows.filter(
-        (row) =>
-          inferStatus(row, requiredVideosForRow(row)) === "Lost",
+        (row) => inferStatus(row, requiredVideosForRow(row)) === "Lost",
       ).length,
       filterKey: "failed",
     },
     {
       label: "样品运输中数量",
       value: activeEnrichedRows.filter((entry) =>
-        isSampleInTransitForDaily(
-          entry.row,
-          requiredVideosForRow(entry.row),
-        ),
+        isSampleInTransitForDaily(entry.row, requiredVideosForRow(entry.row)),
       ).length,
       filterKey: "sample_shipped",
     },
@@ -1534,13 +1507,16 @@ function App() {
         productName: selectedTask.product || "缺少产品名称",
         statusLabel:
           selectedTask.currentStatus ||
-          displayStatus(inferStatus(selectedTask, requiredVideosForRow(selectedTask))),
+          displayStatus(
+            inferStatus(selectedTask, requiredVideosForRow(selectedTask)),
+          ),
         priorityLabel: priorityLabel(selectedTask),
         triggerReason: selectedTask.triggerReason,
         suggestedAction: selectedTask.suggestedAction,
         trackingStatus: selectedTask.trackingStatus || "—",
         notes: selectedTask.notes.trim() || "—",
-        crossStoreCreator: getDuplicateCheck(selectedTask, rows).crossStoreCreator,
+        crossStoreCreator: getDuplicateCheck(selectedTask, rows)
+          .crossStoreCreator,
         otherActiveSampleCount: Math.max(
           (activeSampleCounts.get(selectedTask.id) ?? 1) - 1,
           0,
@@ -1551,8 +1527,14 @@ function App() {
         moreInfo: [
           { label: "联系渠道", value: channel },
           { label: "最近联系日期", value: selectedTask.lastContactDate || "—" },
-          { label: "样品状态", value: selectedTask.sampleShippingStatus || "—" },
-          { label: "样品到货日期", value: selectedTask.sampleDeliveredDate || "—" },
+          {
+            label: "样品状态",
+            value: selectedTask.sampleShippingStatus || "—",
+          },
+          {
+            label: "样品到货日期",
+            value: selectedTask.sampleDeliveredDate || "—",
+          },
           { label: "视频进度", value: selectedTask.videoProgress || "—" },
           {
             label: "首条视频发布时间",
@@ -1564,7 +1546,8 @@ function App() {
               selectedTask.followUpHistory
                 ?.slice()
                 .reverse()
-                .find((entry) => entry.action === "Creator Replied")?.date || "—",
+                .find((entry) => entry.action === "Creator Replied")?.date ||
+              "—",
           },
           { label: "主页链接", value: selectedTask.profileLink || "—" },
         ],
@@ -1573,16 +1556,16 @@ function App() {
 
   const shouldShowReplyBlock = Boolean(
     selectedTask &&
-      (message ||
-        (selectedTask.trackingStatus ?? "").match(
-          /Replied|Reply Pending|达人已回复|达人回复待处理/i,
-        ) ||
-        selectedTask.lastCreatorResponse?.trim() ||
-        selectedTask.notes.trim()),
+    (message ||
+      (selectedTask.trackingStatus ?? "").match(
+        /Replied|Reply Pending|达人已回复|达人回复待处理/i,
+      ) ||
+      selectedTask.lastCreatorResponse?.trim() ||
+      selectedTask.notes.trim()),
   );
   const isHistoricalReadOnly = Boolean(
     selectedTask &&
-      (usesHistoricalTaskSource || isArchivedCollaboration(selectedTask)),
+    (usesHistoricalTaskSource || isArchivedCollaboration(selectedTask)),
   );
   const deepSeekDisplayError = deepSeekError
     ? deepSeekError.includes("DEEPSEEK_API_KEY")
@@ -1691,12 +1674,7 @@ function App() {
       currentRows.map((row) => {
         if (row.id !== rowId) return row;
         const rowRequiredVideos = requiredVideosForRow(row);
-        let updated = updateCreatorField(
-          row,
-          field,
-          value,
-          rowRequiredVideos,
-        );
+        let updated = updateCreatorField(row, field, value, rowRequiredVideos);
         if (field === "storeName") {
           const storeName = normalizeStoreName(value);
           const storeId = normalizeStoreId(undefined, storeName);
@@ -1718,17 +1696,13 @@ function App() {
           };
         }
         if (field === "product") {
-          const storeId = normalizeStoreId(
-            updated.storeId,
-            updated.storeName,
-          );
+          const storeId = normalizeStoreId(updated.storeId, updated.storeName);
           const matchedCampaign = mergedCampaigns.find(
             (campaign) =>
               normalizeStoreId(campaign.storeId, campaign.storeName) ===
                 storeId && campaign.productName === value,
           );
-          const campaignId =
-            matchedCampaign?.id ?? campaignIdFromName(value);
+          const campaignId = matchedCampaign?.id ?? campaignIdFromName(value);
           updated = {
             ...updated,
             campaignId,
@@ -1737,10 +1711,7 @@ function App() {
               productIdForCampaign(storeId, campaignId),
           };
           const newRequirement = parseRequiredVideos(
-            campaignToFilmingRequirements(
-              matchedCampaign,
-              filmingRequirements,
-            ),
+            campaignToFilmingRequirements(matchedCampaign, filmingRequirements),
           );
           const progress = normalizeVideoProgress(
             row.videoProgress,
@@ -1976,7 +1947,11 @@ function App() {
       username: creatorName,
     };
     const duplicate = getDuplicateCheck(draft, rows);
-    if (creatorName && duplicate.duplicateCreator && duplicate.matchingRows[0]) {
+    if (
+      creatorName &&
+      duplicate.duplicateCreator &&
+      duplicate.matchingRows[0]
+    ) {
       setPendingDuplicateAdd({ draft, existing: duplicate.matchingRows[0] });
       setToast({
         tone: "warning",
@@ -2008,9 +1983,7 @@ function App() {
   }
 
   function toggleAllFilteredCreators(checked: boolean) {
-    setSelectedIds(
-      checked ? filteredRows.map((entry) => entry.row.id) : [],
-    );
+    setSelectedIds(checked ? filteredRows.map((entry) => entry.row.id) : []);
   }
 
   function applyStatusToRows(ids: string[], status: CreatorStatus) {
@@ -2179,7 +2152,10 @@ function App() {
   }
 
   function campaignForRow(
-    row: Pick<CreatorRow, "storeId" | "storeName" | "product" | "campaignId" | "productId">,
+    row: Pick<
+      CreatorRow,
+      "storeId" | "storeName" | "product" | "campaignId" | "productId"
+    >,
   ): Campaign | undefined {
     return mergedCampaigns.find((campaign) =>
       rowMatchesCampaignIdentity(row, campaign),
@@ -2499,8 +2475,7 @@ function App() {
     const selectedRequiredVideos = requiredVideosForRow(selectedTask);
     const progress = window.prompt(
       "视频进度：可填 0/1、1/1、0/2、1/2 或自定义",
-      selectedTask.videoProgress ||
-        `0/${selectedRequiredVideos}`,
+      selectedTask.videoProgress || `0/${selectedRequiredVideos}`,
     );
     if (progress === null) return;
     const firstDate = window.prompt(
@@ -3168,12 +3143,7 @@ function App() {
           <div className="generator-controls">
             <label>
               当前产品项目
-              <input
-                value={
-                  selectedCampaignName
-                }
-                readOnly
-              />
+              <input value={selectedCampaignName} readOnly />
             </label>
             <label>
               选择达人
@@ -3368,9 +3338,7 @@ function App() {
                     inferStatus(row, requiredVideosForRow(row)),
                   )}
                 >
-                  {displayStatus(
-                    inferStatus(row, requiredVideosForRow(row)),
-                  )}
+                  {displayStatus(inferStatus(row, requiredVideosForRow(row)))}
                 </span>
               </div>
               {reviewChecklistForRow(row).map((item) => (
@@ -3838,23 +3806,24 @@ function App() {
           }
         : null;
 
-    const campaignSettingsOptions: CampaignSettingsOption[] = activeCampaigns.map(
-      (campaign) => ({
+    const campaignSettingsOptions: CampaignSettingsOption[] =
+      activeCampaigns.map((campaign) => ({
         value: campaignSelectValue(campaign),
         label: `${campaignLabel(campaign, showStoreLabels)}${
           campaign.archivedAt ? "（已归档）" : ""
         }`,
-      }),
-    );
+      }));
 
     const campaignStoreCleanupItems: CampaignStoreCleanupView[] = stores.map(
       (store) => {
         const linkedCampaigns = mergedCampaigns.filter(
           (campaign) =>
-            normalizeStoreId(campaign.storeId, campaign.storeName) === store.id &&
-            !campaign.archivedAt,
+            normalizeStoreId(campaign.storeId, campaign.storeName) ===
+              store.id && !campaign.archivedAt,
         ).length;
-        const linkedRows = rows.filter((row) => rowStoreId(row) === store.id).length;
+        const linkedRows = rows.filter(
+          (row) => rowStoreId(row) === store.id,
+        ).length;
         return {
           id: store.id,
           name: store.name,
@@ -3878,7 +3847,10 @@ function App() {
               setShowArchivedProducts,
               createCampaign,
               announceEditable: () =>
-                setToast({ tone: "success", text: "可直接在下方编辑产品字段。" }),
+                setToast({
+                  tone: "success",
+                  text: "可直接在下方编辑产品字段。",
+                }),
               duplicateCampaign: () => {
                 if (targetCampaign) duplicateCampaign(targetCampaign);
               },
@@ -3892,26 +3864,34 @@ function App() {
                 if (targetCampaign) deleteCampaign(targetCampaign);
               },
               assignStore: (storeId) => {
-                if (targetCampaign) assignCampaignStore(targetCampaign, storeId);
+                if (targetCampaign)
+                  assignCampaignStore(targetCampaign, storeId);
               },
               renameProduct: (productName) => {
-                if (targetCampaign) updateCampaignProductName(targetCampaign, productName);
+                if (targetCampaign)
+                  updateCampaignProductName(targetCampaign, productName);
               },
               updateKeyContentPoints: (value) =>
                 updateCampaign({ keyContentPoints: normalizeListText(value) }),
-              updateSellingPoints: (value) => updateCampaign({ sellingPoints: value }),
-              updateVideoLength: (value) => updateCampaign({ videoLength: value }),
-              updateVideoCount: (value) => updateCampaign({ videoCount: value }),
+              updateSellingPoints: (value) =>
+                updateCampaign({ sellingPoints: value }),
+              updateVideoLength: (value) =>
+                updateCampaign({ videoLength: value }),
+              updateVideoCount: (value) =>
+                updateCampaign({ videoCount: value }),
               syncVideoCount: () => {
                 if (targetCampaign) syncCampaignVideoCount(targetCampaign);
               },
-              updateAvoidShots: (value) => updateCampaign({ avoidShots: value }),
+              updateAvoidShots: (value) =>
+                updateCampaign({ avoidShots: value }),
               updateProductLinkRequirement: (value) =>
                 updateCampaign({ tagRequirement: value, productLink: "" }),
               updateReferenceLinks: (value) =>
                 updateCampaign({ referenceLinks: normalizeListText(value) }),
               inspectStore: (storeId) => {
-                const item = campaignStoreCleanupItems.find((entry) => entry.id === storeId);
+                const item = campaignStoreCleanupItems.find(
+                  (entry) => entry.id === storeId,
+                );
                 if (!item) return;
                 setToast(
                   item.canHide

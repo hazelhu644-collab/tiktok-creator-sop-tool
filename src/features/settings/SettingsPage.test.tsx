@@ -124,7 +124,9 @@ describe("SettingsPage", () => {
     render(<SettingsPage {...props} />);
 
     expect(screen.getByLabelText("ChatGPT 提示词")).toHaveAttribute("readonly");
-    expect(screen.getByText("提示词已生成。请复制到 ChatGPT 使用。")).toBeVisible();
+    expect(
+      screen.getByText("提示词已生成。请复制到 ChatGPT 使用。"),
+    ).toBeVisible();
     expect(screen.getByText("已复制提示词。")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "复制提示词" }));
@@ -156,7 +158,9 @@ describe("SettingsPage", () => {
     props.uiState.promptHelperOpen = true;
 
     const { rerender } = render(<SettingsPage {...props} />);
-    await user.click(screen.getByRole("button", { name: "用 AI 直接生成草稿" }));
+    await user.click(
+      screen.getByRole("button", { name: "用 AI 直接生成草稿" }),
+    );
     expect(props.actions.generateDraftWithAi).toHaveBeenCalledTimes(1);
 
     const loading = createProps();
@@ -180,7 +184,9 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "AI 生成失败：未配置 OPENAI_API_KEY。",
     );
-    expect(screen.queryByRole("button", { name: "应用到当前产品项目" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "应用到当前产品项目" }),
+    ).not.toBeInTheDocument();
   });
 
   it("previews a draft and forwards apply and dismiss without auto-applying", async () => {
@@ -199,7 +205,9 @@ describe("SettingsPage", () => {
     expect(screen.getByText("每位达人 2 条视频")).toBeVisible();
     expect(screen.getByText("展示雾化功能")).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "应用到当前产品项目" }));
+    await user.click(
+      screen.getByRole("button", { name: "应用到当前产品项目" }),
+    );
     expect(props.actions.applyAiDraft).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "放弃这版草稿" }));

@@ -43,9 +43,7 @@ import type { ReplyTone } from "../../messageGenerator";
 import type { Channel, GeneratedMessage } from "../../types";
 
 export type MessageComposerLoadingAction =
-  | "translate_creator_reply"
-  | "generate_personalized_reply"
-  | null;
+  "translate_creator_reply" | "generate_personalized_reply" | null;
 
 export type MessageComposerData = {
   creatorReply: string;
@@ -223,8 +221,12 @@ describe("MessageComposer", () => {
   it("renders controlled reply, translation, English message, and tracking UI", () => {
     render(<MessageComposer {...createProps()} />);
 
-    expect(screen.getByRole("heading", { name: "达人回复处理" })).toBeInTheDocument();
-    expect(screen.getByLabelText("达人回复原文")).toHaveValue("I can post Friday.");
+    expect(
+      screen.getByRole("heading", { name: "达人回复处理" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("达人回复原文")).toHaveValue(
+      "I can post Friday.",
+    );
     expect(screen.getByText("我可以周五发布。")).toBeInTheDocument();
     expect(screen.getByLabelText("英文话术")).toHaveValue(
       "Thanks! Please confirm the posting time.",
@@ -258,19 +260,19 @@ Create `MessageComposer.tsx`. It must:
 
 The mapping is locked:
 
-| Existing event/value | Controlled boundary |
-| --- | --- |
-| current creator reply | `data.creatorReply` / `actions.updateCreatorReply(value)` |
-| notes | `data.notes` / `actions.updateNotes(value)` |
-| both generate buttons | `actions.generateDeepSeekReply()` |
-| translate button | `actions.translateCreatorReply()` |
-| translation copy/edit/expand | matching translation actions |
-| reply focus/tone/advanced fields | matching controlled UI values/actions |
-| generated message/source/explanation | `data.message`, `data.messageSource`, `data.chineseExplanation` |
-| English edit/copy | `actions.updateEnglishMessage(value)` / `actions.copyEnglishMessage()` |
-| tracking buttons | matching mark/update actions |
-| outcome buttons | `actions.markCreatorOutcome("Completed" | "Failed")` |
-| next/stay buttons | `actions.processNextCreator()` / `actions.stayOnCurrentCreator()` |
+| Existing event/value                 | Controlled boundary                                                    |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| current creator reply                | `data.creatorReply` / `actions.updateCreatorReply(value)`              |
+| notes                                | `data.notes` / `actions.updateNotes(value)`                            |
+| both generate buttons                | `actions.generateDeepSeekReply()`                                      |
+| translate button                     | `actions.translateCreatorReply()`                                      |
+| translation copy/edit/expand         | matching translation actions                                           |
+| reply focus/tone/advanced fields     | matching controlled UI values/actions                                  |
+| generated message/source/explanation | `data.message`, `data.messageSource`, `data.chineseExplanation`        |
+| English edit/copy                    | `actions.updateEnglishMessage(value)` / `actions.copyEnglishMessage()` |
+| tracking buttons                     | matching mark/update actions                                           |
+| outcome buttons                      | `actions.markCreatorOutcome("Completed"                                | "Failed")` |
+| next/stay buttons                    | `actions.processNextCreator()` / `actions.stayOnCurrentCreator()`      |
 
 - [ ] **Step 5: Run the first component test and confirm GREEN**
 
@@ -289,15 +291,21 @@ it("forwards reply, DeepSeek, translation, and English editing callbacks", async
   fireEvent.change(screen.getByLabelText("达人回复原文"), {
     target: { value: "Updated reply" },
   });
-  expect(props.actions.updateCreatorReply).toHaveBeenCalledWith("Updated reply");
+  expect(props.actions.updateCreatorReply).toHaveBeenCalledWith(
+    "Updated reply",
+  );
   fireEvent.change(screen.getByLabelText("处理备注 / 达人备注"), {
     target: { value: "Updated note" },
   });
   expect(props.actions.updateNotes).toHaveBeenCalledWith("Updated note");
 
-  await user.click(screen.getByRole("button", { name: "DeepSeek 翻译达人回复" }));
+  await user.click(
+    screen.getByRole("button", { name: "DeepSeek 翻译达人回复" }),
+  );
   expect(props.actions.translateCreatorReply).toHaveBeenCalledTimes(1);
-  await user.click(screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0]);
+  await user.click(
+    screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0],
+  );
   expect(props.actions.generateDeepSeekReply).toHaveBeenCalledTimes(1);
   await user.click(screen.getByRole("button", { name: "复制翻译" }));
   expect(props.actions.copyTranslation).toHaveBeenCalledTimes(1);
@@ -317,7 +325,9 @@ it("forwards reply, DeepSeek, translation, and English editing callbacks", async
   fireEvent.change(screen.getByLabelText("英文话术"), {
     target: { value: "Edited English" },
   });
-  expect(props.actions.updateEnglishMessage).toHaveBeenCalledWith("Edited English");
+  expect(props.actions.updateEnglishMessage).toHaveBeenCalledWith(
+    "Edited English",
+  );
   await user.click(screen.getByRole("button", { name: "复制英文话术" }));
   expect(props.actions.copyEnglishMessage).toHaveBeenCalledTimes(1);
   await user.click(screen.getByRole("button", { name: "标记为已发送" }));
@@ -416,65 +426,70 @@ const deepSeekDisplayError = deepSeekError
 Replace only the existing `shouldShowReplyBlock && selectedTask` reply-panel JSX with:
 
 ```tsx
-{shouldShowReplyBlock && selectedTask && (
-  <MessageComposer
-    data={{
-      creatorReply: currentCreatorReply(selectedTask),
-      notes: selectedTask.notes,
-      channel,
-      chineseTranslation: deepSeekChineseTranslation,
-      errorMessage: deepSeekDisplayError,
-      message,
-      messageSource,
-      chineseExplanation: deepSeekChineseExplanation,
-      trackingStatus,
-      lastProcessingResult,
-      hasNextTask: Boolean(nextTask),
-    }}
-    uiState={{
-      historicalReadOnly: isHistoricalReadOnly,
-      loadingAction: deepSeekLoadingAction,
-      translationExpanded: isTranslationExpanded,
-      translationEditing: isTranslationEditing,
-      advancedReplyOpen: isAdvancedReplyOpen,
-      replyFocus,
-      relationshipNote: replyRelationshipNote,
-      replyTone,
-      replyGoal,
-      replyConcession,
-      showNextCreatorPrompt,
-      messageOutputRef: messageAreaRef,
-    }}
-    actions={{
-      updateCreatorReply: (value) => updateCurrentCreatorReply(selectedTask, value),
-      updateNotes: (value) => updateRow(selectedTask.id, "notes", value),
-      generateDeepSeekReply: () => void callDeepSeek("generate_personalized_reply"),
-      translateCreatorReply: () => void callDeepSeek("translate_creator_reply"),
-      copyTranslation: () =>
-        void copyText(deepSeekChineseTranslation, "已复制中文翻译。"),
-      updateTranslation: setDeepSeekChineseTranslation,
-      setTranslationExpanded: setIsTranslationExpanded,
-      setTranslationEditing: setIsTranslationEditing,
-      setReplyFocus,
-      setReplyTone,
-      setAdvancedReplyOpen: setIsAdvancedReplyOpen,
-      setRelationshipNote: setReplyRelationshipNote,
-      setReplyGoal,
-      setReplyConcession,
-      updateEnglishMessage: updateGeneratedEnglishMessage,
-      copyEnglishMessage: () => void handleCopyGeneratedMessage(),
-      markMessageSent: handleMarkMessageSent,
-      markCreatorReplied: handleMarkCreatorReplied,
-      markCreatorNoReply,
-      markVideoProgress,
-      updateVideoProgressManually: handleManualVideoProgressUpdate,
-      markCreatorOutcome,
-      markCreatorSkippedToday,
-      processNextCreator: handleProcessNextCreator,
-      stayOnCurrentCreator: () => setShowNextCreatorPrompt(false),
-    }}
-  />
-)}
+{
+  shouldShowReplyBlock && selectedTask && (
+    <MessageComposer
+      data={{
+        creatorReply: currentCreatorReply(selectedTask),
+        notes: selectedTask.notes,
+        channel,
+        chineseTranslation: deepSeekChineseTranslation,
+        errorMessage: deepSeekDisplayError,
+        message,
+        messageSource,
+        chineseExplanation: deepSeekChineseExplanation,
+        trackingStatus,
+        lastProcessingResult,
+        hasNextTask: Boolean(nextTask),
+      }}
+      uiState={{
+        historicalReadOnly: isHistoricalReadOnly,
+        loadingAction: deepSeekLoadingAction,
+        translationExpanded: isTranslationExpanded,
+        translationEditing: isTranslationEditing,
+        advancedReplyOpen: isAdvancedReplyOpen,
+        replyFocus,
+        relationshipNote: replyRelationshipNote,
+        replyTone,
+        replyGoal,
+        replyConcession,
+        showNextCreatorPrompt,
+        messageOutputRef: messageAreaRef,
+      }}
+      actions={{
+        updateCreatorReply: (value) =>
+          updateCurrentCreatorReply(selectedTask, value),
+        updateNotes: (value) => updateRow(selectedTask.id, "notes", value),
+        generateDeepSeekReply: () =>
+          void callDeepSeek("generate_personalized_reply"),
+        translateCreatorReply: () =>
+          void callDeepSeek("translate_creator_reply"),
+        copyTranslation: () =>
+          void copyText(deepSeekChineseTranslation, "已复制中文翻译。"),
+        updateTranslation: setDeepSeekChineseTranslation,
+        setTranslationExpanded: setIsTranslationExpanded,
+        setTranslationEditing: setIsTranslationEditing,
+        setReplyFocus,
+        setReplyTone,
+        setAdvancedReplyOpen: setIsAdvancedReplyOpen,
+        setRelationshipNote: setReplyRelationshipNote,
+        setReplyGoal,
+        setReplyConcession,
+        updateEnglishMessage: updateGeneratedEnglishMessage,
+        copyEnglishMessage: () => void handleCopyGeneratedMessage(),
+        markMessageSent: handleMarkMessageSent,
+        markCreatorReplied: handleMarkCreatorReplied,
+        markCreatorNoReply,
+        markVideoProgress,
+        updateVideoProgressManually: handleManualVideoProgressUpdate,
+        markCreatorOutcome,
+        markCreatorSkippedToday,
+        processNextCreator: handleProcessNextCreator,
+        stayOnCurrentCreator: () => setShowNextCreatorPrompt(false),
+      }}
+    />
+  );
+}
 ```
 
 Do not change `shouldShowReplyBlock`, `selectedTask`, `isHistoricalReadOnly`, `messageAreaRef`, any handler implementation, or any state declaration/effect.

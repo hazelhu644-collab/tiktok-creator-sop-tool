@@ -54,12 +54,7 @@ export type WorkbenchFilterKey =
   | "failed"
   | "sample_shipped";
 
-export type DashboardUrgency =
-  | "All"
-  | "Highest"
-  | "High"
-  | "Medium"
-  | "Low";
+export type DashboardUrgency = "All" | "Highest" | "High" | "Medium" | "Low";
 
 export type DashboardCampaignCardView = {
   value: string;
@@ -196,36 +191,42 @@ Create `src/features/dashboard/DashboardPage.test.tsx` with a `createProps()` fi
 ```tsx
 const base: DashboardPageProps = {
   data: {
-    campaignCards: [{
-      value: "store-1::pet-brush",
-      label: "Pet Brush",
-      ariaLabel: "Pet Brush2 位达人",
-      creatorCount: 2,
-      activeCount: 2,
-      todayFollowUp: 1,
-      highPriority: 1,
-      inTransit: 0,
-      deliveredPending: 1,
-      postedVideos: 1,
-      completed: 0,
-      failed: 0,
-    }],
-    metricCards: [{
-      label: "今日待跟进达人数量",
-      value: 1,
-      filterKey: "follow_up_today",
-    }],
+    campaignCards: [
+      {
+        value: "store-1::pet-brush",
+        label: "Pet Brush",
+        ariaLabel: "Pet Brush2 位达人",
+        creatorCount: 2,
+        activeCount: 2,
+        todayFollowUp: 1,
+        highPriority: 1,
+        inTransit: 0,
+        deliveredPending: 1,
+        postedVideos: 1,
+        completed: 0,
+        failed: 0,
+      },
+    ],
+    metricCards: [
+      {
+        label: "今日待跟进达人数量",
+        value: 1,
+        filterKey: "follow_up_today",
+      },
+    ],
     selectedCampaignName: "Pet Brush",
     workbenchFilterLabel: "",
     highestPendingCount: 1,
-    queueItems: [{
-      id: "creator-1",
-      creatorHandle: "@alpha_creator",
-      priorityLabel: "最高",
-      statusLabel: "待跟进",
-      multiSample: false,
-      subLine: "Pet Brush · 已签收",
-    }],
+    queueItems: [
+      {
+        id: "creator-1",
+        creatorHandle: "@alpha_creator",
+        priorityLabel: "最高",
+        statusLabel: "待跟进",
+        multiSample: false,
+        subLine: "Pet Brush · 已签收",
+      },
+    ],
     selectedCreator: {
       id: "creator-1",
       displayName: "alpha_creator",
@@ -288,12 +289,24 @@ Add the first test:
 it("renders the existing Dashboard overview, queue, and current creator", () => {
   render(<DashboardPage {...createProps()} />);
 
-  expect(screen.getByRole("heading", { name: "今日工作台" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "产品项目概览" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Pet Brush2 位达人" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /今日待跟进达人数量1Pet Brush/ })).toBeInTheDocument();
-  expect(screen.getByTestId("creator-queue")).toHaveTextContent("@alpha_creator");
-  expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("Creator prefers weekends");
+  expect(
+    screen.getByRole("heading", { name: "今日工作台" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "产品项目概览" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Pet Brush2 位达人" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /今日待跟进达人数量1Pet Brush/ }),
+  ).toBeInTheDocument();
+  expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+    "@alpha_creator",
+  );
+  expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+    "Creator prefers weekends",
+  );
 });
 ```
 
@@ -356,12 +369,18 @@ Add tests that assert:
 
 ```tsx
 await user.click(screen.getByRole("button", { name: "Pet Brush2 位达人" }));
-expect(props.actions.selectCampaignCard).toHaveBeenCalledWith("store-1::pet-brush");
+expect(props.actions.selectCampaignCard).toHaveBeenCalledWith(
+  "store-1::pet-brush",
+);
 
 await user.click(screen.getByRole("button", { name: /今日待跟进达人数量/ }));
-expect(props.actions.selectMetricCard).toHaveBeenCalledWith(props.data.metricCards[0]);
+expect(props.actions.selectMetricCard).toHaveBeenCalledWith(
+  props.data.metricCards[0],
+);
 
-fireEvent.change(screen.getByLabelText("搜索队列"), { target: { value: "alpha" } });
+fireEvent.change(screen.getByLabelText("搜索队列"), {
+  target: { value: "alpha" },
+});
 expect(props.actions.setFollowupSearch).toHaveBeenCalledWith("alpha");
 fireEvent.keyDown(screen.getByLabelText("搜索队列"), { key: "Enter" });
 expect(props.actions.locateCreator).toHaveBeenCalledTimes(1);

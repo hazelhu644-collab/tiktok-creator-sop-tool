@@ -10,15 +10,15 @@ Built with ChatGPT + Codex for creator collaboration operations.
 
 ## Features
 
-* Creator outreach workflow management
-* Daily creator follow-up task list
-* Sample delivery and video progress tracking
-* AI-assisted creator message generation
-* SOP-based collaboration status management
-* Multi-stage creator pipeline
-* Local creator workflow and message generation without required API keys
-* Optional DeepSeek integration for creator reply translation and personalized replies
-* Optional OpenAI integration for filming-requirement drafts
+- Creator outreach workflow management
+- Daily creator follow-up task list
+- Sample delivery and video progress tracking
+- AI-assisted creator message generation
+- SOP-based collaboration status management
+- Multi-stage creator pipeline
+- Local creator workflow and message generation without required API keys
+- Optional DeepSeek integration for creator reply translation and personalized replies
+- Optional OpenAI integration for filming-requirement drafts
 
 ---
 
@@ -32,10 +32,10 @@ The goal is to help sellers know which creators need attention today and what ac
 
 ## Target Users
 
-* TikTok Shop small sellers
-* Chinese cross-border e-commerce teams
-* New sellers managing creator collaborations for the first time
-* Brand-side operators who need a clearer outreach workflow
+- TikTok Shop small sellers
+- Chinese cross-border e-commerce teams
+- New sellers managing creator collaborations for the first time
+- Brand-side operators who need a clearer outreach workflow
 
 ---
 
@@ -69,12 +69,12 @@ The first product template is designed for a pet steam grooming brush.
 
 Video requirements:
 
-* 2 videos per creator
-* Each video should be 60 seconds or longer
-* Video 1: real review style
-* Video 2: daily pet-care routine style
-* Must tag the brand account
-* Must add the TikTok Shop product link
+- 2 videos per creator
+- Each video should be 60 seconds or longer
+- Video 1: real review style
+- Video 2: daily pet-care routine style
+- Must tag the brand account
+- Must add the TikTok Shop product link
 
 Content priority:
 
@@ -88,21 +88,21 @@ Content priority:
 
 ## Creator Status Options
 
-* Not Contacted
-* Invited
-* Replied
-* Sample Requested
-* Sample Approved
-* Sample Shipped
-* Delivered
-* Waiting Video
-* Posted
-* Need Revision
-* Product Tag Missing
-* Ready for Ads
-* Spark Ads Requested
-* Completed
-* Lost
+- Not Contacted
+- Invited
+- Replied
+- Sample Requested
+- Sample Approved
+- Sample Shipped
+- Delivered
+- Waiting Video
+- Posted
+- Need Revision
+- Product Tag Missing
+- Ready for Ads
+- Spark Ads Requested
+- Completed
+- Lost
 
 ---
 
@@ -110,33 +110,33 @@ Content priority:
 
 The uploaded spreadsheet should include:
 
-* Creator username
-* Creator profile link
-* Contact method
-* Product
-* Current status
-* Sample shipping status
-* Video progress
-* Last contact date
-* Notes
+- Creator username
+- Creator profile link
+- Contact method
+- Product
+- Current status
+- Sample shipping status
+- Video progress
+- Last contact date
+- Notes
 
 Video progress uses `X/N`, where `N` is the current Campaign's positive required-video count. `N` is not limited to a fixed list or maximum.
 
 Spreadsheet software may auto-convert values like `1/2` into a date, so users can also use safer formats such as:
 
-* `1 of 2`
-* `0 of 2`
-* `2 of 2`
-* `1 video`
-* `posted 1`
+- `1 of 2`
+- `0 of 2`
+- `2 of 2`
+- `1 video`
+- `posted 1`
 
 The system should generate:
 
-* Suggested status
-* Suggested reason
-* Daily task
-* Priority
-* Recommended next action
+- Suggested status
+- Suggested reason
+- Daily task
+- Priority
+- Recommended next action
 
 ---
 
@@ -159,11 +159,11 @@ The system should only suggest failure. The user makes the final decision.
 
 Suggest “Failed Candidate” when:
 
-* Sample was delivered 7 days ago and video progress is still `0/N`; the task remains Highest and also shows the warning
-* Creator was followed up twice and still has not replied
-* Creator posted only 1 video and has not posted the second video after 5 days
-* Creator has not replied for a long time and has no clear filming plan
-* The video does not follow the brief and the creator is unwilling to correct it
+- Sample was delivered 7 days ago and video progress is still `0/N`; the task remains Highest and also shows the warning
+- Creator was followed up twice and still has not replied
+- Creator posted only 1 video and has not posted the second video after 5 days
+- Creator has not replied for a long time and has no clear filming plan
+- The video does not follow the brief and the creator is unwilling to correct it
 
 ---
 
@@ -190,29 +190,29 @@ When the user selects a creator and contact channel, the tool should generate:
 
 Message style:
 
-* Native US creator communication style
-* Professional but warm
-* Not too humble
-* Not overly excited
-* Clear and direct
-* Suitable for TikTok Shop creator collaboration
+- Native US creator communication style
+- Professional but warm
+- Not too humble
+- Not overly excited
+- Clear and direct
+- Suitable for TikTok Shop creator collaboration
 
 Channel style:
 
-* TikTok DM: short and natural
-* TikTok Shop affiliate message: medium length and clear
-* Email: more complete and structured
-* WhatsApp: conversational but slightly more detailed than TikTok DM
+- TikTok DM: short and natural
+- TikTok Shop affiliate message: medium length and clear
+- Email: more complete and structured
+- WhatsApp: conversational but slightly more detailed than TikTok DM
 
 ---
 
 ## Tech Stack
 
-* TypeScript
-* Vite
-* ChatGPT
-* Codex
-* Vercel
+- TypeScript
+- Vite
+- ChatGPT
+- Codex
+- Vercel
 
 ---
 
@@ -232,16 +232,16 @@ Please use it in your own GitHub, Vercel, and browser environment. Do not reuse 
 
 ### 1. Copy the Template
 
-* Click **Use this template** on GitHub to create your own repository; or
-* Fork this repository to your own GitHub account.
+- Click **Use this template** on GitHub to create your own repository; or
+- Fork this repository to your own GitHub account.
 
 ### 2. Use Local / Free Mode by Default
 
-* API keys are optional. The app's core local features remain available without DeepSeek or OpenAI configuration.
-* Local features include Excel / CSV import and export, browser-based creator data management, daily task analysis, status tracking, and local message templates.
-* Uploaded data and local settings are stored in the current browser's `localStorage`.
-* `localStorage` data does not automatically sync to GitHub, Vercel, or other user accounts.
-* To reset local data, clear browser site data or use the available in-app reset controls.
+- API keys are optional. The app's core local features remain available without DeepSeek or OpenAI configuration.
+- Local features include Excel / CSV import and export, browser-based creator data management, daily task analysis, status tracking, and local message templates.
+- Uploaded data and local settings are stored in the current browser's `localStorage`.
+- `localStorage` data does not automatically sync to GitHub, Vercel, or other user accounts.
+- To reset local data, clear browser site data or use the available in-app reset controls.
 
 ### 3. Deploy to Your Own Vercel
 
@@ -265,10 +265,10 @@ OPENAI_MODEL=gpt-4o-mini
 
 API responsibilities:
 
-* DeepSeek translates creator replies into Chinese and generates personalized creator-facing English replies.
-* OpenAI generates filming-requirement drafts through the filming-requirements API endpoint.
-* Without either API key, local spreadsheet processing, creator management, task analysis, status tracking, and local message generation remain available.
-* Never commit real API keys to the repository.
+- DeepSeek translates creator replies into Chinese and generates personalized creator-facing English replies.
+- OpenAI generates filming-requirement drafts through the filming-requirements API endpoint.
+- Without either API key, local spreadsheet processing, creator management, task analysis, status tracking, and local message generation remain available.
+- Never commit real API keys to the repository.
 
 The Settings-page helper offers both paths. "生成可复制提示词" builds a prompt you paste into ChatGPT yourself and needs no API key. "用 AI 直接生成草稿" calls `/api/generate-filming-requirements`, which requires `OPENAI_API_KEY` in the deployment environment; the result is shown as a draft and is only written into the selected product's requirements and key content points after you confirm. `vite dev` does not serve `/api`, so the direct path only works on a deployed environment.
 
@@ -286,12 +286,12 @@ Demo mode is the recommended way to give public demonstrations, take screenshots
 
 ## Privacy and Security
 
-* Do not upload real creator CSV files to GitHub.
-* Do not commit `.env`, `.env.local`, `.env.production`, or other environment files.
-* Do not commit API keys, tokens, passwords, cookies, or private credentials.
-* Do not share production `localStorage` data, because it may contain real creator workflow information.
-* Use Safe Demo Mode (`?demo=1`) for public or shared demonstrations; it isolates the session from your real data.
-* Do not use real creator data in public or shared demonstrations.
+- Do not upload real creator CSV files to GitHub.
+- Do not commit `.env`, `.env.local`, `.env.production`, or other environment files.
+- Do not commit API keys, tokens, passwords, cookies, or private credentials.
+- Do not share production `localStorage` data, because it may contain real creator workflow information.
+- Use Safe Demo Mode (`?demo=1`) for public or shared demonstrations; it isolates the session from your real data.
+- Do not use real creator data in public or shared demonstrations.
 
 ---
 
@@ -299,24 +299,24 @@ Demo mode is the recommended way to give public demonstrations, take screenshots
 
 ### Implemented
 
-* Excel / CSV creator data import and export
-* Browser-local creator and campaign data storage
-* Daily task analysis and follow-up queues
-* Creator database search, filtering, status management, and archiving
-* Local creator message templates and follow-up message generation
-* Optional DeepSeek reply translation and personalized reply generation
-* OpenAI-backed filming-requirements draft API endpoint
-* Content review workflow and ad-ready asset tracking
-* Multi-store and multi-product campaign configuration
-* Safe Demo Mode with isolated fake data (`?demo=1`)
-* Direct in-app OpenAI filming-requirements draft generation
+- Excel / CSV creator data import and export
+- Browser-local creator and campaign data storage
+- Daily task analysis and follow-up queues
+- Creator database search, filtering, status management, and archiving
+- Local creator message templates and follow-up message generation
+- Optional DeepSeek reply translation and personalized reply generation
+- OpenAI-backed filming-requirements draft API endpoint
+- Content review workflow and ad-ready asset tracking
+- Multi-store and multi-product campaign configuration
+- Safe Demo Mode with isolated fake data (`?demo=1`)
+- Direct in-app OpenAI filming-requirements draft generation
 
 ### Planned
 
-* Browser automation support
-* TikTok Shop workflow integration
-* Campaign performance tracking
-* Team collaboration features
+- Browser automation support
+- TikTok Shop workflow integration
+- Campaign performance tracking
+- Team collaboration features
 
 ---
 

@@ -1,7 +1,25 @@
-import { arrivalDateDeltaDays, isDeliveredLogisticsStatus, isInTransitLogisticsStatus, normalizeVideoProgress, parseRequiredVideos } from './sopRules';
-import type { Channel, CommunicationAction, FollowUpHistoryEntry, GeneratedMessage, Task, UrgencyLevel } from './types';
+import {
+  arrivalDateDeltaDays,
+  isDeliveredLogisticsStatus,
+  isInTransitLogisticsStatus,
+  normalizeVideoProgress,
+  parseRequiredVideos,
+} from "./sopRules";
+import type {
+  Channel,
+  CommunicationAction,
+  FollowUpHistoryEntry,
+  GeneratedMessage,
+  Task,
+  UrgencyLevel,
+} from "./types";
 
-export const CHANNELS: Channel[] = ['TikTok DM', 'TikTok Shop Affiliate Message', 'Email', 'WhatsApp'];
+export const CHANNELS: Channel[] = [
+  "TikTok DM",
+  "TikTok Shop Affiliate Message",
+  "Email",
+  "WhatsApp",
+];
 
 export type CreatorFilmingRequirements = {
   productName: string;
@@ -17,7 +35,7 @@ export type CreatorFilmingRequirements = {
   referenceLinks?: string[];
 };
 
-export type ReplyTone = '中立专业' | '友好一点' | '坚定推进' | '最后确认';
+export type ReplyTone = "中立专业" | "友好一点" | "坚定推进" | "最后确认";
 
 export type CreatorReplyPersonalization = {
   relationshipNote?: string;
@@ -27,26 +45,28 @@ export type CreatorReplyPersonalization = {
 };
 
 export const defaultCreatorFilmingRequirements: CreatorFilmingRequirements = {
-  productName: '蒸汽梳毛器',
-  requiredScenes: '展示雾化功能；展示梳下来的浮毛；展示宠物真实反应；展示自然的日常宠物护理场景；展示清理过程',
-  sellingPoints: '蒸汽软化浮毛，梳毛同时收集毛发，适合日常宠物护理场景。',
-  videoLength: '每条视频 60 秒以上',
-  videoCount: '每位达人 2 条视频',
-  avoidShots: '',
-  productLinkRequirement: '必须挂 TikTok Shop 产品链接，并按 campaign 要求 tag 品牌账号。',
-  referenceVideoLinks: '',
+  productName: "蒸汽梳毛器",
+  requiredScenes:
+    "展示雾化功能；展示梳下来的浮毛；展示宠物真实反应；展示自然的日常宠物护理场景；展示清理过程",
+  sellingPoints: "蒸汽软化浮毛，梳毛同时收集毛发，适合日常宠物护理场景。",
+  videoLength: "每条视频 60 秒以上",
+  videoCount: "每位达人 2 条视频",
+  avoidShots: "",
+  productLinkRequirement:
+    "必须挂 TikTok Shop 产品链接，并按 campaign 要求 tag 品牌账号。",
+  referenceVideoLinks: "",
   requirements: [
-    '每位达人 2 条视频',
-    '每条视频 60 秒以上',
-    '必须 tag 品牌账号',
-    '必须挂 TikTok Shop 产品链接',
+    "每位达人 2 条视频",
+    "每条视频 60 秒以上",
+    "必须 tag 品牌账号",
+    "必须挂 TikTok Shop 产品链接",
   ],
   keyContentPoints: [
-    '展示雾化功能',
-    '展示梳下来的浮毛',
-    '展示宠物真实反应',
-    '展示自然的日常宠物护理场景',
-    '展示清理过程',
+    "展示雾化功能",
+    "展示梳下来的浮毛",
+    "展示宠物真实反应",
+    "展示自然的日常宠物护理场景",
+    "展示清理过程",
   ],
   referenceLinks: [],
 };
@@ -77,19 +97,34 @@ function normalizeForScenario(value: string): string {
 }
 
 function normalizeTrackingStatus(value: string | undefined): string {
-  const normalized = normalizeForScenario(value ?? '');
-  if (normalized === 'replied' || normalized === 'creator replied' || normalized === 'reply pending' || normalized === '达人已回复' || normalized === '达人回复待处理') return 'reply-pending';
-  if (normalized === 'followed up' || normalized === '已发送待回复') return 'sent-waiting';
-  if (normalized === 'completed' || normalized === '已完成') return 'completed';
-  if (normalized === 'failed' || normalized === '已失败') return 'failed';
+  const normalized = normalizeForScenario(value ?? "");
+  if (
+    normalized === "replied" ||
+    normalized === "creator replied" ||
+    normalized === "reply pending" ||
+    normalized === "达人已回复" ||
+    normalized === "达人回复待处理"
+  )
+    return "reply-pending";
+  if (normalized === "followed up" || normalized === "已发送待回复")
+    return "sent-waiting";
+  if (normalized === "completed" || normalized === "已完成") return "completed";
+  if (normalized === "failed" || normalized === "已失败") return "failed";
   return normalized;
 }
 
 function isReplyPendingTask(task: Task): boolean {
-  const latestCreatorReply = task.followUpHistory?.slice().reverse().find((entry) => entry.action === 'Creator Replied' && entry.note?.trim())?.note?.trim();
-  const savedReply = task.lastCreatorResponse?.trim() || latestCreatorReply || task.notes.trim();
-  return normalizeTrackingStatus(task.trackingStatus) === 'reply-pending'
-    && Boolean(savedReply);
+  const latestCreatorReply = task.followUpHistory
+    ?.slice()
+    .reverse()
+    .find((entry) => entry.action === "Creator Replied" && entry.note?.trim())
+    ?.note?.trim();
+  const savedReply =
+    task.lastCreatorResponse?.trim() || latestCreatorReply || task.notes.trim();
+  return (
+    normalizeTrackingStatus(task.trackingStatus) === "reply-pending" &&
+    Boolean(savedReply)
+  );
 }
 
 function statusIncludes(task: Task, terms: string[]): boolean {
@@ -98,84 +133,144 @@ function statusIncludes(task: Task, terms: string[]): boolean {
 }
 
 function hasSampleInTransitEvidence(task: Task): boolean {
-  return (isInTransitLogisticsStatus(task.sampleShippingStatus) || isInTransitLogisticsStatus(task.currentStatus))
-    && !hasSampleDeliveredEvidence(task);
+  return (
+    (isInTransitLogisticsStatus(task.sampleShippingStatus) ||
+      isInTransitLogisticsStatus(task.currentStatus)) &&
+    !hasSampleDeliveredEvidence(task)
+  );
 }
 
 function hasSampleDeliveredEvidence(task: Task): boolean {
-  return isDeliveredLogisticsStatus(task.sampleShippingStatus)
-    || /delivered|waiting video|已签收|已到货|签收|到货|等待视频/i.test(task.currentStatus);
+  return (
+    isDeliveredLogisticsStatus(task.sampleShippingStatus) ||
+    /delivered|waiting video|已签收|已到货|签收|到货|等待视频/i.test(
+      task.currentStatus,
+    )
+  );
 }
 
 function progressForTask(task: Task, configuredRequiredVideos?: number) {
-  const progressRequiredVideos = task.videoProgress.match(/(?:\/|of\s+)(\d+)/i)?.[1];
-  const fallbackRequiredVideos = progressRequiredVideos ? Number.parseInt(progressRequiredVideos, 10) : configuredRequiredVideos;
+  const progressRequiredVideos =
+    task.videoProgress.match(/(?:\/|of\s+)(\d+)/i)?.[1];
+  const fallbackRequiredVideos = progressRequiredVideos
+    ? Number.parseInt(progressRequiredVideos, 10)
+    : configuredRequiredVideos;
   return normalizeVideoProgress(task.videoProgress, fallbackRequiredVideos);
 }
 
-function isPartialVideoCompletionTask(task: Task, configuredRequiredVideos?: number): boolean {
+function isPartialVideoCompletionTask(
+  task: Task,
+  configuredRequiredVideos?: number,
+): boolean {
   const progress = progressForTask(task, configuredRequiredVideos);
-  return typeof progress.postedCount === 'number'
-    && progress.postedCount > 0
-    && typeof progress.requiredVideos === 'number'
-    && progress.postedCount < progress.requiredVideos;
+  return (
+    typeof progress.postedCount === "number" &&
+    progress.postedCount > 0 &&
+    typeof progress.requiredVideos === "number" &&
+    progress.postedCount < progress.requiredVideos
+  );
 }
 
-function isCompletedTask(task: Task, configuredRequiredVideos: number): boolean {
+function isCompletedTask(
+  task: Task,
+  configuredRequiredVideos: number,
+): boolean {
   const progress = progressForTask(task, configuredRequiredVideos);
-  return statusIncludes(task, ['completed'])
-    || (typeof progress.postedCount === 'number' && progress.postedCount >= configuredRequiredVideos);
+  return (
+    statusIncludes(task, ["completed"]) ||
+    (typeof progress.postedCount === "number" &&
+      progress.postedCount >= configuredRequiredVideos)
+  );
 }
 
-function clearlyMeetsFinalFailedCandidateConditions(task: Task, configuredRequiredVideos: number): boolean {
-  if (hasSampleInTransitEvidence(task) || isCompletedTask(task, configuredRequiredVideos) || statusIncludes(task, ['failed']) || !hasSampleDeliveredEvidence(task)) return false;
+function clearlyMeetsFinalFailedCandidateConditions(
+  task: Task,
+  configuredRequiredVideos: number,
+): boolean {
+  if (
+    hasSampleInTransitEvidence(task) ||
+    isCompletedTask(task, configuredRequiredVideos) ||
+    statusIncludes(task, ["failed"]) ||
+    !hasSampleDeliveredEvidence(task)
+  )
+    return false;
 
-  const warningText = task.failedWarnings.join(' ');
+  const warningText = task.failedWarnings.join(" ");
   const deliveredDate = task.sampleDeliveredDate.trim();
   const deliveredAgeInDays = deliveredDate
-    ? Math.floor((Date.now() - new Date(`${deliveredDate}T00:00:00Z`).getTime()) / 86_400_000)
+    ? Math.floor(
+        (Date.now() - new Date(`${deliveredDate}T00:00:00Z`).getTime()) /
+          86_400_000,
+      )
     : 0;
-  const hasStaleZeroPostWarning = task.failedWarnings.some((warning) => warning.includes('样品已到货') && warning.includes('视频进度仍为 0/'));
+  const hasStaleZeroPostWarning = task.failedWarnings.some(
+    (warning) =>
+      warning.includes("样品已到货") && warning.includes("视频进度仍为 0/"),
+  );
 
-  return task.lastFollowUpCount >= 2
-    || deliveredAgeInDays >= 30
-    || (hasStaleZeroPostWarning && task.lastFollowUpCount === 0 && !task.triggerReason.includes('达人还没有发布视频'))
-    || /长期未回复|没有明确拍摄计划|合作状态较差|不愿意修改视频|long-time no reply|long time no reply|no filming plan|bad cooperation|unwilling/i.test(warningText);
+  return (
+    task.lastFollowUpCount >= 2 ||
+    deliveredAgeInDays >= 30 ||
+    (hasStaleZeroPostWarning &&
+      task.lastFollowUpCount === 0 &&
+      !task.triggerReason.includes("达人还没有发布视频")) ||
+    /长期未回复|没有明确拍摄计划|合作状态较差|不愿意修改视频|long-time no reply|long time no reply|no filming plan|bad cooperation|unwilling/i.test(
+      warningText,
+    )
+  );
 }
 
-export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2): CreatorFollowUpClassification {
+export function classifyCreatorFollowUp(
+  task: Task,
+  configuredRequiredVideos = 2,
+): CreatorFollowUpClassification {
   const progress = progressForTask(task, configuredRequiredVideos);
   const postedCount = progress.postedCount ?? 0;
   const requiredVideos = progress.requiredVideos ?? configuredRequiredVideos;
-  const currentStatus = task.currentStatus.trim() || '未填写';
-  const sampleShippingStatus = task.sampleShippingStatus.trim() || '未填写';
+  const currentStatus = task.currentStatus.trim() || "未填写";
+  const sampleShippingStatus = task.sampleShippingStatus.trim() || "未填写";
   const status = normalizeForScenario(task.currentStatus);
   const shippingStatus = normalizeForScenario(task.sampleShippingStatus);
   const hasDeliveredEvidence = hasSampleDeliveredEvidence(task);
   const hasInTransitEvidence = hasSampleInTransitEvidence(task);
   const trackingStatus = normalizeTrackingStatus(task.trackingStatus);
-  const isCompleted = isCompletedTask(task, configuredRequiredVideos) || trackingStatus === 'completed';
-  const isFailed = statusIncludes(task, ['failed']) || trackingStatus === 'failed';
-  const needsRevision = statusIncludes(task, ['needs revision', 'revision'])
-    || /revision|revise|edit|修改|调整|重拍/i.test(task.notes);
+  const isCompleted =
+    isCompletedTask(task, configuredRequiredVideos) ||
+    trackingStatus === "completed";
+  const isFailed =
+    statusIncludes(task, ["failed"]) || trackingStatus === "failed";
+  const needsRevision =
+    statusIncludes(task, ["needs revision", "revision"]) ||
+    /revision|revise|edit|修改|调整|重拍/i.test(task.notes);
   const partialCompletion = postedCount > 0 && postedCount < requiredVideos;
-  const finalFollowUp = clearlyMeetsFinalFailedCandidateConditions(task, configuredRequiredVideos);
-  const hasLogisticsExceptionRisk = hasInTransitEvidence
-    && !hasDeliveredEvidence
-    && (task.priority === 'Highest'
-      || task.lastFollowUpCount >= 2
-      || task.failedWarnings.length > 0
-      || /shipping delay|logistics|tracking|delivery issue|delayed|stuck|lost|物流|快递|延迟|异常/i.test(task.notes));
-  const hasNoSampleStarted = !shippingStatus || shippingStatus === 'not shipped' || shippingStatus === 'not started' || shippingStatus === 'pending';
-  const isFirstOutreach = (!status || status.includes('to contact'))
-    && hasNoSampleStarted
-    && !task.sampleDeliveredDate.trim()
-    && postedCount === 0;
+  const finalFollowUp = clearlyMeetsFinalFailedCandidateConditions(
+    task,
+    configuredRequiredVideos,
+  );
+  const hasLogisticsExceptionRisk =
+    hasInTransitEvidence &&
+    !hasDeliveredEvidence &&
+    (task.priority === "Highest" ||
+      task.lastFollowUpCount >= 2 ||
+      task.failedWarnings.length > 0 ||
+      /shipping delay|logistics|tracking|delivery issue|delayed|stuck|lost|物流|快递|延迟|异常/i.test(
+        task.notes,
+      ));
+  const hasNoSampleStarted =
+    !shippingStatus ||
+    shippingStatus === "not shipped" ||
+    shippingStatus === "not started" ||
+    shippingStatus === "pending";
+  const isFirstOutreach =
+    (!status || status.includes("to contact")) &&
+    hasNoSampleStarted &&
+    !task.sampleDeliveredDate.trim() &&
+    postedCount === 0;
 
   if (isFailed) {
     return {
-      urgencyLevel: '归档',
-      communicationAction: '合作失败归档',
+      urgencyLevel: "归档",
+      communicationAction: "合作失败归档",
       reason: `当前状态为 ${currentStatus}，应从活跃跟进队列归档，只做最终 campaign status 确认。`,
       highRisk: false,
     };
@@ -183,19 +278,25 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
 
   if (isReplyPendingTask(task)) {
     return {
-      urgencyLevel: '高',
-      communicationAction: '回复达人消息',
+      urgencyLevel: "高",
+      communicationAction: "回复达人消息",
       reason: `达人已回复且「达人回复/下一步备注」不为空，需要基于达人回复继续推进沟通，而不是只记录回复。`,
       highRisk: false,
     };
   }
 
   if (hasInTransitEvidence && !hasDeliveredEvidence) {
-    const arrivalDelta = arrivalDateDeltaDays(task.sampleDeliveredDate, new Date());
-    if (hasLogisticsExceptionRisk || (arrivalDelta !== null && arrivalDelta < 0)) {
+    const arrivalDelta = arrivalDateDeltaDays(
+      task.sampleDeliveredDate,
+      new Date(),
+    );
+    if (
+      hasLogisticsExceptionRisk ||
+      (arrivalDelta !== null && arrivalDelta < 0)
+    ) {
       return {
-        urgencyLevel: '高',
-        communicationAction: '确认物流 / 是否签收',
+        urgencyLevel: "高",
+        communicationAction: "确认物流 / 是否签收",
         reason: `原因：样品已发出但尚未确认送达，需要优先确认物流 / 是否签收。样品仍处于运输中，不能催促视频履约或做最后确认。`,
         highRisk: true,
       };
@@ -203,8 +304,8 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
 
     if (arrivalDelta === 0) {
       return {
-        urgencyLevel: '高',
-        communicationAction: '确认样品是否收到',
+        urgencyLevel: "高",
+        communicationAction: "确认样品是否收到",
         reason: `样品到货日期为今天，在运输中语境下按预计到货日期处理，应确认样品是否收到并提醒拍摄计划。`,
         highRisk: false,
       };
@@ -212,16 +313,17 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
 
     if (arrivalDelta === 1) {
       return {
-        urgencyLevel: task.priority === 'High' ? '高' : '中',
-        communicationAction: '提醒达人注意签收并准备拍摄',
+        urgencyLevel: task.priority === "High" ? "高" : "中",
+        communicationAction: "提醒达人注意签收并准备拍摄",
         reason: `样品预计明天到货，应提醒达人注意签收并提前准备拍摄内容。`,
         highRisk: false,
       };
     }
 
     return {
-      urgencyLevel: task.priority === 'High' || task.priority === 'Highest' ? '高' : '中',
-      communicationAction: '样品运输中，提前沟通拍摄要求',
+      urgencyLevel:
+        task.priority === "High" || task.priority === "Highest" ? "高" : "中",
+      communicationAction: "样品运输中，提前沟通拍摄要求",
       reason: `物流状态为 ${sampleShippingStatus} 或 Current status 为 ${currentStatus}，样品到货日期在运输中语境下按预计到货日期处理。物流状态已发货/运输中，当前应提前沟通拍摄要求、内容结构、视频长度数量和挂链要求，不能催促视频履约。`,
       highRisk: false,
     };
@@ -229,8 +331,8 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
 
   if (isCompleted) {
     return {
-      urgencyLevel: '归档',
-      communicationAction: '合作完成维护',
+      urgencyLevel: "归档",
+      communicationAction: "合作完成维护",
       reason: `当前状态为 ${currentStatus}，或视频进度已达到 ${postedCount}/${configuredRequiredVideos}，合作已完成，应做维护而不是催发视频。`,
       highRisk: false,
     };
@@ -238,8 +340,8 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
 
   if (needsRevision && hasDeliveredEvidence) {
     return {
-      urgencyLevel: task.priority === 'Highest' ? '极高' : '高',
-      communicationAction: '视频修改',
+      urgencyLevel: task.priority === "Highest" ? "极高" : "高",
+      communicationAction: "视频修改",
       reason: `当前状态或备注显示需要修改视频，应清楚说明修改点并推动达人完成调整。`,
       highRisk: false,
     };
@@ -247,78 +349,104 @@ export function classifyCreatorFollowUp(task: Task, configuredRequiredVideos = 2
 
   if (needsRevision) {
     return {
-      urgencyLevel: task.priority === 'Highest' ? '极高' : '高',
-      communicationAction: '视频修改',
+      urgencyLevel: task.priority === "Highest" ? "极高" : "高",
+      communicationAction: "视频修改",
       reason: `当前状态或备注显示需要修改视频，应清楚说明修改点并推动达人完成调整。`,
       highRisk: false,
     };
   }
 
   if (partialCompletion) {
-    const urgent = task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0;
+    const urgent =
+      task.priority === "Highest" ||
+      task.lastFollowUpCount >= 2 ||
+      task.failedWarnings.length > 0;
     return {
-      urgencyLevel: urgent ? '极高' : '高',
-      communicationAction: '剩余视频履约',
-      reason: `达人已发布部分视频，但当前视频进度为 ${postedCount}/${requiredVideos}，仍有剩余视频未完成${urgent ? '，且已有较高跟进压力或风险提醒' : ''}。`,
+      urgencyLevel: urgent ? "极高" : "高",
+      communicationAction: "剩余视频履约",
+      reason: `达人已发布部分视频，但当前视频进度为 ${postedCount}/${requiredVideos}，仍有剩余视频未完成${urgent ? "，且已有较高跟进压力或风险提醒" : ""}。`,
       highRisk: urgent,
     };
   }
 
   if (finalFollowUp) {
     return {
-      urgencyLevel: '极高',
-      communicationAction: '最后确认',
+      urgencyLevel: "极高",
+      communicationAction: "最后确认",
       reason: `达人跟进次数较高或已有失败风险提醒，合作仍未完成，需要今天确认是否还能继续履约。`,
       highRisk: true,
     };
   }
 
   if (hasDeliveredEvidence && postedCount === 0) {
-    const urgent = task.priority === 'Highest' || task.lastFollowUpCount >= 2 || task.failedWarnings.length > 0;
+    const urgent =
+      task.priority === "Highest" ||
+      task.lastFollowUpCount >= 2 ||
+      task.failedWarnings.length > 0;
     return {
-      urgencyLevel: urgent ? '极高' : '高',
-      communicationAction: '样品到货催拍',
-      reason: `物流状态为 ${sampleShippingStatus}，样品到货日期${task.sampleDeliveredDate.trim() ? '已填写' : '未填写'}；样品已送达或已填写到货日期，但当前视频进度为 0/${requiredVideos}，需要确认拍摄和发布时间。`,
+      urgencyLevel: urgent ? "极高" : "高",
+      communicationAction: "样品到货催拍",
+      reason: `物流状态为 ${sampleShippingStatus}，样品到货日期${task.sampleDeliveredDate.trim() ? "已填写" : "未填写"}；样品已送达或已填写到货日期，但当前视频进度为 0/${requiredVideos}，需要确认拍摄和发布时间。`,
       highRisk: urgent,
     };
   }
 
   if (isFirstOutreach) {
     return {
-      urgencyLevel: '低',
-      communicationAction: '未合作邀约',
+      urgencyLevel: "低",
+      communicationAction: "未合作邀约",
       reason: `当前状态为 ${currentStatus}，样品尚未发出且没有到货或视频进度，适合发送首次合作邀约。`,
       highRisk: false,
     };
   }
 
-  if (statusIncludes(task, ['sample requested', 'invited', 'waiting for sample request', 'contacted', 'waiting for reply', 'no reply'])) {
+  if (
+    statusIncludes(task, [
+      "sample requested",
+      "invited",
+      "waiting for sample request",
+      "contacted",
+      "waiting for reply",
+      "no reply",
+    ])
+  ) {
     return {
-      urgencyLevel: '中',
-      communicationAction: '未合作邀约',
+      urgencyLevel: "中",
+      communicationAction: "未合作邀约",
       reason: `达人处于正常建联或样品申请推进阶段，当前不紧急，但需要保持合作流程继续移动。`,
       highRisk: false,
     };
   }
 
   return {
-    urgencyLevel: task.priority === 'Low' || task.priority === 'None' ? '低' : '中',
-    communicationAction: '未合作邀约',
+    urgencyLevel:
+      task.priority === "Low" || task.priority === "None" ? "低" : "中",
+    communicationAction: "未合作邀约",
     reason: `当前状态为 ${currentStatus}，未命中特定样品或视频阶段，按常规合作进度确认处理。`,
     highRisk: false,
   };
 }
 
-function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageScenario {
+function scenarioForTask(
+  task: Task,
+  configuredRequiredVideos: number,
+): MessageScenario {
   const progress = progressForTask(task, configuredRequiredVideos);
   const postedCount = progress.postedCount ?? 0;
   const requiredVideos = progress.requiredVideos ?? configuredRequiredVideos;
-  const currentStatus = task.currentStatus.trim() || '未填写';
-  const sampleShippingStatus = task.sampleShippingStatus.trim() || '未填写';
+  const currentStatus = task.currentStatus.trim() || "未填写";
+  const sampleShippingStatus = task.sampleShippingStatus.trim() || "未填写";
   const hasDeliveredEvidence = hasSampleDeliveredEvidence(task);
   const hasInTransitEvidence = hasSampleInTransitEvidence(task);
-  const classification = classifyCreatorFollowUp(task, configuredRequiredVideos);
-  const withClassification = (scenario: string, reason = classification.reason, highRisk = classification.highRisk): MessageScenario => ({
+  const classification = classifyCreatorFollowUp(
+    task,
+    configuredRequiredVideos,
+  );
+  const withClassification = (
+    scenario: string,
+    reason = classification.reason,
+    highRisk = classification.highRisk,
+  ): MessageScenario => ({
     scenario,
     reason,
     highRisk,
@@ -326,138 +454,212 @@ function scenarioForTask(task: Task, configuredRequiredVideos: number): MessageS
     communicationAction: classification.communicationAction,
   });
 
-  if (classification.communicationAction === '回复达人消息') return withClassification('Creator Reply Follow-up');
-  if (classification.communicationAction === '合作失败归档') return withClassification('Failed Archive Confirmation');
-  if (classification.communicationAction === '合作完成维护') return withClassification('Completed Thank You');
-  if (classification.communicationAction === '视频修改') return withClassification('Needs Revision Reminder');
-  if (classification.communicationAction === '最后确认') return withClassification('Final Follow-up Before Failed Candidate');
-  if (classification.communicationAction === '剩余视频履约') return withClassification('Partial Video Completion Follow-up');
-  if (classification.communicationAction === '样品到货催拍') return withClassification('Sample Delivered Follow-up');
-  if (classification.communicationAction === '物流异常确认' || classification.communicationAction === '确认物流 / 是否签收') return withClassification('Logistics Exception Confirmation');
-  if (['样品运输中，提前沟通拍摄要求', '样品在路上，提醒达人提前规划拍摄内容', '提醒达人注意签收并准备拍摄', '确认样品是否收到'].includes(classification.communicationAction)) return withClassification('Sample In Transit Reminder');
+  if (classification.communicationAction === "回复达人消息")
+    return withClassification("Creator Reply Follow-up");
+  if (classification.communicationAction === "合作失败归档")
+    return withClassification("Failed Archive Confirmation");
+  if (classification.communicationAction === "合作完成维护")
+    return withClassification("Completed Thank You");
+  if (classification.communicationAction === "视频修改")
+    return withClassification("Needs Revision Reminder");
+  if (classification.communicationAction === "最后确认")
+    return withClassification("Final Follow-up Before Failed Candidate");
+  if (classification.communicationAction === "剩余视频履约")
+    return withClassification("Partial Video Completion Follow-up");
+  if (classification.communicationAction === "样品到货催拍")
+    return withClassification("Sample Delivered Follow-up");
+  if (
+    classification.communicationAction === "物流异常确认" ||
+    classification.communicationAction === "确认物流 / 是否签收"
+  )
+    return withClassification("Logistics Exception Confirmation");
+  if (
+    [
+      "样品运输中，提前沟通拍摄要求",
+      "样品在路上，提醒达人提前规划拍摄内容",
+      "提醒达人注意签收并准备拍摄",
+      "确认样品是否收到",
+    ].includes(classification.communicationAction)
+  )
+    return withClassification("Sample In Transit Reminder");
 
-  if (statusIncludes(task, ['to contact'])) {
-    return withClassification('First Outreach', `当前状态为 ${currentStatus}，还未正式建联，因此生成首次合作介绍话术。`, false);
+  if (statusIncludes(task, ["to contact"])) {
+    return withClassification(
+      "First Outreach",
+      `当前状态为 ${currentStatus}，还未正式建联，因此生成首次合作介绍话术。`,
+      false,
+    );
   }
 
-  if (statusIncludes(task, ['contacted', 'waiting for reply', 'no reply'])) {
-    return withClassification('No Reply Follow-up', `当前状态为 ${currentStatus}，重点是简短确认达人是否仍有合作兴趣。`, false);
+  if (statusIncludes(task, ["contacted", "waiting for reply", "no reply"])) {
+    return withClassification(
+      "No Reply Follow-up",
+      `当前状态为 ${currentStatus}，重点是简短确认达人是否仍有合作兴趣。`,
+      false,
+    );
   }
 
-  if (statusIncludes(task, ['invited', 'waiting for sample request'])) {
-    return withClassification('Sample Request Reminder', `当前状态为 ${currentStatus}，达人已收到邀请但还需要申请样品。`, false);
+  if (statusIncludes(task, ["invited", "waiting for sample request"])) {
+    return withClassification(
+      "Sample Request Reminder",
+      `当前状态为 ${currentStatus}，达人已收到邀请但还需要申请样品。`,
+      false,
+    );
   }
 
-  if (statusIncludes(task, ['sample requested'])) {
-    return withClassification('Sample Request Confirmation', `当前状态为 ${currentStatus}，适合确认样品申请已收到并说明下一步。`, false);
+  if (statusIncludes(task, ["sample requested"])) {
+    return withClassification(
+      "Sample Request Confirmation",
+      `当前状态为 ${currentStatus}，适合确认样品申请已收到并说明下一步。`,
+      false,
+    );
   }
 
   if (hasDeliveredEvidence && postedCount > 0 && postedCount < requiredVideos) {
-    return withClassification('Partial Video Completion Follow-up');
+    return withClassification("Partial Video Completion Follow-up");
   }
 
   if (hasDeliveredEvidence && postedCount === 0) {
-    return withClassification('Sample Delivered Follow-up', `虽然 Current status 为 ${currentStatus}，但物流状态为 ${sampleShippingStatus} 或样品到货日期已填写，说明达人已进入样品合作流程，因此生成样品到货后催拍。`, false);
+    return withClassification(
+      "Sample Delivered Follow-up",
+      `虽然 Current status 为 ${currentStatus}，但物流状态为 ${sampleShippingStatus} 或样品到货日期已填写，说明达人已进入样品合作流程，因此生成样品到货后催拍。`,
+      false,
+    );
   }
 
   if (hasInTransitEvidence) {
-    return withClassification('Sample In Transit Reminder', `物流状态为 ${sampleShippingStatus}，物流状态已发货/运输中，优先按样品流程生成话术。`, false);
+    return withClassification(
+      "Sample In Transit Reminder",
+      `物流状态为 ${sampleShippingStatus}，物流状态已发货/运输中，优先按样品流程生成话术。`,
+      false,
+    );
   }
 
-  if (task.priority === 'Medium') {
-    return withClassification('Second Follow-up', `系统优先级为中，说明此前已跟进但合作仍未完成，需要再次确认进展。`, true);
+  if (task.priority === "Medium") {
+    return withClassification(
+      "Second Follow-up",
+      `系统优先级为中，说明此前已跟进但合作仍未完成，需要再次确认进展。`,
+      true,
+    );
   }
 
-  return withClassification('Light Follow-up', `当前状态为 ${currentStatus}，未命中特定阶段，生成轻量合作进度确认话术。`, false);
+  return withClassification(
+    "Light Follow-up",
+    `当前状态为 ${currentStatus}，未命中特定阶段，生成轻量合作进度确认话术。`,
+    false,
+  );
 }
 
-function matchesFilmingRequirementsProduct(task: Task, filmingRequirements: CreatorFilmingRequirements): boolean {
+function matchesFilmingRequirementsProduct(
+  task: Task,
+  filmingRequirements: CreatorFilmingRequirements,
+): boolean {
   const taskProduct = task.product.trim().toLowerCase();
-  const requirementProduct = filmingRequirements.productName.trim().toLowerCase();
+  const requirementProduct = filmingRequirements.productName
+    .trim()
+    .toLowerCase();
 
   if (!taskProduct || !requirementProduct) return false;
-  return taskProduct.includes(requirementProduct) || requirementProduct.includes(taskProduct);
+  return (
+    taskProduct.includes(requirementProduct) ||
+    requirementProduct.includes(taskProduct)
+  );
 }
 
 function toEnglishProductName(product: string): string {
   const normalized = product.trim();
   const translationMap: Record<string, string> = {
-    蒸汽梳毛器: 'steam grooming brush',
-    智能宠物饮水机: 'smart pet water fountain',
+    蒸汽梳毛器: "steam grooming brush",
+    智能宠物饮水机: "smart pet water fountain",
   };
 
-  if (!normalized) return 'the product';
+  if (!normalized) return "the product";
   if (translationMap[normalized]) return translationMap[normalized];
-  return hasChineseCharacters(normalized) ? 'the product' : normalized;
+  return hasChineseCharacters(normalized) ? "the product" : normalized;
 }
 
 function toEnglishContentPoint(point: string): string {
   const normalized = point.trim();
   const translationMap: Record<string, string> = {
-    展示雾化功能: 'show the mist feature',
-    展示梳下来的浮毛: 'show the loose hair removed',
+    展示雾化功能: "show the mist feature",
+    展示梳下来的浮毛: "show the loose hair removed",
     展示宠物真实反应: "show your pet’s real reaction",
-    展示自然的日常宠物护理场景: 'show a natural daily pet-care scene',
-    展示清理过程: 'show the cleanup process',
-    展示逗猫棒很好玩: 'show that the cat teaser is fun to use',
+    展示自然的日常宠物护理场景: "show a natural daily pet-care scene",
+    展示清理过程: "show the cleanup process",
+    展示逗猫棒很好玩: "show that the cat teaser is fun to use",
   };
 
-  if (!normalized) return '';
+  if (!normalized) return "";
   if (translationMap[normalized]) return translationMap[normalized];
-  return hasChineseCharacters(normalized) ? '' : normalized;
+  return hasChineseCharacters(normalized) ? "" : normalized;
 }
 
 function toEnglishRequirement(requirement: string): string {
   const normalized = requirement.trim();
-  if (!normalized) return '';
+  if (!normalized) return "";
 
   const videoCountMatch = normalized.match(/每位达人\s*(\d+)\s*条视频/);
   if (videoCountMatch) {
     const count = Number(videoCountMatch[1]);
-    return `complete ${count} ${count === 1 ? 'video' : 'videos'}`;
+    return `complete ${count} ${count === 1 ? "video" : "videos"}`;
   }
 
   const durationMatch = normalized.match(/每条视频\s*(\d+)\s*秒以上/);
-  if (durationMatch) return `keep each video at least ${durationMatch[1]} seconds`;
+  if (durationMatch)
+    return `keep each video at least ${durationMatch[1]} seconds`;
 
-  if (normalized.includes('必须') && normalized.toLowerCase().includes('tag')) return 'tag the brand account';
-  if (normalized.includes('TikTok Shop') && (normalized.includes('产品链接') || normalized.toLowerCase().includes('link'))) return 'include the TikTok Shop product link';
+  if (normalized.includes("必须") && normalized.toLowerCase().includes("tag"))
+    return "tag the brand account";
+  if (
+    normalized.includes("TikTok Shop") &&
+    (normalized.includes("产品链接") ||
+      normalized.toLowerCase().includes("link"))
+  )
+    return "include the TikTok Shop product link";
 
-  return hasChineseCharacters(normalized) ? '' : normalized;
+  return hasChineseCharacters(normalized) ? "" : normalized;
 }
 
 function joinEnglishList(items: string[]): string {
-  if (items.length === 0) return '';
+  if (items.length === 0) return "";
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 function isGuidelineScenario(scenario: string): boolean {
-  return scenario === 'Creator Reply Follow-up'
-    || scenario === 'Sample Delivered Follow-up'
-    || scenario === 'Sample In Transit Reminder'
-    || scenario === 'Logistics Exception Confirmation'
-    || scenario === 'Partial Video Completion Follow-up'
-    || scenario === 'Needs Revision Reminder'
-    || scenario === 'Final Follow-up Before Failed Candidate'
-    || scenario === 'Second Follow-up';
+  return (
+    scenario === "Creator Reply Follow-up" ||
+    scenario === "Sample Delivered Follow-up" ||
+    scenario === "Sample In Transit Reminder" ||
+    scenario === "Logistics Exception Confirmation" ||
+    scenario === "Partial Video Completion Follow-up" ||
+    scenario === "Needs Revision Reminder" ||
+    scenario === "Final Follow-up Before Failed Candidate" ||
+    scenario === "Second Follow-up"
+  );
 }
 
-function referenceLinksLine(scenario: string, filmingRequirements: CreatorFilmingRequirements): string {
+function referenceLinksLine(
+  scenario: string,
+  filmingRequirements: CreatorFilmingRequirements,
+): string {
   const referenceLinks = (filmingRequirements.referenceLinks ?? [])
     .map((link) => link.trim())
     .filter((link) => link && !hasChineseCharacters(link))
     .slice(0, 3);
-  if (referenceLinks.length === 0 || !isGuidelineScenario(scenario)) return '';
+  if (referenceLinks.length === 0 || !isGuidelineScenario(scenario)) return "";
 
-  const linksText = referenceLinks.join('; ');
+  const linksText = referenceLinks.join("; ");
 
-  if (scenario === 'Final Follow-up Before Failed Candidate' || scenario === 'Second Follow-up') {
+  if (
+    scenario === "Final Follow-up Before Failed Candidate" ||
+    scenario === "Second Follow-up"
+  ) {
     return `You can use the reference links as direction for the remaining video(s): ${linksText}.`;
   }
 
-  if (scenario === 'Partial Video Completion Follow-up') {
+  if (scenario === "Partial Video Completion Follow-up") {
     return `You can also use these reference videos as direction for the next post: ${linksText}.`;
   }
 
@@ -465,128 +667,243 @@ function referenceLinksLine(scenario: string, filmingRequirements: CreatorFilmin
 }
 
 function remainingVideoPhrase(count: number | null): string {
-  if (count === null || count <= 0) return 'remaining video(s)';
-  return `${count} remaining ${count === 1 ? 'video' : 'videos'}`;
+  if (count === null || count <= 0) return "remaining video(s)";
+  return `${count} remaining ${count === 1 ? "video" : "videos"}`;
 }
 
-function partialCompletionGuidelinesLine(filmingRequirements: CreatorFilmingRequirements, hasReferenceLinks: boolean): string {
-  return `For the remaining video, please keep following the filming guidelines we shared${hasReferenceLinks ? ' and reference direction' : ''}, and ${(englishOnly(filmingRequirements.productLinkRequirement) || 'make sure the TikTok Shop product link is attached').replace(/^please\s+/i, '')}.`;
+function partialCompletionGuidelinesLine(
+  filmingRequirements: CreatorFilmingRequirements,
+  hasReferenceLinks: boolean,
+): string {
+  return `For the remaining video, please keep following the filming guidelines we shared${hasReferenceLinks ? " and reference direction" : ""}, and ${(englishOnly(filmingRequirements.productLinkRequirement) || "make sure the TikTok Shop product link is attached").replace(/^please\s+/i, "")}.`;
 }
 
 function englishOnly(value: string): string {
-  return hasChineseCharacters(value) ? '' : value.trim();
+  return hasChineseCharacters(value) ? "" : value.trim();
 }
 
-function shortFilmingReminder(filmingRequirements: CreatorFilmingRequirements, hasReferenceLinks = false): string {
-  const linkRequirement = englishOnly(filmingRequirements.productLinkRequirement) || 'make sure the TikTok Shop product link is attached';
-  const referenceDirection = hasReferenceLinks ? ' and the reference direction' : '';
-  return `Please follow the filming requirements we shared${referenceDirection}, and ${linkRequirement.replace(/^please\s+/i, '')}.`;
+function shortFilmingReminder(
+  filmingRequirements: CreatorFilmingRequirements,
+  hasReferenceLinks = false,
+): string {
+  const linkRequirement =
+    englishOnly(filmingRequirements.productLinkRequirement) ||
+    "make sure the TikTok Shop product link is attached";
+  const referenceDirection = hasReferenceLinks
+    ? " and the reference direction"
+    : "";
+  return `Please follow the filming requirements we shared${referenceDirection}, and ${linkRequirement.replace(/^please\s+/i, "")}.`;
 }
 
-function fullFilmingBriefLine(task: Task, filmingRequirements: CreatorFilmingRequirements): string {
-  const contentSource = filmingRequirements.requiredScenes && filmingRequirements.requiredScenes !== defaultCreatorFilmingRequirements.requiredScenes
-    ? filmingRequirements.requiredScenes.split(/[；;\n]/)
-    : filmingRequirements.keyContentPoints;
+function fullFilmingBriefLine(
+  task: Task,
+  filmingRequirements: CreatorFilmingRequirements,
+): string {
+  const contentSource =
+    filmingRequirements.requiredScenes &&
+    filmingRequirements.requiredScenes !==
+      defaultCreatorFilmingRequirements.requiredScenes
+      ? filmingRequirements.requiredScenes.split(/[；;\n]/)
+      : filmingRequirements.keyContentPoints;
   const contentPoints = contentSource
     .map((item) => englishOnly(item) || toEnglishContentPoint(item))
     .filter(Boolean)
     .slice(0, 4);
   const sellingPoints = englishOnly(filmingRequirements.sellingPoints);
-  const videoLength = englishOnly(filmingRequirements.videoLength) || filmingRequirements.requirements.map(toEnglishRequirement).find((item) => item.includes('seconds')) || '';
-  const videoCount = englishOnly(filmingRequirements.videoCount) || filmingRequirements.requirements.map(toEnglishRequirement).find((item) => item.startsWith('complete ')) || '';
+  const videoLength =
+    englishOnly(filmingRequirements.videoLength) ||
+    filmingRequirements.requirements
+      .map(toEnglishRequirement)
+      .find((item) => item.includes("seconds")) ||
+    "";
+  const videoCount =
+    englishOnly(filmingRequirements.videoCount) ||
+    filmingRequirements.requirements
+      .map(toEnglishRequirement)
+      .find((item) => item.startsWith("complete ")) ||
+    "";
   const avoidShots = englishOnly(filmingRequirements.avoidShots);
-  const linkRequirement = englishOnly(filmingRequirements.productLinkRequirement) || 'include the TikTok Shop product link when posting';
-  const pieces = ['Please follow the filming guidelines we shared in this product-specific filming brief'];
+  const linkRequirement =
+    englishOnly(filmingRequirements.productLinkRequirement) ||
+    "include the TikTok Shop product link when posting";
+  const pieces = [
+    "Please follow the filming guidelines we shared in this product-specific filming brief",
+  ];
 
-  if (contentPoints.length) pieces.push(`show the main product use case clearly, including ${joinEnglishList(contentPoints)}`);
+  if (contentPoints.length)
+    pieces.push(
+      `show the main product use case clearly, including ${joinEnglishList(contentPoints)}`,
+    );
   if (sellingPoints) pieces.push(`highlight ${sellingPoints}`);
   if (videoLength) pieces.push(`video length: ${videoLength}`);
   if (videoCount) pieces.push(`video quantity: ${videoCount}`);
   if (avoidShots) pieces.push(`avoid: ${avoidShots}`);
   if (linkRequirement) pieces.push(linkRequirement);
 
-  return `${pieces.join('; ')}.`;
+  return `${pieces.join("; ")}.`;
 }
 
-function filmingGuidelinesLine(task: Task, filmingRequirements: CreatorFilmingRequirements, mode: 'short' | 'full', hasReferenceLinks = false): string {
-  if (mode === 'short') return shortFilmingReminder(filmingRequirements, hasReferenceLinks);
+function filmingGuidelinesLine(
+  task: Task,
+  filmingRequirements: CreatorFilmingRequirements,
+  mode: "short" | "full",
+  hasReferenceLinks = false,
+): string {
+  if (mode === "short")
+    return shortFilmingReminder(filmingRequirements, hasReferenceLinks);
   return fullFilmingBriefLine(task, filmingRequirements);
 }
 
 function creatorGreeting(username: string): string {
   const normalized = username.trim();
-  if (!normalized || hasChineseCharacters(normalized)) return 'there';
-  return normalized.startsWith('@') ? normalized : `@${normalized}`;
+  if (!normalized || hasChineseCharacters(normalized)) return "there";
+  return normalized.startsWith("@") ? normalized : `@${normalized}`;
 }
 
 export function generateMessage(
   task: Task,
   channel: Channel,
   filmingRequirements: CreatorFilmingRequirements = defaultCreatorFilmingRequirements,
-  userReplyFocus = '',
+  userReplyFocus = "",
   replyPersonalization: CreatorReplyPersonalization = {},
 ): GeneratedMessage {
   const configuredRequiredVideos = parseRequiredVideos(filmingRequirements);
   const scenarioSelection = scenarioForTask(task, configuredRequiredVideos);
   const { scenario, highRisk } = scenarioSelection;
   const name = creatorGreeting(task.username);
-  const product = toEnglishProductName(task.product || filmingRequirements.productName);
-  const cleanReferenceLinks = (filmingRequirements.referenceLinks ?? []).map((link) => link.trim()).filter((link) => link && !hasChineseCharacters(link));
+  const product = toEnglishProductName(
+    task.product || filmingRequirements.productName,
+  );
+  const cleanReferenceLinks = (filmingRequirements.referenceLinks ?? [])
+    .map((link) => link.trim())
+    .filter((link) => link && !hasChineseCharacters(link));
   const hasReferenceLinks = cleanReferenceLinks.length > 0;
-  const guidelineLine = scenario === 'Creator Reply Follow-up'
-    ? filmingGuidelinesLine(task, filmingRequirements, /what to film|film|requirements|brief|拍什么|要求|brief/i.test(`${userReplyFocus} ${task.lastCreatorResponse ?? ''} ${task.notes}`) ? 'full' : 'short', hasReferenceLinks)
-    : scenario === 'Partial Video Completion Follow-up'
-    ? partialCompletionGuidelinesLine(filmingRequirements, hasReferenceLinks)
-    : scenario === 'Final Follow-up Before Failed Candidate' || scenario === 'Second Follow-up'
-      ? ''
-      : isGuidelineScenario(scenario)
-        ? filmingGuidelinesLine(task, filmingRequirements, scenario === 'Sample In Transit Reminder' || scenario === 'Sample Delivered Follow-up' ? 'full' : 'short', hasReferenceLinks)
-        : '';
-  const filmingRequirementsReminder = [guidelineLine, referenceLinksLine(scenario, { ...filmingRequirements, referenceLinks: cleanReferenceLinks })]
+  const guidelineLine =
+    scenario === "Creator Reply Follow-up"
+      ? filmingGuidelinesLine(
+          task,
+          filmingRequirements,
+          /what to film|film|requirements|brief|拍什么|要求|brief/i.test(
+            `${userReplyFocus} ${task.lastCreatorResponse ?? ""} ${task.notes}`,
+          )
+            ? "full"
+            : "short",
+          hasReferenceLinks,
+        )
+      : scenario === "Partial Video Completion Follow-up"
+        ? partialCompletionGuidelinesLine(
+            filmingRequirements,
+            hasReferenceLinks,
+          )
+        : scenario === "Final Follow-up Before Failed Candidate" ||
+            scenario === "Second Follow-up"
+          ? ""
+          : isGuidelineScenario(scenario)
+            ? filmingGuidelinesLine(
+                task,
+                filmingRequirements,
+                scenario === "Sample In Transit Reminder" ||
+                  scenario === "Sample Delivered Follow-up"
+                  ? "full"
+                  : "short",
+                hasReferenceLinks,
+              )
+            : "";
+  const filmingRequirementsReminder = [
+    guidelineLine,
+    referenceLinksLine(scenario, {
+      ...filmingRequirements,
+      referenceLinks: cleanReferenceLinks,
+    }),
+  ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
   const progress = progressForTask(task, configuredRequiredVideos);
-  const missingVideos = typeof progress.postedCount === 'number' ? Math.max(0, configuredRequiredVideos - progress.postedCount) : null;
+  const missingVideos =
+    typeof progress.postedCount === "number"
+      ? Math.max(0, configuredRequiredVideos - progress.postedCount)
+      : null;
   const remainingVideos = remainingVideoPhrase(missingVideos);
 
-  let english = '';
+  let english = "";
 
-  if (scenario === 'First Outreach') {
+  if (scenario === "First Outreach") {
     english = firstOutreachMessage(channel, name, product);
-  } else if (scenario === 'No Reply Follow-up') {
+  } else if (scenario === "No Reply Follow-up") {
     english = noReplyFollowUpMessage(channel, name, product);
-  } else if (scenario === 'Sample Request Reminder') {
+  } else if (scenario === "Sample Request Reminder") {
     english = sampleRequestReminderMessage(channel, name, product);
-  } else if (scenario === 'Sample Request Confirmation') {
+  } else if (scenario === "Sample Request Confirmation") {
     english = sampleRequestConfirmationMessage(channel, name, product);
-  } else if (scenario === 'Sample In Transit Reminder') {
-    english = sampleInTransitMessage(channel, name, product, filmingRequirementsReminder);
-  } else if (scenario === 'Logistics Exception Confirmation') {
-    english = logisticsExceptionMessage(channel, name, product, filmingRequirementsReminder);
-  } else if (scenario === 'Creator Reply Follow-up') {
-    english = creatorReplyMessage(channel, name, product, task, userReplyFocus, filmingRequirementsReminder, replyPersonalization);
-  } else if (scenario === 'Sample Delivered Follow-up') {
+  } else if (scenario === "Sample In Transit Reminder") {
+    english = sampleInTransitMessage(
+      channel,
+      name,
+      product,
+      filmingRequirementsReminder,
+    );
+  } else if (scenario === "Logistics Exception Confirmation") {
+    english = logisticsExceptionMessage(
+      channel,
+      name,
+      product,
+      filmingRequirementsReminder,
+    );
+  } else if (scenario === "Creator Reply Follow-up") {
+    english = creatorReplyMessage(
+      channel,
+      name,
+      product,
+      task,
+      userReplyFocus,
+      filmingRequirementsReminder,
+      replyPersonalization,
+    );
+  } else if (scenario === "Sample Delivered Follow-up") {
     const request = `Tracking shows the ${product} sample has been delivered. Could you please confirm you received it and share your expected posting date for the first video or filming schedule? ${filmingRequirementsReminder}`;
-    english = byChannel(channel, name, request, '', highRisk);
-  } else if (scenario === 'Partial Video Completion Follow-up') {
-    english = partialCompletionMessage(channel, name, remainingVideos, filmingRequirementsReminder);
-  } else if (scenario === 'Needs Revision Reminder') {
-    english = needsRevisionMessage(channel, name, product, filmingRequirementsReminder);
-  } else if (scenario === 'Completed Thank You') {
+    english = byChannel(channel, name, request, "", highRisk);
+  } else if (scenario === "Partial Video Completion Follow-up") {
+    english = partialCompletionMessage(
+      channel,
+      name,
+      remainingVideos,
+      filmingRequirementsReminder,
+    );
+  } else if (scenario === "Needs Revision Reminder") {
+    english = needsRevisionMessage(
+      channel,
+      name,
+      product,
+      filmingRequirementsReminder,
+    );
+  } else if (scenario === "Completed Thank You") {
     english = completedMessage(channel, name, product);
-  } else if (scenario === 'Failed Archive Confirmation') {
+  } else if (scenario === "Failed Archive Confirmation") {
     english = failedArchiveMessage(channel, name, product);
-  } else if (scenario === 'Second Follow-up' || scenario === 'Final Follow-up Before Failed Candidate') {
+  } else if (
+    scenario === "Second Follow-up" ||
+    scenario === "Final Follow-up Before Failed Candidate"
+  ) {
     const request = `I’m following up on the ${product} collaboration. The required video(s) are still incomplete on our side. Could you please confirm whether you’re still able to complete the remaining video(s) and confirm your expected posting date? If you’re no longer able to continue, please let us know so we can update the campaign status on our side.`;
-    english = byChannel(channel, name, request, filmingRequirementsReminder, true);
+    english = byChannel(
+      channel,
+      name,
+      request,
+      filmingRequirementsReminder,
+      true,
+    );
   } else {
     const request = `I’m checking in on the ${product} collaboration. Please send a quick update on the current status so we can keep the campaign status accurate on our side.`;
-    english = byChannel(channel, name, request, '', highRisk);
+    english = byChannel(channel, name, request, "", highRisk);
   }
 
   return {
     english: removeChineseCharacters(english),
-    chineseExplanation: buildChineseExplanation(scenario, channel, hasReferenceLinks),
+    chineseExplanation: buildChineseExplanation(
+      scenario,
+      channel,
+      hasReferenceLinks,
+    ),
     scenario,
     scenarioReason: scenarioSelection.reason,
     urgencyLevel: scenarioSelection.urgencyLevel,
@@ -594,31 +911,55 @@ export function generateMessage(
   };
 }
 
-function firstOutreachMessage(channel: Channel, name: string, product: string): string {
+function firstOutreachMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+): string {
   const request = `We’re reaching out about a potential collaboration for the ${product}. If you’re interested, please let us know and we can share the product link, content requirements, and next steps.`;
-  return byChannel(channel, name, request, '', false);
+  return byChannel(channel, name, request, "", false);
 }
 
-function noReplyFollowUpMessage(channel: Channel, name: string, product: string): string {
+function noReplyFollowUpMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+): string {
   const request = `I’m following up on the ${product} collaboration we sent over. Please let us know if you’re interested, or if this campaign is not a fit right now.`;
-  return byChannel(channel, name, request, '', false);
+  return byChannel(channel, name, request, "", false);
 }
 
-function sampleRequestReminderMessage(channel: Channel, name: string, product: string): string {
+function sampleRequestReminderMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+): string {
   const request = `The sample invitation for the ${product} campaign is available. If you’re still interested in moving forward, please apply for the sample so we can keep the campaign timeline moving.`;
-  return byChannel(channel, name, request, '', false);
+  return byChannel(channel, name, request, "", false);
 }
 
-function sampleRequestConfirmationMessage(channel: Channel, name: string, product: string): string {
+function sampleRequestConfirmationMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+): string {
   const request = `We received your sample request for the ${product} campaign, and it is being reviewed or processed on our side. Once the sample is approved and shipped, we’ll use the shipping update to confirm the next step.`;
-  return byChannel(channel, name, request, '', false);
+  return byChannel(channel, name, request, "", false);
 }
 
-function sampleInTransitMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
+function sampleInTransitMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+  filmingRequirementsReminder: string,
+): string {
   const reminder = filmingRequirementsReminder.trim();
-  const compactRequest = `Hi ${name}, the ${product} sample is on the way. While it is in transit, we wanted to share the key filming requirements so you can plan the content in advance. Please review this product-specific brief, prepare the required scenes and selling points, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. Once the sample arrives, please let us know when you expect to start filming after receiving the sample and share your expected posting schedule. Thank you. ${reminder}`.replace(/\s+/g, ' ').trim();
+  const compactRequest =
+    `Hi ${name}, the ${product} sample is on the way. While it is in transit, we wanted to share the key filming requirements so you can plan the content in advance. Please review this product-specific brief, prepare the required scenes and selling points, follow the required video length and quantity, and make sure the TikTok Shop product link is attached when posting. No posting is needed before the sample is delivered. Once the sample arrives, please let us know when you expect to start filming after receiving the sample and share your expected posting schedule. Thank you. ${reminder}`
+      .replace(/\s+/g, " ")
+      .trim();
 
-  if (channel === 'TikTok DM' || channel === 'WhatsApp') return compactRequest;
+  if (channel === "TikTok DM" || channel === "WhatsApp") return compactRequest;
 
   return `Hi ${name},
 
@@ -631,14 +972,21 @@ Once the sample arrives, please let us know when you expect to start filming aft
 Thank you.`;
 }
 
-function logisticsExceptionMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
+function logisticsExceptionMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+  filmingRequirementsReminder: string,
+): string {
   const reminder = filmingRequirementsReminder.trim();
 
-  if (channel === 'TikTok DM') {
-    return `Hi ${name}, I’m checking in on the ${product} sample shipment. It still appears to be in transit on our side. Have you received it or seen any delivery update? Please let us know if there is any delivery issue. Once it arrives, we can move forward with filming based on the guidelines. ${reminder}`.replace(/\s+/g, ' ').trim();
+  if (channel === "TikTok DM") {
+    return `Hi ${name}, I’m checking in on the ${product} sample shipment. It still appears to be in transit on our side. Have you received it or seen any delivery update? Please let us know if there is any delivery issue. Once it arrives, we can move forward with filming based on the guidelines. ${reminder}`
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
-  if (channel === 'TikTok Shop Affiliate Message') {
+  if (channel === "TikTok Shop Affiliate Message") {
     return `Hi ${name},
 
 I’m checking in on the sample shipment for the ${product} collaboration. The package appears to still be in transit on our side, so I wanted to confirm whether you’ve received it or seen any delivery updates.
@@ -648,8 +996,10 @@ Please let us know if there is any issue with the delivery. Once the sample arri
 Thank you.`;
   }
 
-  if (channel === 'WhatsApp') {
-    return `Hi ${name}, I’m checking in on the ${product} sample shipment. It still appears to be in transit on our side. Could you confirm whether you have received it or seen any delivery updates? Please let us know if there is any delivery issue. Once it arrives, we can move forward with the filming plan. ${reminder}`.replace(/\s+/g, ' ').trim();
+  if (channel === "WhatsApp") {
+    return `Hi ${name}, I’m checking in on the ${product} sample shipment. It still appears to be in transit on our side. Could you confirm whether you have received it or seen any delivery updates? Please let us know if there is any delivery issue. Once it arrives, we can move forward with the filming plan. ${reminder}`
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   return `Hi ${name},
@@ -662,32 +1012,52 @@ Thank you,
 Brand Team`;
 }
 
-function needsRevisionMessage(channel: Channel, name: string, product: string, filmingRequirementsReminder: string): string {
+function needsRevisionMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+  filmingRequirementsReminder: string,
+): string {
   const request = `We reviewed the ${product} video and need one adjustment before we can move it forward for campaign review. Please check the product link, tag, and brief requirements, then update the specific item that does not match the filming guidelines.`;
   return byChannel(channel, name, request, filmingRequirementsReminder, false);
 }
 
-function completedMessage(channel: Channel, name: string, product: string): string {
+function completedMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+): string {
   const request = `Thank you for completing the ${product} collaboration. We’ll review performance on our side and consider the content for ad testing or future campaign opportunities. If you’re open to future products, we’ll keep you in mind for the next suitable campaign.`;
-  return byChannel(channel, name, request, '', false);
+  return byChannel(channel, name, request, "", false);
 }
 
-function failedArchiveMessage(channel: Channel, name: string, product: string): string {
+function failedArchiveMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+): string {
   const request = `We’re updating the campaign status for the ${product} collaboration on our side. Based on the current status, we’ll archive this campaign as not completed unless there is a final update we should review.`;
-  return byChannel(channel, name, request, '', false);
+  return byChannel(channel, name, request, "", false);
 }
 
-function partialCompletionMessage(channel: Channel, name: string, remainingVideos: string, filmingRequirementsReminder: string): string {
-  const partialReferenceLinks = filmingRequirementsReminder.includes('You can also use these reference videos')
-    ? ` ${filmingRequirementsReminder.slice(filmingRequirementsReminder.indexOf('You can also use these reference videos'))}`
-    : '';
+function partialCompletionMessage(
+  channel: Channel,
+  name: string,
+  remainingVideos: string,
+  filmingRequirementsReminder: string,
+): string {
+  const partialReferenceLinks = filmingRequirementsReminder.includes(
+    "You can also use these reference videos",
+  )
+    ? ` ${filmingRequirementsReminder.slice(filmingRequirementsReminder.indexOf("You can also use these reference videos"))}`
+    : "";
   const core = `Thank you for posting the first video. The content looks good, and we’re preparing to review it for ad testing. We’ve noted it on our side. There is still ${remainingVideos} for this collaboration. Could you please confirm when you expect to post the second video? Could you please confirm when you expect to post the remaining video? Please confirm the expected posting date for the remaining video so we can keep the collaboration timeline clear. Please make sure the TikTok Shop product link is attached when posting. Thank you.`;
 
-  if (channel === 'TikTok DM' || channel === 'WhatsApp') {
+  if (channel === "TikTok DM" || channel === "WhatsApp") {
     return `Hi ${name}, ${core}${partialReferenceLinks}`;
   }
 
-  if (channel === 'TikTok Shop Affiliate Message') {
+  if (channel === "TikTok Shop Affiliate Message") {
     return `Hi ${name},
 
 ${core}
@@ -703,36 +1073,41 @@ Thank you,
 Brand Team`;
 }
 
-
 function sanitizeEnglishText(value: string): string {
   return removeChineseCharacters(value)
-    .replace(/[，。；：、]/g, ' ')
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/\b(?:for example|e\.g\.)\s*[:：]?\s*/gi, '')
-    .replace(/\b(?:no problem|okay|ok)\b[,.]?\s*/gi, '')
-    .replace(/\b(?:noted|i'?ll note it|record it)\b[,.]?\s*/gi, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[，。；：、]/g, " ")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\b(?:for example|e\.g\.)\s*[:：]?\s*/gi, "")
+    .replace(/\b(?:no problem|okay|ok)\b[,.]?\s*/gi, "")
+    .replace(/\b(?:noted|i'?ll note it|record it)\b[,.]?\s*/gi, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-type CreatorReplyIntent = 'posting-time' | 'video-length' | 'package-not-arrived' | 'filming-brief' | 'cannot-continue' | 'general';
+type CreatorReplyIntent =
+  | "posting-time"
+  | "video-length"
+  | "package-not-arrived"
+  | "filming-brief"
+  | "cannot-continue"
+  | "general";
 
 type ReplyIntentSignal =
-  | 'posting-time'
-  | 'ad-planning'
-  | 'note-internally'
-  | 'friendly-acknowledgement'
-  | 'video-length'
-  | 'product-link'
-  | 'concession';
+  | "posting-time"
+  | "ad-planning"
+  | "note-internally"
+  | "friendly-acknowledgement"
+  | "video-length"
+  | "product-link"
+  | "concession";
 
 type CreatorReplyContext = {
   reply: string;
   intent: CreatorReplyIntent;
   timeline: string;
-  focusIntent: CreatorReplyIntent | 'product-link' | 'confirmation' | 'general';
+  focusIntent: CreatorReplyIntent | "product-link" | "confirmation" | "general";
   cleanFocus: string;
-  goalIntent: CreatorReplyIntent | 'product-link' | 'confirmation' | 'general';
+  goalIntent: CreatorReplyIntent | "product-link" | "confirmation" | "general";
   cleanGoal: string;
   cleanRelationshipNote: string;
   concessionText: string;
@@ -740,8 +1115,16 @@ type CreatorReplyContext = {
   intentSignals: Set<ReplyIntentSignal>;
 };
 
-function latestHistoryCreatorReply(entries: FollowUpHistoryEntry[] | undefined): string {
-  return entries?.slice().reverse().find((entry) => entry.action === 'Creator Replied' && entry.note?.trim())?.note?.trim() ?? '';
+function latestHistoryCreatorReply(
+  entries: FollowUpHistoryEntry[] | undefined,
+): string {
+  return (
+    entries
+      ?.slice()
+      .reverse()
+      .find((entry) => entry.action === "Creator Replied" && entry.note?.trim())
+      ?.note?.trim() ?? ""
+  );
 }
 
 function creatorReplySource(task: Task): string {
@@ -750,105 +1133,261 @@ function creatorReplySource(task: Task): string {
   if (task.lastCreatorResponse?.trim()) return task.lastCreatorResponse.trim();
 
   const notes = task.notes.trim();
-  if (normalizeTrackingStatus(task.trackingStatus) === 'reply-pending' && notes) return notes;
-  return '';
+  if (normalizeTrackingStatus(task.trackingStatus) === "reply-pending" && notes)
+    return notes;
+  return "";
 }
 
 function detectCreatorReplyIntent(value: string): CreatorReplyIntent {
   const normalized = normalizeForScenario(value);
-  if (/\b(can'?t|cannot|unable|won'?t|not able|no longer|stop|cancel|quit)\b.*\b(continue|post|do|complete|film|collab|collaboration)?\b|not continue|can't do it|cannot do it|won't be able/.test(normalized)) return 'cannot-continue';
-  if (/not arrived|hasn.?t arrived|haven.?t received|haven.?t arrived|not here|no package|package didn.?t arrive|didn.?t receive|never received|shipping issue|tracking issue|lost|stuck/.test(normalized)) return 'package-not-arrived';
-  if (/too long|60\s*(?:s|sec|second|seconds)|length|duration|shorter|can it be short|that'?s too long/.test(normalized)) return 'video-length';
-  if (/what should i film|what to film|requirements?|guidelines?|brief|any brief|details|what do you need|what format|instructions?/.test(normalized)) return 'filming-brief';
-  if (/\b(end of (?:the )?week|eow|friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|tonight|next week|this week)\b|\b(i'?ll|i will|i can|can)\b.{0,40}\b(post|publish|film|complete|done|get (?:a )?video done|finish|upload)\b|\b(post|publish|film|complete|finish|upload)\b.{0,40}\b(friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|end of (?:the )?week)\b/.test(normalized)) return 'posting-time';
-  return 'general';
+  if (
+    /\b(can'?t|cannot|unable|won'?t|not able|no longer|stop|cancel|quit)\b.*\b(continue|post|do|complete|film|collab|collaboration)?\b|not continue|can't do it|cannot do it|won't be able/.test(
+      normalized,
+    )
+  )
+    return "cannot-continue";
+  if (
+    /not arrived|hasn.?t arrived|haven.?t received|haven.?t arrived|not here|no package|package didn.?t arrive|didn.?t receive|never received|shipping issue|tracking issue|lost|stuck/.test(
+      normalized,
+    )
+  )
+    return "package-not-arrived";
+  if (
+    /too long|60\s*(?:s|sec|second|seconds)|length|duration|shorter|can it be short|that'?s too long/.test(
+      normalized,
+    )
+  )
+    return "video-length";
+  if (
+    /what should i film|what to film|requirements?|guidelines?|brief|any brief|details|what do you need|what format|instructions?/.test(
+      normalized,
+    )
+  )
+    return "filming-brief";
+  if (
+    /\b(end of (?:the )?week|eow|friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|tonight|next week|this week)\b|\b(i'?ll|i will|i can|can)\b.{0,40}\b(post|publish|film|complete|done|get (?:a )?video done|finish|upload)\b|\b(post|publish|film|complete|finish|upload)\b.{0,40}\b(friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today|end of (?:the )?week)\b/.test(
+      normalized,
+    )
+  )
+    return "posting-time";
+  return "general";
 }
 
-function detectFocusIntent(value: string): CreatorReplyContext['focusIntent'] {
+function detectFocusIntent(value: string): CreatorReplyContext["focusIntent"] {
   const normalized = normalizeForScenario(value);
-  if (!normalized) return 'general';
-  if (/没问题|记录|可以|同意|works|ok|okay|fine|confirm/.test(normalized)) return 'confirmation';
-  if (/60|时长|秒|太长|length|duration|shorter/.test(normalized)) return 'video-length';
-  if (/周五|发布|发|post|publish|friday|tomorrow|today|end of (?:the )?week/.test(normalized)) return 'posting-time';
-  if (/物流|快递|包裹|delivery|shipping|package|tracking/.test(normalized)) return 'package-not-arrived';
-  if (/拍什么|要求|brief|requirement|guideline|film/.test(normalized)) return 'filming-brief';
-  if (/挂车|产品链接|shop|link|tag/.test(normalized)) return 'product-link';
-  if (/不能继续|不继续|失败|归档|can'?t|cannot|unable|not continue/.test(normalized)) return 'cannot-continue';
-  return 'general';
+  if (!normalized) return "general";
+  if (/没问题|记录|可以|同意|works|ok|okay|fine|confirm/.test(normalized))
+    return "confirmation";
+  if (/60|时长|秒|太长|length|duration|shorter/.test(normalized))
+    return "video-length";
+  if (
+    /周五|发布|发|post|publish|friday|tomorrow|today|end of (?:the )?week/.test(
+      normalized,
+    )
+  )
+    return "posting-time";
+  if (/物流|快递|包裹|delivery|shipping|package|tracking/.test(normalized))
+    return "package-not-arrived";
+  if (/拍什么|要求|brief|requirement|guideline|film/.test(normalized))
+    return "filming-brief";
+  if (/挂车|产品链接|shop|link|tag/.test(normalized)) return "product-link";
+  if (
+    /不能继续|不继续|失败|归档|can'?t|cannot|unable|not continue/.test(
+      normalized,
+    )
+  )
+    return "cannot-continue";
+  return "general";
 }
-
 
 function hasKeyword(value: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(value));
 }
 
-function detectReplyIntentSignals(...values: Array<string | undefined>): Set<ReplyIntentSignal> {
-  const text = values.filter(Boolean).join(' ').trim().toLowerCase();
+function detectReplyIntentSignals(
+  ...values: Array<string | undefined>
+): Set<ReplyIntentSignal> {
+  const text = values.filter(Boolean).join(" ").trim().toLowerCase();
   const signals = new Set<ReplyIntentSignal>();
   if (!text) return signals;
 
-  if (hasKeyword(text, [/具体(?:的)?时间/, /什么时候/, /几号/, /发布(?:时间|日期)?/, /发布日期/, /预计时间/, /时间线/, /\btimeline\b/, /posting date/, /when to post/])) signals.add('posting-time');
-  if (hasKeyword(text, [/投流/, /广告/, /测试/, /广告测试/, /投放计划/, /安排投放/, /\bboost\b/, /ad testing/, /campaign planning/, /media buying/])) signals.add('ad-planning');
-  if (hasKeyword(text, [/记录/, /记一下/, /我这里记录/, /\bnote\b/, /\bnoted\b/])) signals.add('note-internally');
-  if (hasKeyword(text, [/没问题/, /好的/, /可以/, /顺利/, /期待/, /谢谢/, /no problem/, /sounds good/, /looking forward/])) signals.add('friendly-acknowledgement');
-  if (hasKeyword(text, [/60\s*秒/, /60\s*s(?:ec|econds?)?\b/, /太长/, /短一点/, /35\s*秒/, /35\s*s(?:ec|econds?)?\b/, /视频时长/, /\blength\b/, /shorter/, /too long/])) signals.add('video-length');
-  if (hasKeyword(text, [/挂车/, /产品链接/, /shop link/, /product link/, /\btag\b/, /品牌账号/])) signals.add('product-link');
-  if (hasKeyword(text, [/可以短一点/, /不低于\s*35\s*秒?/, /可以先发\s*1\s*条/, /再补\s*1\s*条/, /周五可以/, /可以周五/, /can be shorter/, /at least 35 seconds/])) signals.add('concession');
+  if (
+    hasKeyword(text, [
+      /具体(?:的)?时间/,
+      /什么时候/,
+      /几号/,
+      /发布(?:时间|日期)?/,
+      /发布日期/,
+      /预计时间/,
+      /时间线/,
+      /\btimeline\b/,
+      /posting date/,
+      /when to post/,
+    ])
+  )
+    signals.add("posting-time");
+  if (
+    hasKeyword(text, [
+      /投流/,
+      /广告/,
+      /测试/,
+      /广告测试/,
+      /投放计划/,
+      /安排投放/,
+      /\bboost\b/,
+      /ad testing/,
+      /campaign planning/,
+      /media buying/,
+    ])
+  )
+    signals.add("ad-planning");
+  if (
+    hasKeyword(text, [/记录/, /记一下/, /我这里记录/, /\bnote\b/, /\bnoted\b/])
+  )
+    signals.add("note-internally");
+  if (
+    hasKeyword(text, [
+      /没问题/,
+      /好的/,
+      /可以/,
+      /顺利/,
+      /期待/,
+      /谢谢/,
+      /no problem/,
+      /sounds good/,
+      /looking forward/,
+    ])
+  )
+    signals.add("friendly-acknowledgement");
+  if (
+    hasKeyword(text, [
+      /60\s*秒/,
+      /60\s*s(?:ec|econds?)?\b/,
+      /太长/,
+      /短一点/,
+      /35\s*秒/,
+      /35\s*s(?:ec|econds?)?\b/,
+      /视频时长/,
+      /\blength\b/,
+      /shorter/,
+      /too long/,
+    ])
+  )
+    signals.add("video-length");
+  if (
+    hasKeyword(text, [
+      /挂车/,
+      /产品链接/,
+      /shop link/,
+      /product link/,
+      /\btag\b/,
+      /品牌账号/,
+    ])
+  )
+    signals.add("product-link");
+  if (
+    hasKeyword(text, [
+      /可以短一点/,
+      /不低于\s*35\s*秒?/,
+      /可以先发\s*1\s*条/,
+      /再补\s*1\s*条/,
+      /周五可以/,
+      /可以周五/,
+      /can be shorter/,
+      /at least 35 seconds/,
+    ])
+  )
+    signals.add("concession");
 
   return signals;
 }
 
 function hasSpecificReplyIntent(context: CreatorReplyContext): boolean {
-  return context.intentSignals.size > 0 || context.focusIntent !== 'general' || context.goalIntent !== 'general' || Boolean(context.concessionText);
+  return (
+    context.intentSignals.size > 0 ||
+    context.focusIntent !== "general" ||
+    context.goalIntent !== "general" ||
+    Boolean(context.concessionText)
+  );
 }
 
 function replyAcknowledgementLine(context: CreatorReplyContext): string {
   const reply = normalizeForScenario(context.reply);
-  if (context.intentSignals.has('friendly-acknowledgement') || /no problem|sounds good|okay|ok|sure|thank/.test(reply)) {
-    return 'Thank you for the update.';
+  if (
+    context.intentSignals.has("friendly-acknowledgement") ||
+    /no problem|sounds good|okay|ok|sure|thank/.test(reply)
+  ) {
+    return "Thank you for the update.";
   }
-  return 'Thank you for the update.';
+  return "Thank you for the update.";
 }
 
-function replyIntentLines(context: CreatorReplyContext, filmingRequirementsReminder: string): string[] {
+function replyIntentLines(
+  context: CreatorReplyContext,
+  filmingRequirementsReminder: string,
+): string[] {
   const lines: string[] = [];
 
-  if (context.intentSignals.has('friendly-acknowledgement')) {
-    lines.push('We’re looking forward to seeing the content and will update the campaign status on our side.');
+  if (context.intentSignals.has("friendly-acknowledgement")) {
+    lines.push(
+      "We’re looking forward to seeing the content and will update the campaign status on our side.",
+    );
   }
 
-  if (context.intentSignals.has('posting-time')) {
-    const isAskingForTimeline = /有没有|什么时候|具体|几号|when|posting date|timeline/i.test(`${context.cleanFocus} ${context.cleanGoal}`);
-    if (!isAskingForTimeline && context.timeline !== 'on the timeline you shared') {
-      lines.push(`I’ll note that you’re planning to complete the content ${context.timeline}.`);
+  if (context.intentSignals.has("posting-time")) {
+    const isAskingForTimeline =
+      /有没有|什么时候|具体|几号|when|posting date|timeline/i.test(
+        `${context.cleanFocus} ${context.cleanGoal}`,
+      );
+    if (
+      !isAskingForTimeline &&
+      context.timeline !== "on the timeline you shared"
+    ) {
+      lines.push(
+        `I’ll note that you’re planning to complete the content ${context.timeline}.`,
+      );
     } else {
-      lines.push('Do you have an estimated posting date or expected posting timeline?');
+      lines.push(
+        "Do you have an estimated posting date or expected posting timeline?",
+      );
     }
   }
 
-  if (context.intentSignals.has('ad-planning')) {
-    lines.push('This will help our team plan the ad testing schedule, boost timing, and campaign planning accordingly.');
+  if (context.intentSignals.has("ad-planning")) {
+    lines.push(
+      "This will help our team plan the ad testing schedule, boost timing, and campaign planning accordingly.",
+    );
   }
 
-  if (context.intentSignals.has('note-internally')) {
-    lines.push('I’ll note this on our side.');
+  if (context.intentSignals.has("note-internally")) {
+    lines.push("I’ll note this on our side.");
   }
 
-  if (context.intentSignals.has('video-length')) {
+  if (context.intentSignals.has("video-length")) {
     lines.push(videoLengthRequirement(context));
   }
 
-  if (context.intentSignals.has('product-link')) {
-    lines.push('Please make sure the TikTok Shop product link is attached when you post, and tag the brand account if required.');
+  if (context.intentSignals.has("product-link")) {
+    lines.push(
+      "Please make sure the TikTok Shop product link is attached when you post, and tag the brand account if required.",
+    );
   }
 
-  if (context.intentSignals.has('concession') && context.concessionText) {
-    lines.push(`${context.concessionText} Please still make sure the key product use is shown clearly.`);
-  } else if (context.intentSignals.has('concession')) {
-    lines.push('A slightly shorter video is acceptable as long as it is at least 35 seconds and the key product use is shown clearly.');
+  if (context.intentSignals.has("concession") && context.concessionText) {
+    lines.push(
+      `${context.concessionText} Please still make sure the key product use is shown clearly.`,
+    );
+  } else if (context.intentSignals.has("concession")) {
+    lines.push(
+      "A slightly shorter video is acceptable as long as it is at least 35 seconds and the key product use is shown clearly.",
+    );
   }
 
-  if (context.intentSignals.has('video-length') && filmingRequirementsReminder && !lines.some((line) => line.includes('60-second'))) {
+  if (
+    context.intentSignals.has("video-length") &&
+    filmingRequirementsReminder &&
+    !lines.some((line) => line.includes("60-second"))
+  ) {
     lines.push(filmingBriefLine(filmingRequirementsReminder));
   }
 
@@ -857,163 +1396,309 @@ function replyIntentLines(context: CreatorReplyContext, filmingRequirementsRemin
 
 function extractTimeline(value: string): string {
   const normalized = normalizeForScenario(value);
-  if (/月底|周末|end of (?:the )?week|end of week|eow/.test(normalized)) return 'by the end of this week';
-  const chineseWeekdays: Record<string, string> = { 周一: 'Monday', 周二: 'Tuesday', 周三: 'Wednesday', 周四: 'Thursday', 周五: 'Friday', 周六: 'Saturday', 周日: 'Sunday', 周天: 'Sunday' };
-  const chineseWeekday = Object.entries(chineseWeekdays).find(([keyword]) => normalized.includes(keyword));
+  if (/月底|周末|end of (?:the )?week|end of week|eow/.test(normalized))
+    return "by the end of this week";
+  const chineseWeekdays: Record<string, string> = {
+    周一: "Monday",
+    周二: "Tuesday",
+    周三: "Wednesday",
+    周四: "Thursday",
+    周五: "Friday",
+    周六: "Saturday",
+    周日: "Sunday",
+    周天: "Sunday",
+  };
+  const chineseWeekday = Object.entries(chineseWeekdays).find(([keyword]) =>
+    normalized.includes(keyword),
+  );
   if (chineseWeekday) return `on ${chineseWeekday[1]}`;
-  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const weekday = weekdays.find((day) => normalized.includes(day.toLowerCase()));
+  const weekdays = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+  const weekday = weekdays.find((day) =>
+    normalized.includes(day.toLowerCase()),
+  );
   if (weekday) return `on ${weekday}`;
-  if (/tomorrow/.test(normalized)) return 'tomorrow';
-  if (/today|tonight/.test(normalized)) return normalized.includes('tonight') ? 'tonight' : 'today';
-  if (/next week/.test(normalized)) return 'next week';
-  if (/this week/.test(normalized)) return 'this week';
-  return 'on the timeline you shared';
+  if (/tomorrow/.test(normalized)) return "tomorrow";
+  if (/today|tonight/.test(normalized))
+    return normalized.includes("tonight") ? "tonight" : "today";
+  if (/next week/.test(normalized)) return "next week";
+  if (/this week/.test(normalized)) return "this week";
+  return "on the timeline you shared";
 }
 
-function englishInstructionFromChinese(value: string, kind: 'focus' | 'goal' | 'concession' | 'relationship'): string {
+function englishInstructionFromChinese(
+  value: string,
+  kind: "focus" | "goal" | "concession" | "relationship",
+): string {
   const normalized = normalizeForScenario(value);
   const rawNormalized = value.trim().toLowerCase();
-  if (!normalized) return '';
+  if (!normalized) return "";
   const parts: string[] = [];
 
-  if (kind !== 'concession' && /没问题|可以|同意|记录|顺利/.test(normalized)) parts.push('Confirm that the update works and say we will note it on our side.');
-  if (/周五/.test(normalized)) parts.push('Confirm Friday posting is okay.');
-  if (/月底|周末|end of week|end of the week/.test(normalized)) parts.push('Confirm the end-of-week timeline.');
-  if (/60|时长|秒|太长/.test(normalized)) parts.push('Explain the 60-second requirement clearly.');
-  if (/挂车|产品链接|小黄车|shop/.test(normalized)) parts.push('Remind the creator to attach the TikTok Shop product link.');
-  if (/tag|品牌账号/.test(normalized)) parts.push('Remind the creator to tag the brand account.');
-  if (/物流|快递|包裹|没收到|未收到/.test(normalized)) parts.push('Ask the creator to keep checking delivery updates and tell us if there is a shipping issue.');
-  if (/安抚|情绪/.test(normalized)) parts.push('Keep the reply calm and reassuring.');
-  if (/剩余|补|2\s*条|两条/.test(normalized)) parts.push('Clarify the remaining video deliverables.');
-  if (/确认是否继续|是否继续|继续合作/.test(normalized)) parts.push('Confirm whether the collaboration can continue.');
-  if (/不接受不挂车/.test(normalized)) parts.push('Do not accept posting without the TikTok Shop product link.');
-  if (/可以短一点|短一点/.test(normalized)) parts.push('A slightly shorter video is acceptable.');
-  const minSeconds = rawNormalized.match(/(?:不能低于|不低于|至少|above|over|minimum|min)\s*(\d+)\s*(?:秒|s|sec|seconds)?/)?.[1];
+  if (kind !== "concession" && /没问题|可以|同意|记录|顺利/.test(normalized))
+    parts.push(
+      "Confirm that the update works and say we will note it on our side.",
+    );
+  if (/周五/.test(normalized)) parts.push("Confirm Friday posting is okay.");
+  if (/月底|周末|end of week|end of the week/.test(normalized))
+    parts.push("Confirm the end-of-week timeline.");
+  if (/60|时长|秒|太长/.test(normalized))
+    parts.push("Explain the 60-second requirement clearly.");
+  if (/挂车|产品链接|小黄车|shop/.test(normalized))
+    parts.push("Remind the creator to attach the TikTok Shop product link.");
+  if (/tag|品牌账号/.test(normalized))
+    parts.push("Remind the creator to tag the brand account.");
+  if (/物流|快递|包裹|没收到|未收到/.test(normalized))
+    parts.push(
+      "Ask the creator to keep checking delivery updates and tell us if there is a shipping issue.",
+    );
+  if (/安抚|情绪/.test(normalized))
+    parts.push("Keep the reply calm and reassuring.");
+  if (/剩余|补|2\s*条|两条/.test(normalized))
+    parts.push("Clarify the remaining video deliverables.");
+  if (/确认是否继续|是否继续|继续合作/.test(normalized))
+    parts.push("Confirm whether the collaboration can continue.");
+  if (/不接受不挂车/.test(normalized))
+    parts.push("Do not accept posting without the TikTok Shop product link.");
+  if (/可以短一点|短一点/.test(normalized))
+    parts.push("A slightly shorter video is acceptable.");
+  const minSeconds = rawNormalized.match(
+    /(?:不能低于|不低于|至少|above|over|minimum|min)\s*(\d+)\s*(?:秒|s|sec|seconds)?/,
+  )?.[1];
   if (minSeconds) parts.push(`Keep the video above ${minSeconds} seconds.`);
-  if (/先发\s*1|先发一|1\s*条再补|一条再补/.test(normalized)) parts.push('Posting one video first and completing the remaining video later is acceptable.');
-  if (/周五发布/.test(normalized)) parts.push('Posting on Friday is acceptable.');
-  if (/对标|参考/.test(normalized)) parts.push('The creator can use the reference video direction for a reshoot.');
+  if (/先发\s*1|先发一|1\s*条再补|一条再补/.test(normalized))
+    parts.push(
+      "Posting one video first and completing the remaining video later is acceptable.",
+    );
+  if (/周五发布/.test(normalized))
+    parts.push("Posting on Friday is acceptable.");
+  if (/对标|参考/.test(normalized))
+    parts.push(
+      "The creator can use the reference video direction for a reshoot.",
+    );
 
-  if (kind === 'relationship') {
-    if (/友好|沟通还可以|质量不错|第一次合作|专业/.test(normalized)) parts.push('Keep the tone professional and friendly.');
-    if (/回复比较慢|拖了很久|已经拖/.test(normalized)) parts.push('Keep the next action clear because the timeline has been slow.');
+  if (kind === "relationship") {
+    if (/友好|沟通还可以|质量不错|第一次合作|专业/.test(normalized))
+      parts.push("Keep the tone professional and friendly.");
+    if (/回复比较慢|拖了很久|已经拖/.test(normalized))
+      parts.push(
+        "Keep the next action clear because the timeline has been slow.",
+      );
   }
 
-  return Array.from(new Set(parts)).join(' ');
+  return Array.from(new Set(parts)).join(" ");
 }
 
-function userDirectionText(value: string, kind: 'focus' | 'goal' | 'concession' | 'relationship'): string {
+function userDirectionText(
+  value: string,
+  kind: "focus" | "goal" | "concession" | "relationship",
+): string {
   const translated = englishInstructionFromChinese(value, kind);
   const cleaned = sanitizeEnglishText(value);
-  return [translated, cleaned].filter(Boolean).join(' ');
+  return [translated, cleaned].filter(Boolean).join(" ");
 }
 
-function buildCreatorReplyContext(task: Task, userReplyFocus: string, personalization: CreatorReplyPersonalization): CreatorReplyContext {
+function buildCreatorReplyContext(
+  task: Task,
+  userReplyFocus: string,
+  personalization: CreatorReplyPersonalization,
+): CreatorReplyContext {
   const reply = creatorReplySource(task);
-  const focusText = userDirectionText(userReplyFocus, 'focus');
-  const goalText = userDirectionText(personalization.replyGoal ?? '', 'goal');
+  const focusText = userDirectionText(userReplyFocus, "focus");
+  const goalText = userDirectionText(personalization.replyGoal ?? "", "goal");
   return {
     reply,
     intent: detectCreatorReplyIntent(reply),
-    timeline: extractTimeline(`${reply} ${userReplyFocus} ${personalization.replyGoal ?? ''}`),
+    timeline: extractTimeline(
+      `${reply} ${userReplyFocus} ${personalization.replyGoal ?? ""}`,
+    ),
     focusIntent: detectFocusIntent(userReplyFocus),
     cleanFocus: focusText,
-    goalIntent: detectFocusIntent(personalization.replyGoal ?? ''),
+    goalIntent: detectFocusIntent(personalization.replyGoal ?? ""),
     cleanGoal: goalText,
-    cleanRelationshipNote: userDirectionText(personalization.relationshipNote ?? '', 'relationship'),
-    concessionText: userDirectionText(`${personalization.acceptableConcession ?? ''} ${userReplyFocus}`, 'concession'),
-    tone: personalization.replyTone ?? '中立专业',
-    intentSignals: detectReplyIntentSignals(userReplyFocus, personalization.replyGoal, personalization.acceptableConcession),
+    cleanRelationshipNote: userDirectionText(
+      personalization.relationshipNote ?? "",
+      "relationship",
+    ),
+    concessionText: userDirectionText(
+      `${personalization.acceptableConcession ?? ""} ${userReplyFocus}`,
+      "concession",
+    ),
+    tone: personalization.replyTone ?? "中立专业",
+    intentSignals: detectReplyIntentSignals(
+      userReplyFocus,
+      personalization.replyGoal,
+      personalization.acceptableConcession,
+    ),
   };
 }
 
 function relationshipSentence(context: CreatorReplyContext): string {
-  if (!context.cleanRelationshipNote) return '';
-  if (/slow|timeline has been slow/i.test(context.cleanRelationshipNote)) return 'To keep the collaboration moving, I want to keep the next step clear.';
-  if (/friendly|professional/i.test(context.cleanRelationshipNote) && context.tone !== '最后确认') return 'I appreciate the communication on this collaboration.';
-  return '';
+  if (!context.cleanRelationshipNote) return "";
+  if (/slow|timeline has been slow/i.test(context.cleanRelationshipNote))
+    return "To keep the collaboration moving, I want to keep the next step clear.";
+  if (
+    /friendly|professional/i.test(context.cleanRelationshipNote) &&
+    context.tone !== "最后确认"
+  )
+    return "I appreciate the communication on this collaboration.";
+  return "";
 }
 
 function toneClosing(context: CreatorReplyContext): string {
-  if (context.intent === 'cannot-continue') return '';
-  if (context.tone === '友好一点') return 'Looking forward to seeing the content.';
-  if (context.tone === '坚定推进') return 'Please keep this timeline so we can continue the campaign smoothly.';
-  if (context.tone === '最后确认') return 'We will use this confirmation to keep the campaign status accurate on our side.';
-  return '';
+  if (context.intent === "cannot-continue") return "";
+  if (context.tone === "友好一点")
+    return "Looking forward to seeing the content.";
+  if (context.tone === "坚定推进")
+    return "Please keep this timeline so we can continue the campaign smoothly.";
+  if (context.tone === "最后确认")
+    return "We will use this confirmation to keep the campaign status accurate on our side.";
+  return "";
 }
 
 function productLinkReminder(context: CreatorReplyContext): string {
-  if (context.intent === 'package-not-arrived' || context.intent === 'cannot-continue') return '';
-  const isExplicit = context.focusIntent === 'product-link' || context.goalIntent === 'product-link';
+  if (
+    context.intent === "package-not-arrived" ||
+    context.intent === "cannot-continue"
+  )
+    return "";
+  const isExplicit =
+    context.focusIntent === "product-link" ||
+    context.goalIntent === "product-link";
   return isExplicit
-    ? 'Please make sure the TikTok Shop product link is attached when you post.'
-    : 'Please make sure the TikTok Shop product link is attached and continue following the filming guidelines we shared.';
+    ? "Please make sure the TikTok Shop product link is attached when you post."
+    : "Please make sure the TikTok Shop product link is attached and continue following the filming guidelines we shared.";
 }
 
 function videoLengthRequirement(context: CreatorReplyContext): string {
   const concession = context.concessionText;
   const concessionLine = concession
     ? `${concession} Please still make sure the key product use is shown clearly.`
-    : 'The 60-second direction is important because longer videos usually give us enough product detail for ad testing. If your content style needs a small adjustment, please keep the key product use clear.';
+    : "The 60-second direction is important because longer videos usually give us enough product detail for ad testing. If your content style needs a small adjustment, please keep the key product use clear.";
   return `I understand the concern about the video length. ${concessionLine}`;
 }
 
 function filmingBriefLine(filmingRequirementsReminder: string): string {
-  return filmingRequirementsReminder || 'Please follow the filming guidelines we shared, show the main product use clearly, tag the brand account if required, and attach the TikTok Shop product link.';
+  return (
+    filmingRequirementsReminder ||
+    "Please follow the filming guidelines we shared, show the main product use clearly, tag the brand account if required, and attach the TikTok Shop product link."
+  );
 }
 
 function addUserDirection(lines: string[], context: CreatorReplyContext) {
-  const direction = [context.cleanGoal, context.cleanFocus].filter(Boolean).join(' ');
+  const direction = [context.cleanGoal, context.cleanFocus]
+    .filter(Boolean)
+    .join(" ");
   if (!direction) return;
-  if (context.intent === 'posting-time' && /Confirm that the update works|Confirm Friday posting|Confirm the end-of-week timeline/i.test(direction)) return;
-  if (context.intent === 'video-length' && /60-second|shorter|above \d+ seconds/i.test(direction)) return;
-  if (context.intent === 'package-not-arrived' && /delivery updates|shipping issue/i.test(direction)) return;
-  if (context.intent === 'filming-brief' && /filming|requirement|guideline/i.test(direction)) return;
-  if (context.intent === 'cannot-continue' && /campaign status|continue/i.test(direction)) return;
+  if (
+    context.intent === "posting-time" &&
+    /Confirm that the update works|Confirm Friday posting|Confirm the end-of-week timeline/i.test(
+      direction,
+    )
+  )
+    return;
+  if (
+    context.intent === "video-length" &&
+    /60-second|shorter|above \d+ seconds/i.test(direction)
+  )
+    return;
+  if (
+    context.intent === "package-not-arrived" &&
+    /delivery updates|shipping issue/i.test(direction)
+  )
+    return;
+  if (
+    context.intent === "filming-brief" &&
+    /filming|requirement|guideline/i.test(direction)
+  )
+    return;
+  if (
+    context.intent === "cannot-continue" &&
+    /campaign status|continue/i.test(direction)
+  )
+    return;
   lines.push(direction);
 }
 
-function creatorReplyLines(product: string, task: Task, userReplyFocus: string, filmingRequirementsReminder: string, personalization: CreatorReplyPersonalization): string[] {
-  const context = buildCreatorReplyContext(task, userReplyFocus, personalization);
+function creatorReplyLines(
+  product: string,
+  task: Task,
+  userReplyFocus: string,
+  filmingRequirementsReminder: string,
+  personalization: CreatorReplyPersonalization,
+): string[] {
+  const context = buildCreatorReplyContext(
+    task,
+    userReplyFocus,
+    personalization,
+  );
   const lines: string[] = [];
   const relationship = relationshipSentence(context);
-  const specificFocusLines = replyIntentLines(context, filmingRequirementsReminder);
+  const specificFocusLines = replyIntentLines(
+    context,
+    filmingRequirementsReminder,
+  );
   const hasSpecificFocus = hasSpecificReplyIntent(context);
 
   if (hasSpecificFocus) {
     lines.push(replyAcknowledgementLine(context));
     if (relationship) lines.push(relationship);
-    if (context.intent === 'package-not-arrived') {
-      lines.push('Please keep checking the delivery updates, and let us know if the package still does not arrive or if you see any shipping issue.');
-      lines.push('No need to start filming until the sample has arrived.');
+    if (context.intent === "package-not-arrived") {
+      lines.push(
+        "Please keep checking the delivery updates, and let us know if the package still does not arrive or if you see any shipping issue.",
+      );
+      lines.push("No need to start filming until the sample has arrived.");
     }
     lines.push(...specificFocusLines);
 
-    if (specificFocusLines.length === 0 && context.intent !== 'package-not-arrived') {
+    if (
+      specificFocusLines.length === 0 &&
+      context.intent !== "package-not-arrived"
+    ) {
       addUserDirection(lines, context);
     }
-  } else if (context.intent === 'posting-time') {
-    lines.push(`Thank you for the update. I’ll note that you’re planning to complete the ${product} content ${context.timeline}.`);
+  } else if (context.intent === "posting-time") {
+    lines.push(
+      `Thank you for the update. I’ll note that you’re planning to complete the ${product} content ${context.timeline}.`,
+    );
     const reminder = productLinkReminder(context);
     if (reminder) lines.push(reminder);
-  } else if (context.intent === 'video-length') {
+  } else if (context.intent === "video-length") {
     lines.push(videoLengthRequirement(context));
-    const reminder = productLinkReminder({ ...context, focusIntent: 'product-link' });
+    const reminder = productLinkReminder({
+      ...context,
+      focusIntent: "product-link",
+    });
     if (reminder) lines.push(reminder);
-  } else if (context.intent === 'package-not-arrived') {
-    lines.push('Thanks for letting me know. Please keep checking the delivery updates, and let us know if the package still does not arrive or if you see any shipping issue.');
-    lines.push('No need to start filming until the sample has arrived.');
-  } else if (context.intent === 'filming-brief') {
-    lines.push('Of course — here is the main filming direction for this collaboration.');
+  } else if (context.intent === "package-not-arrived") {
+    lines.push(
+      "Thanks for letting me know. Please keep checking the delivery updates, and let us know if the package still does not arrive or if you see any shipping issue.",
+    );
+    lines.push("No need to start filming until the sample has arrived.");
+  } else if (context.intent === "filming-brief") {
+    lines.push(
+      "Of course — here is the main filming direction for this collaboration.",
+    );
     lines.push(filmingBriefLine(filmingRequirementsReminder));
-  } else if (context.intent === 'cannot-continue') {
-    lines.push('Thank you for letting us know. We will update the campaign status on our side.');
-    if (context.tone === '最后确认') lines.push('No further action is needed from you for this campaign unless anything changes.');
+  } else if (context.intent === "cannot-continue") {
+    lines.push(
+      "Thank you for letting us know. We will update the campaign status on our side.",
+    );
+    if (context.tone === "最后确认")
+      lines.push(
+        "No further action is needed from you for this campaign unless anything changes.",
+      );
   } else {
     lines.push(`Thank you for the update on the ${product} collaboration.`);
-    lines.push('I’ll note this on our side.');
-    lines.push('Please keep us posted if anything changes with the timeline.');
+    lines.push("I’ll note this on our side.");
+    lines.push("Please keep us posted if anything changes with the timeline.");
   }
 
   if (!hasSpecificFocus && relationship) lines.splice(1, 0, relationship);
@@ -1024,97 +1709,156 @@ function creatorReplyLines(product: string, task: Task, userReplyFocus: string, 
   return Array.from(new Set(lines.map((line) => line.trim()).filter(Boolean)));
 }
 
-function creatorReplyMessage(channel: Channel, name: string, product: string, task: Task, userReplyFocus: string, filmingRequirementsReminder: string, personalization: CreatorReplyPersonalization): string {
-  const lines = creatorReplyLines(product, task, userReplyFocus, filmingRequirementsReminder, personalization);
-  const body = lines.join(' ');
+function creatorReplyMessage(
+  channel: Channel,
+  name: string,
+  product: string,
+  task: Task,
+  userReplyFocus: string,
+  filmingRequirementsReminder: string,
+  personalization: CreatorReplyPersonalization,
+): string {
+  const lines = creatorReplyLines(
+    product,
+    task,
+    userReplyFocus,
+    filmingRequirementsReminder,
+    personalization,
+  );
+  const body = lines.join(" ");
 
-  if (channel === 'Email') {
+  if (channel === "Email") {
     return `Hi ${name},
 
-${lines.join('\n\n')}
+${lines.join("\n\n")}
 
 Best,
 Brand Team`;
   }
 
-  if (channel === 'TikTok Shop Affiliate Message') {
+  if (channel === "TikTok Shop Affiliate Message") {
     return `Hi ${name},
 
-${lines.join('\n\n')}
+${lines.join("\n\n")}
 
 Thank you.`;
   }
 
-  if (channel === 'WhatsApp') {
-    return `Hi ${name}, thank you for the update — ${body.replace(/^Thank you for the update\.\s*/i, '')}`.replace(/\s+/g, ' ').trim();
+  if (channel === "WhatsApp") {
+    return `Hi ${name}, thank you for the update — ${body.replace(/^Thank you for the update\.\s*/i, "")}`
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   return `Hi ${name}, ${body.charAt(0).toLowerCase()}${body.slice(1)}`;
 }
 
-function byChannel(channel: Channel, name: string, request: string, filmingRequirementsReminder: string, highRisk: boolean): string {
+function byChannel(
+  channel: Channel,
+  name: string,
+  request: string,
+  filmingRequirementsReminder: string,
+  highRisk: boolean,
+): string {
   const cleanReminder = filmingRequirementsReminder.trim();
 
-  if (channel === 'TikTok DM') {
-    const sentences = highRisk ? request.split('. ').slice(0, 4) : request.split('. ').slice(0, 3);
-    return `Hi ${name}, ${sentences.join('. ')}. ${cleanReminder}`.replace(/\s+/g, ' ').replace('..', '.').trim();
+  if (channel === "TikTok DM") {
+    const sentences = highRisk
+      ? request.split(". ").slice(0, 4)
+      : request.split(". ").slice(0, 3);
+    return `Hi ${name}, ${sentences.join(". ")}. ${cleanReminder}`
+      .replace(/\s+/g, " ")
+      .replace("..", ".")
+      .trim();
   }
 
-  if (channel === 'TikTok Shop Affiliate Message') {
-    const closing = highRisk ? 'Thank you.' : 'This helps us keep the collaboration timeline clear.';
-    return `Hi ${name}, ${request} ${cleanReminder} ${closing}`.replace(/\s+/g, ' ').trim();
+  if (channel === "TikTok Shop Affiliate Message") {
+    const closing = highRisk
+      ? "Thank you."
+      : "This helps us keep the collaboration timeline clear.";
+    return `Hi ${name}, ${request} ${cleanReminder} ${closing}`
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
-  if (channel === 'WhatsApp') {
-    const closing = highRisk ? 'Thank you.' : 'A quick update is fine so we can keep the collaboration timeline clear.';
-    return `Hi ${name}, ${request} ${cleanReminder || closing}`.replace(/\s+/g, ' ').trim();
+  if (channel === "WhatsApp") {
+    const closing = highRisk
+      ? "Thank you."
+      : "A quick update is fine so we can keep the collaboration timeline clear.";
+    return `Hi ${name}, ${request} ${cleanReminder || closing}`
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   return `Hi ${name},
 
 ${request}
 
-${cleanReminder ? `${cleanReminder}
+${
+  cleanReminder
+    ? `${cleanReminder}
 
-` : ''}${highRisk ? 'Thank you.' : 'This helps us keep the collaboration timeline clear and make sure the content matches the campaign guidelines.'}
+`
+    : ""
+}${highRisk ? "Thank you." : "This helps us keep the collaboration timeline clear and make sure the content matches the campaign guidelines."}
 
 Best,
 Brand Team`;
 }
 
-function buildChineseExplanation(scenario: string, channel: Channel, hasReferenceLinks: boolean): string {
+function buildChineseExplanation(
+  scenario: string,
+  channel: Channel,
+  hasReferenceLinks: boolean,
+): string {
   const channelNote: Record<Channel, string> = {
-    'TikTok DM': 'TikTok DM 版本更短、更自然，适合快速提醒，不会显得强势。',
-    'TikTok Shop Affiliate Message': 'TikTok Shop 达人联盟消息更完整，明确说明合作背景和下一步动作。',
-    Email: '邮件版本结构更正式，包含问候、背景、请求、下一步和结尾。',
-    WhatsApp: 'WhatsApp 版本保持聊天感，但比 DM 稍微更详细，方便对方快速回复。',
+    "TikTok DM": "TikTok DM 版本更短、更自然，适合快速提醒，不会显得强势。",
+    "TikTok Shop Affiliate Message":
+      "TikTok Shop 达人联盟消息更完整，明确说明合作背景和下一步动作。",
+    Email: "邮件版本结构更正式，包含问候、背景、请求、下一步和结尾。",
+    WhatsApp: "WhatsApp 版本保持聊天感，但比 DM 稍微更详细，方便对方快速回复。",
   };
 
   const scenarioNotes: Record<string, string> = {
-    'First Outreach': '首次建联，重点是清楚介绍合作并确认达人是否有兴趣。',
-    'No Reply Follow-up': '建联后未回复跟进，重点是短句确认是否有兴趣，不施压。',
-    'Sample Request Reminder': '提醒达人申请样品，重点是让达人完成样品申请动作。',
-    'Sample Request Confirmation': '样品申请后确认，重点是说明申请已收到或正在处理。',
-    'Sample In Transit Reminder': '样品运输中提醒，重点是提醒达人关注物流，到货后再开始拍摄。',
-    'Logistics Exception Confirmation': '物流异常确认，重点是确认达人是否收到包裹、查看物流更新，并说明样品到货后再推进拍摄。',
-    'Sample Delivered Follow-up': '样品到货后催拍，重点是确认发布时间，并轻量提醒拍摄要求、产品链接和 tag。',
-    'Partial Video Completion Follow-up': '已发布部分视频，跟进剩余视频，先认可已发布内容，再确认剩余视频发布时间。',
-    'Needs Revision Reminder': '视频修改提醒，重点是清楚说明需要调整，不情绪化。',
-    'Completed Thank You': '合作完成感谢 / 后续合作，重点是感谢并说明后续 performance review 或 ad testing。',
-    'Failed Archive Confirmation': '合作失败归档，默认不催促，只做 campaign status 更新确认。',
-    'Final Follow-up Before Failed Candidate': '合作失败风险前的最后跟进，重点是让达人明确是否还能完成合作。',
-    'Second Follow-up': '第二次跟进，重点是再次确认进度和明确发布时间。',
-    'Creator Reply Follow-up': '这个话术用于达人已经回复后继续推进沟通。系统根据达人回复内容和你填写的回复重点生成下一步回复。当前版本不调用外部 AI API，而是通过本地规则识别“发布时间、投流计划、让步、挂车提醒”等常见运营意图。如果填写了具体回复重点，话术不应只生成通用模板。',
-    'Light Follow-up': '轻量跟进，适合未命中特定阶段时确认当前合作进展。',
+    "First Outreach": "首次建联，重点是清楚介绍合作并确认达人是否有兴趣。",
+    "No Reply Follow-up":
+      "建联后未回复跟进，重点是短句确认是否有兴趣，不施压。",
+    "Sample Request Reminder":
+      "提醒达人申请样品，重点是让达人完成样品申请动作。",
+    "Sample Request Confirmation":
+      "样品申请后确认，重点是说明申请已收到或正在处理。",
+    "Sample In Transit Reminder":
+      "样品运输中提醒，重点是提醒达人关注物流，到货后再开始拍摄。",
+    "Logistics Exception Confirmation":
+      "物流异常确认，重点是确认达人是否收到包裹、查看物流更新，并说明样品到货后再推进拍摄。",
+    "Sample Delivered Follow-up":
+      "样品到货后催拍，重点是确认发布时间，并轻量提醒拍摄要求、产品链接和 tag。",
+    "Partial Video Completion Follow-up":
+      "已发布部分视频，跟进剩余视频，先认可已发布内容，再确认剩余视频发布时间。",
+    "Needs Revision Reminder":
+      "视频修改提醒，重点是清楚说明需要调整，不情绪化。",
+    "Completed Thank You":
+      "合作完成感谢 / 后续合作，重点是感谢并说明后续 performance review 或 ad testing。",
+    "Failed Archive Confirmation":
+      "合作失败归档，默认不催促，只做 campaign status 更新确认。",
+    "Final Follow-up Before Failed Candidate":
+      "合作失败风险前的最后跟进，重点是让达人明确是否还能完成合作。",
+    "Second Follow-up": "第二次跟进，重点是再次确认进度和明确发布时间。",
+    "Creator Reply Follow-up":
+      "这个话术用于达人已经回复后继续推进沟通。系统根据达人回复内容和你填写的回复重点生成下一步回复。当前版本不调用外部 AI API，而是通过本地规则识别“发布时间、投流计划、让步、挂车提醒”等常见运营意图。如果填写了具体回复重点，话术不应只生成通用模板。",
+    "Light Follow-up": "轻量跟进，适合未命中特定阶段时确认当前合作进展。",
   };
 
   const referenceLinksNote = hasReferenceLinks
-    ? ' 参考视频链接用于给达人参考拍摄模板、内容灵感或后续视频优化方向，并最多放入 3 条。'
-    : '';
+    ? " 参考视频链接用于给达人参考拍摄模板、内容灵感或后续视频优化方向，并最多放入 3 条。"
+    : "";
 
   return `这条消息用于「${scenarioNotes[scenario] ?? scenario}」场景。语气保持专业、冷静、直接，符合美国本地 TikTok Shop affiliate campaign management 的沟通方式。${channelNote[channel]}${referenceLinksNote}`;
 }
 
 function removeChineseCharacters(value: string): string {
-  return value.replace(/[\u3400-\u9fff]/g, '').replace(/\s+([,.!?;:])/g, '$1').trim();
+  return value
+    .replace(/[\u3400-\u9fff]/g, "")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .trim();
 }

@@ -1,11 +1,7 @@
 import { MessageComposer } from "../messaging/MessageComposer";
 import type { DashboardPageProps } from "./dashboardTypes";
 
-export function DashboardPage({
-  data,
-  uiState,
-  actions,
-}: DashboardPageProps) {
+export function DashboardPage({ data, uiState, actions }: DashboardPageProps) {
   const {
     campaignCards,
     metricCards,
@@ -111,10 +107,7 @@ export function DashboardPage({
           </button>
         ))}
       </section>
-      <section
-        className="panel generator-panel workbench-panel"
-        ref={queueRef}
-      >
+      <section className="panel generator-panel workbench-panel" ref={queueRef}>
         <div className="section-heading">
           <div>
             <h2>今日待处理达人队列</h2>
@@ -157,7 +150,9 @@ export function DashboardPage({
             搜索队列
             <input
               value={followupSearch}
-              onChange={(event) => actions.setFollowupSearch(event.target.value)}
+              onChange={(event) =>
+                actions.setFollowupSearch(event.target.value)
+              }
               onKeyDown={(event) => {
                 if (event.key === "Enter") actions.locateCreator();
               }}
@@ -191,7 +186,8 @@ export function DashboardPage({
               value={urgency}
               onChange={(event) =>
                 actions.setUrgency(
-                  event.target.value as DashboardPageProps["uiState"]["urgency"],
+                  event.target
+                    .value as DashboardPageProps["uiState"]["urgency"],
                 )
               }
             >
@@ -221,7 +217,8 @@ export function DashboardPage({
             >
               {queueItems.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.creatorHandle} · {item.priorityLabel} · {item.statusLabel}
+                  {item.creatorHandle} · {item.priorityLabel} ·{" "}
+                  {item.statusLabel}
                 </option>
               ))}
             </select>
@@ -232,7 +229,8 @@ export function DashboardPage({
               value={channel}
               onChange={(event) =>
                 actions.setChannel(
-                  event.target.value as DashboardPageProps["uiState"]["channel"],
+                  event.target
+                    .value as DashboardPageProps["uiState"]["channel"],
                 )
               }
             >
@@ -354,7 +352,8 @@ export function DashboardPage({
               <div className="inline-warning duplicate-warning">
                 <strong>同达人多样品</strong>
                 <span>
-                  该达人还有 {selectedCreator.otherActiveSampleCount} 个其他样品合作。该达人存在多个样品合作，请确认是否需要合并沟通。
+                  该达人还有 {selectedCreator.otherActiveSampleCount}{" "}
+                  个其他样品合作。该达人存在多个样品合作，请确认是否需要合并沟通。
                 </span>
                 <button
                   type="button"

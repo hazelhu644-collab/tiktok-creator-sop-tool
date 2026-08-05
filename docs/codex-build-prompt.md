@@ -23,13 +23,13 @@ Please build this as a lightweight web app that can be deployed later to Vercel 
 
 Recommended stack:
 
-* React or Next.js
-* TypeScript if possible
-* Clean and simple UI
-* No login required
-* No database required
-* No TikTok API integration required
-* Data can be processed temporarily in the browser
+- React or Next.js
+- TypeScript if possible
+- Clean and simple UI
+- No login required
+- No database required
+- No TikTok API integration required
+- Data can be processed temporarily in the browser
 
 ## Input
 
@@ -37,18 +37,18 @@ The user should be able to upload a CSV or Excel file.
 
 The spreadsheet columns should follow:
 
-* Creator username
-* Creator profile link
-* Contact method
-* Product
-* Current status
-* Sample shipping status
-* Sample delivered date
-* Video progress
-* First video posted date
-* Last contact date
-* Last follow-up count
-* Notes
+- Creator username
+- Creator profile link
+- Contact method
+- Product
+- Current status
+- Sample shipping status
+- Sample delivered date
+- Video progress
+- First video posted date
+- Last contact date
+- Last follow-up count
+- Notes
 
 ## Core Features
 
@@ -62,13 +62,13 @@ After upload, parse the creator data and show a clean table preview.
 
 Generate a summary showing:
 
-* Total creators in the uploaded file
-* Number of creators that need follow-up today
-* Number of Highest priority tasks
-* Number of High priority tasks
-* Number of Medium priority tasks
-* Number of Low priority tasks
-* Number of Failed Candidate warnings
+- Total creators in the uploaded file
+- Number of creators that need follow-up today
+- Number of Highest priority tasks
+- Number of High priority tasks
+- Number of Medium priority tasks
+- Number of Low priority tasks
+- Number of Failed Candidate warnings
 
 ### 3. Daily Task Table
 
@@ -76,15 +76,15 @@ Generate a task table sorted by priority.
 
 Table columns:
 
-* Priority
-* Creator username
-* Product
-* Current status
-* Trigger reason
-* Suggested action
-* Contact method
-* Video progress
-* Failed candidate warning if applicable
+- Priority
+- Creator username
+- Product
+- Current status
+- Trigger reason
+- Suggested action
+- Contact method
+- Video progress
+- Failed candidate warning if applicable
 
 ### 4. Priority Logic
 
@@ -103,11 +103,11 @@ For all Highest priority creators, show a separate explanation section below the
 
 Each explanation should include:
 
-* Creator username
-* Sample delivery timing
-* Current video progress
-* Why this creator is urgent
-* Suggested next action
+- Creator username
+- Sample delivery timing
+- Current video progress
+- Why this creator is urgent
+- Suggested next action
 
 ### 6. Failed Candidate Warning
 
@@ -121,10 +121,10 @@ The user should still make the final decision.
 
 Allow the user to select one creator from the task table and choose a channel:
 
-* TikTok DM
-* TikTok Shop Affiliate Message
-* Email
-* WhatsApp
+- TikTok DM
+- TikTok Shop Affiliate Message
+- Email
+- WhatsApp
 
 Then generate:
 
@@ -163,11 +163,11 @@ The design should feel clean, practical, and suitable for a small business opera
 
 Do not build:
 
-* Login system
-* Payment system
-* TikTok API integration
-* Database
-* Complex dashboard
-* Monthly report
+- Login system
+- Payment system
+- TikTok API integration
+- Database
+- Complex dashboard
+- Monthly report
 
 Focus only on the first MVP.

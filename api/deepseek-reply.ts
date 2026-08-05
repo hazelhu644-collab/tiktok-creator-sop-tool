@@ -7,8 +7,7 @@ const MISSING_DEEPSEEK_API_KEY_ERROR =
   "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。";
 
 export type DeepSeekAction =
-  | "translate_creator_reply"
-  | "generate_personalized_reply";
+  "translate_creator_reply" | "generate_personalized_reply";
 
 type DeepSeekReplyRequest = {
   action?: DeepSeekAction;
@@ -46,8 +45,7 @@ type GeneratePersonalizedReplyResponse = {
 };
 
 type DeepSeekReplyResponse =
-  | TranslateCreatorReplyResponse
-  | GeneratePersonalizedReplyResponse;
+  TranslateCreatorReplyResponse | GeneratePersonalizedReplyResponse;
 
 type ServerlessRequest = {
   method?: string;

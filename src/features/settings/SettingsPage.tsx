@@ -103,7 +103,8 @@ export function SettingsPage({ data, uiState, actions }: SettingsPageProps) {
             )}
             {aiDraftAppliedTo && (
               <p className="ai-status">
-                已把草稿应用到「{aiDraftAppliedTo}」，可在上方产品项目设置中继续修改。
+                已把草稿应用到「{aiDraftAppliedTo}
+                」，可在上方产品项目设置中继续修改。
               </p>
             )}
 
@@ -148,7 +149,9 @@ export function SettingsPage({ data, uiState, actions }: SettingsPageProps) {
 
             {generatedPrompt && (
               <>
-                <p className="ai-status">提示词已生成。请复制到 ChatGPT 使用。</p>
+                <p className="ai-status">
+                  提示词已生成。请复制到 ChatGPT 使用。
+                </p>
                 <label>
                   ChatGPT 提示词
                   <textarea value={generatedPrompt} readOnly rows={8} />

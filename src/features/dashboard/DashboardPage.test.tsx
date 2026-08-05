@@ -10,36 +10,42 @@ import type { MessageComposerProps } from "../messaging/messageComposerTypes";
 function createProps(): DashboardPageProps {
   const base: DashboardPageProps = {
     data: {
-      campaignCards: [{
-        value: "store-1::pet-brush",
-        label: "Pet Brush",
-        ariaLabel: "Pet Brush2 位达人",
-        creatorCount: 2,
-        activeCount: 2,
-        todayFollowUp: 1,
-        highPriority: 1,
-        inTransit: 0,
-        deliveredPending: 1,
-        postedVideos: 1,
-        completed: 0,
-        failed: 0,
-      }],
-      metricCards: [{
-        label: "今日待跟进达人数量",
-        value: 1,
-        filterKey: "follow_up_today",
-      }],
+      campaignCards: [
+        {
+          value: "store-1::pet-brush",
+          label: "Pet Brush",
+          ariaLabel: "Pet Brush2 位达人",
+          creatorCount: 2,
+          activeCount: 2,
+          todayFollowUp: 1,
+          highPriority: 1,
+          inTransit: 0,
+          deliveredPending: 1,
+          postedVideos: 1,
+          completed: 0,
+          failed: 0,
+        },
+      ],
+      metricCards: [
+        {
+          label: "今日待跟进达人数量",
+          value: 1,
+          filterKey: "follow_up_today",
+        },
+      ],
       selectedCampaignName: "Pet Brush",
       workbenchFilterLabel: "",
       highestPendingCount: 1,
-      queueItems: [{
-        id: "creator-1",
-        creatorHandle: "@alpha_creator",
-        priorityLabel: "最高",
-        statusLabel: "待跟进",
-        multiSample: false,
-        subLine: "Pet Brush · 已签收",
-      }],
+      queueItems: [
+        {
+          id: "creator-1",
+          creatorHandle: "@alpha_creator",
+          priorityLabel: "最高",
+          statusLabel: "待跟进",
+          multiSample: false,
+          subLine: "Pet Brush · 已签收",
+        },
+      ],
       selectedCreator: {
         id: "creator-1",
         displayName: "alpha_creator",
@@ -168,12 +174,24 @@ describe("DashboardPage", () => {
   it("renders the existing Dashboard overview, queue, and current creator", () => {
     render(<DashboardPage {...createProps()} />);
 
-    expect(screen.getByRole("heading", { name: "今日工作台" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "产品项目概览" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pet Brush2 位达人" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /今日待跟进达人数量1Pet Brush/ })).toBeInTheDocument();
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("@alpha_creator");
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("Creator prefers weekends");
+    expect(
+      screen.getByRole("heading", { name: "今日工作台" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "产品项目概览" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Pet Brush2 位达人" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /今日待跟进达人数量1Pet Brush/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "@alpha_creator",
+    );
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "Creator prefers weekends",
+    );
   });
 
   it("forwards controlled dashboard, queue, and creator selection callbacks", async () => {
@@ -182,12 +200,20 @@ describe("DashboardPage", () => {
     render(<DashboardPage {...props} />);
 
     await user.click(screen.getByRole("button", { name: "Pet Brush2 位达人" }));
-    expect(props.actions.selectCampaignCard).toHaveBeenCalledWith("store-1::pet-brush");
+    expect(props.actions.selectCampaignCard).toHaveBeenCalledWith(
+      "store-1::pet-brush",
+    );
 
-    await user.click(screen.getByRole("button", { name: /今日待跟进达人数量/ }));
-    expect(props.actions.selectMetricCard).toHaveBeenCalledWith(props.data.metricCards[0]);
+    await user.click(
+      screen.getByRole("button", { name: /今日待跟进达人数量/ }),
+    );
+    expect(props.actions.selectMetricCard).toHaveBeenCalledWith(
+      props.data.metricCards[0],
+    );
 
-    fireEvent.change(screen.getByLabelText("搜索队列"), { target: { value: "alpha" } });
+    fireEvent.change(screen.getByLabelText("搜索队列"), {
+      target: { value: "alpha" },
+    });
     expect(props.actions.setFollowupSearch).toHaveBeenCalledWith("alpha");
     fireEvent.keyDown(screen.getByLabelText("搜索队列"), { key: "Enter" });
     expect(props.actions.locateCreator).toHaveBeenCalledTimes(1);
@@ -204,7 +230,11 @@ describe("DashboardPage", () => {
       <DashboardPage
         {...{
           ...props,
-          uiState: { ...props.uiState, queueExpanded: false, onlyCurrentCreator: false },
+          uiState: {
+            ...props.uiState,
+            queueExpanded: false,
+            onlyCurrentCreator: false,
+          },
         }}
       />,
     );
@@ -237,7 +267,9 @@ describe("DashboardPage", () => {
       crossStoreCreator: true,
       otherActiveSampleCount: 2,
       filmingRequirements: [{ label: "必须展示", value: "展示开箱" }],
-      moreInfo: [{ label: "主页链接", value: "https://www.tiktok.com/@alpha_creator" }],
+      moreInfo: [
+        { label: "主页链接", value: "https://www.tiktok.com/@alpha_creator" },
+      ],
     };
     render(
       <DashboardPage
@@ -251,11 +283,15 @@ describe("DashboardPage", () => {
     expect(screen.getByText("跨店铺达人")).toBeInTheDocument();
     expect(screen.getByText("同达人多样品")).toBeInTheDocument();
     expect(screen.getByText("展示开箱")).toBeInTheDocument();
-    expect(screen.getByText("https://www.tiktok.com/@alpha_creator")).toBeInTheDocument();
+    expect(
+      screen.getByText("https://www.tiktok.com/@alpha_creator"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "查看其他样品记录" }));
     expect(props.actions.showOtherSamples).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: "生成多样品合并提醒" }));
+    await user.click(
+      screen.getByRole("button", { name: "生成多样品合并提醒" }),
+    );
     expect(props.actions.showMultiSampleReminder).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "处理下一个达人" }));
     expect(props.actions.processNextCreator).toHaveBeenCalledTimes(1);
@@ -275,7 +311,9 @@ describe("DashboardPage", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "达人回复处理" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "达人回复处理" }),
+    ).toBeInTheDocument();
 
     rerender(
       <DashboardPage
@@ -290,6 +328,10 @@ describe("DashboardPage", () => {
       />,
     );
 
-    expect(screen.getByText("当前为历史统计下钻，只读展示；如需继续合作，请先恢复达人。")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "当前为历史统计下钻，只读展示；如需继续合作，请先恢复达人。",
+      ),
+    ).toBeInTheDocument();
   });
 });
