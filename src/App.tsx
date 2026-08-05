@@ -291,6 +291,26 @@ function priorityLabel(task: Task): string {
         : "低";
 }
 
+function isHandledToday(task: Task) {
+  const today = todayString();
+  const handledActions = [
+    "Message Sent",
+    "No Reply",
+    "Skipped Today",
+    "Creator Replied",
+    "Video Posted",
+    "Completed",
+    "Failed",
+  ];
+  return (
+    task.lastHandledDate === today ||
+    task.lastMessageSentAt === today ||
+    task.followUpHistory?.some(
+      (entry) => entry.date === today && handledActions.includes(entry.action),
+    )
+  );
+}
+
 function priorityActionLabel(task: Task): string {
   if (task.priority === "Highest") return "必须处理";
   if (task.priority === "High") return "待跟进";
@@ -904,64 +924,47 @@ function App() {
       ),
     [rows],
   );
-  const matchesWorkbenchFilter = (task: Task, key: WorkbenchFilterKey) => {
-    const taskRequiredVideos = requiredVideosForRow(task);
-    const status = inferStatus(task, taskRequiredVideos);
-    const taskMeta = tasksById.get(task.id);
-    const progress = normalizeVideoProgress(
-      task.videoProgress,
-      taskRequiredVideos,
-    );
-    switch (key) {
-      case "follow_up_today":
-        return (
-          Boolean(taskMeta?.needsFollowUp || task.needsFollowUp) &&
-          !isHandledToday(task)
-        );
-      case "processed_today":
-        return isHandledToday(task);
-      case "sample_shipped":
-        return isSampleInTransitForDaily(task, taskRequiredVideos);
-      case "delivered_waiting_video":
-        return (
-          isSampleDeliveredForVideo(task, taskRequiredVideos) &&
-          (progress.postedCount ?? 0) === 0
-        );
-      case "published_video":
-        return (progress.postedCount ?? 0) > 0;
-      case "posted_this_week":
-        return (
-          isCurrentWeek(task.firstVideoPostedDate) ||
-          isCurrentWeek(task.latestVideoPostedDate ?? "")
-        );
-      case "completed":
-        return status === "Completed";
-      case "failed":
-        return status === "Lost";
-      default:
-        return true;
-    }
-  };
-  function isHandledToday(task: Task) {
-    const today = todayString();
-    const handledActions = [
-      "Message Sent",
-      "No Reply",
-      "Skipped Today",
-      "Creator Replied",
-      "Video Posted",
-      "Completed",
-      "Failed",
-    ];
-    return (
-      task.lastHandledDate === today ||
-      task.lastMessageSentAt === today ||
-      task.followUpHistory?.some(
-        (entry) =>
-          entry.date === today && handledActions.includes(entry.action),
-      )
-    );
-  }
+  const matchesWorkbenchFilter = useCallback(
+    (task: Task, key: WorkbenchFilterKey) => {
+      const taskRequiredVideos = requiredVideosForRow(task);
+      const status = inferStatus(task, taskRequiredVideos);
+      const taskMeta = tasksById.get(task.id);
+      const progress = normalizeVideoProgress(
+        task.videoProgress,
+        taskRequiredVideos,
+      );
+      switch (key) {
+        case "follow_up_today":
+          return (
+            Boolean(taskMeta?.needsFollowUp || task.needsFollowUp) &&
+            !isHandledToday(task)
+          );
+        case "processed_today":
+          return isHandledToday(task);
+        case "sample_shipped":
+          return isSampleInTransitForDaily(task, taskRequiredVideos);
+        case "delivered_waiting_video":
+          return (
+            isSampleDeliveredForVideo(task, taskRequiredVideos) &&
+            (progress.postedCount ?? 0) === 0
+          );
+        case "published_video":
+          return (progress.postedCount ?? 0) > 0;
+        case "posted_this_week":
+          return (
+            isCurrentWeek(task.firstVideoPostedDate) ||
+            isCurrentWeek(task.latestVideoPostedDate ?? "")
+          );
+        case "completed":
+          return status === "Completed";
+        case "failed":
+          return status === "Lost";
+        default:
+          return true;
+      }
+    },
+    [requiredVideosForRow, tasksById],
+  );
 
   function queueStatusLabel(task: Task) {
     const handledToday = isHandledToday(task);
@@ -1027,8 +1030,7 @@ function App() {
     followupSearch,
     followupUrgency,
     workbenchFilter,
-    requiredVideos,
-    tasksById,
+    matchesWorkbenchFilter,
     showProcessedToday,
     usesHistoricalTaskSource,
   ]);
@@ -1267,12 +1269,7 @@ function App() {
         avgViews: avgViews(row),
         gmv: gmvRange(row),
       })),
-    [
-      databaseVisibleRows,
-      tasksById,
-      mergedCampaigns,
-      activeFilmingRequirements,
-    ],
+    [databaseVisibleRows, tasksById, requiredVideosForRow],
   );
 
   const archivedSearchMatches = useMemo(() => {
