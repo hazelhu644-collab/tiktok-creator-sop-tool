@@ -296,16 +296,20 @@ function compactCreatorLabel(task: Task): string {
   return `${creatorHandle(task)} · ${priorityLabel(task)} · ${queueStatusLabelText(task)}`;
 }
 
+function priorityActionLabel(task: Task): string {
+  if (task.priority === "Highest") return "必须处理";
+  if (task.priority === "High") return "待跟进";
+  if (task.priority === "Medium") return "轻跟进";
+  return "稍后复查";
+}
+
 function queueStatusLabelText(task: Task): string {
   if (task.trackingStatus?.trim()) return task.trackingStatus.trim();
   if (task.priority === "Low" && task.triggerReason.includes("今日已处理"))
     return "今日已处理";
   if (task.priority === "Low" && task.triggerReason.includes("暂不催"))
     return "暂不催";
-  if (task.priority === "Highest") return "必须处理";
-  if (task.priority === "High") return "待跟进";
-  if (task.priority === "Medium") return "轻跟进";
-  return "稍后复查";
+  return priorityActionLabel(task);
 }
 
 function containsChinese(value: string): boolean {
@@ -977,7 +981,7 @@ function App() {
     if (handledToday && task.trackingStatus)
       return `今日已处理 · ${task.trackingStatus}`;
     if (task.trackingStatus) return task.trackingStatus;
-    return priorityLabel(task);
+    return priorityActionLabel(task);
   }
 
   const filteredTasks = useMemo(() => {
