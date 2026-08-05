@@ -1211,9 +1211,13 @@ function App() {
     null,
   );
 
-  if (templateSyncKey !== syncedTemplateKey) {
-    setSyncedTemplateKey(templateSyncKey);
-    setTemplateForm((form) => {
+  /**
+   * Fills the form from the selected campaign and creator. Used both by the
+   * automatic refill on selection change and by the manual refill button, so
+   * the two can never drift apart.
+   */
+  const fillTemplateFormFromSources = useCallback(
+    (form: TemplateForm): TemplateForm => {
       let next = form;
 
       if (templateCampaignTarget) {
@@ -1267,7 +1271,19 @@ function App() {
       }
 
       return next;
-    });
+    },
+    [
+      templateCampaignTarget,
+      selectedTemplateCreator,
+      campaignForRow,
+      filmingRequirements,
+      activeFilmingRequirements,
+    ],
+  );
+
+  if (templateSyncKey !== syncedTemplateKey) {
+    setSyncedTemplateKey(templateSyncKey);
+    setTemplateForm(fillTemplateFormFromSources);
   }
 
   useEffect(() => {
@@ -3105,6 +3121,24 @@ function App() {
                 </label>
               ),
             )}
+            <div className="template-form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setTemplateForm(fillTemplateFormFromSources);
+                  setToast({
+                    tone: "success",
+                    text: "已用当前产品项目和达人资料重新填充表单。",
+                  });
+                }}
+              >
+                从产品项目重新填充
+              </button>
+              <p className="muted">
+                表单内容会保留到你切换产品或达人为止。在设置里改了拍摄要求后，点这里同步过来。
+              </p>
+            </div>
           </div>
           <div className="template-results">
             {templateMessages.map((template) => (
