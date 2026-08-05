@@ -42,12 +42,21 @@ function createProps(
       },
       generatedPrompt: "",
       promptCopyStatus: "",
+      aiDraft: null,
+      aiDraftLoading: false,
+      aiDraftError: "",
+      canApplyAiDraft: true,
+      aiDraftAppliedTo: "",
     },
     uiState: {
       promptHelperOpen: false,
       promptHelperForm: {
         sellingPoints: "",
+        videoCount: "",
         durationRequirement: "",
+        targetPetOrScene: "",
+        mustShowShots: "",
+        avoidShots: "",
         referenceLinks: "",
       },
     },
@@ -56,6 +65,9 @@ function createProps(
       updatePromptHelperField: vi.fn(),
       generatePrompt: vi.fn(),
       copyPrompt: vi.fn(),
+      generateDraftWithAi: vi.fn(),
+      applyAiDraft: vi.fn(),
+      dismissAiDraft: vi.fn(),
       clearLocalCreatorData: vi.fn(),
     },
   };
@@ -71,9 +83,7 @@ describe("SettingsPage", () => {
       screen.getByRole("heading", { name: "产品项目设置" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", {
-        name: "用 ChatGPT 辅助生成拍摄要求（可选）",
-      }),
+      screen.getByRole("heading", { name: "辅助生成拍摄要求（可选）" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "展开辅助生成" }),
@@ -119,6 +129,101 @@ describe("SettingsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "复制提示词" }));
     expect(props.actions.copyPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes every field the filming-requirements endpoint accepts", () => {
+    const props = createProps();
+    props.uiState.promptHelperOpen = true;
+
+    render(<SettingsPage {...props} />);
+
+    for (const label of [
+      "产品卖点",
+      "目标视频数量",
+      "单条视频时长要求",
+      "目标宠物 / 使用场景",
+      "必须展示的画面",
+      "不希望达人这样拍",
+      "对标视频链接（可选，每行一个）",
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("forwards AI generation and disables the button while it runs", async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    props.uiState.promptHelperOpen = true;
+
+    const { rerender } = render(<SettingsPage {...props} />);
+    await user.click(screen.getByRole("button", { name: "用 AI 直接生成草稿" }));
+    expect(props.actions.generateDraftWithAi).toHaveBeenCalledTimes(1);
+
+    const loading = createProps();
+    loading.uiState.promptHelperOpen = true;
+    loading.data.aiDraftLoading = true;
+    rerender(<SettingsPage {...loading} />);
+
+    expect(screen.getByRole("button", { name: "AI 生成中…" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "正在调用 AI 生成拍摄要求草稿…",
+    );
+  });
+
+  it("surfaces the endpoint error without interpreting it", () => {
+    const props = createProps();
+    props.uiState.promptHelperOpen = true;
+    props.data.aiDraftError = "AI 生成失败：未配置 OPENAI_API_KEY。";
+
+    render(<SettingsPage {...props} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "AI 生成失败：未配置 OPENAI_API_KEY。",
+    );
+    expect(screen.queryByRole("button", { name: "应用到当前产品项目" })).not.toBeInTheDocument();
+  });
+
+  it("previews a draft and forwards apply and dismiss without auto-applying", async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    props.uiState.promptHelperOpen = true;
+    props.data.aiDraft = {
+      productName: "蒸汽梳毛器",
+      requirements: ["每位达人 2 条视频", "必须挂 TikTok Shop 产品链接"],
+      priorities: ["展示雾化功能", "展示梳下来的浮毛"],
+    };
+
+    render(<SettingsPage {...props} />);
+
+    expect(screen.getByText("AI 草稿：蒸汽梳毛器")).toBeVisible();
+    expect(screen.getByText("每位达人 2 条视频")).toBeVisible();
+    expect(screen.getByText("展示雾化功能")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "应用到当前产品项目" }));
+    expect(props.actions.applyAiDraft).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "放弃这版草稿" }));
+    expect(props.actions.dismissAiDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks applying when there is no campaign to write into", () => {
+    const props = createProps();
+    props.uiState.promptHelperOpen = true;
+    props.data.canApplyAiDraft = false;
+    props.data.aiDraft = {
+      productName: "未命名产品",
+      requirements: ["每位达人 2 条视频"],
+      priorities: ["展示使用过程"],
+    };
+
+    render(<SettingsPage {...props} />);
+
+    expect(
+      screen.getByRole("button", { name: "应用到当前产品项目" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("当前没有可写入的产品项目，请先在上方新增一个产品。"),
+    ).toBeVisible();
   });
 
   it("forwards the danger-zone clear action", async () => {

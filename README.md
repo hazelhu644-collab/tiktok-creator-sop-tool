@@ -270,7 +270,7 @@ API responsibilities:
 * Without either API key, local spreadsheet processing, creator management, task analysis, status tracking, and local message generation remain available.
 * Never commit real API keys to the repository.
 
-The current Settings-page ChatGPT helper produces a copyable prompt and does not directly call the OpenAI endpoint yet.
+The Settings-page helper offers both paths. "生成可复制提示词" builds a prompt you paste into ChatGPT yourself and needs no API key. "用 AI 直接生成草稿" calls `/api/generate-filming-requirements`, which requires `OPENAI_API_KEY` in the deployment environment; the result is shown as a draft and is only written into the selected product's requirements and key content points after you confirm. `vite dev` does not serve `/api`, so the direct path only works on a deployed environment.
 
 ### 5. Public Demo Safety
 
@@ -309,9 +309,10 @@ Demo mode is the recommended way to give public demonstrations, take screenshots
 * Content review workflow and ad-ready asset tracking
 * Multi-store and multi-product campaign configuration
 * Safe Demo Mode with isolated fake data (`?demo=1`)
+* Direct in-app OpenAI filming-requirements draft generation
 
 ### Planned
-* Direct in-app OpenAI filming-requirements draft generation
+
 * Browser automation support
 * TikTok Shop workflow integration
 * Campaign performance tracking
