@@ -311,6 +311,57 @@ function isHandledToday(task: Task) {
   );
 }
 
+/**
+ * Rows saved while a sample was still in transit keep saying so even after the
+ * expected arrival date passes. Applied when rows are first loaded rather than
+ * from an effect, so the first render already shows the corrected state instead
+ * of causing a second one.
+ */
+function markArrivedSamplesDelivered(rows: CreatorRow[]): CreatorRow[] {
+  const today = todayString();
+  const specialStatus =
+    /lost|returned|canceled|failed|completed|合作失败|合作完成|已归档/i;
+  let changed = false;
+
+  const nextRows = rows.map((row) => {
+    if (
+      row.archivedAt ||
+      specialStatus.test(
+        `${row.currentStatus} ${row.sampleShippingStatus} ${row.trackingStatus ?? ""}`,
+      )
+    )
+      return row;
+    if (
+      !isInTransitLogisticsStatus(row.sampleShippingStatus) ||
+      !row.sampleDeliveredDate ||
+      row.sampleDeliveredDate > today
+    )
+      return row;
+
+    changed = true;
+    return {
+      ...row,
+      sampleShippingStatus: row.sampleShippingStatus.match(/[㐀-鿿]/)
+        ? "已签收"
+        : "Delivered",
+      currentStatus: "Delivered",
+      trackingStatus: "确认样品是否收到 / 确认拍摄计划",
+      lastMessageScenario: "确认样品是否收到 / 确认拍摄计划",
+      nextFollowUpDate: today,
+      followUpHistory: [
+        ...(row.followUpHistory ?? []),
+        {
+          date: today,
+          action: "Creator Replied" as const,
+          note: "系统根据样品到货日期自动更新为 Delivered。",
+        },
+      ],
+    };
+  });
+
+  return changed ? nextRows : rows;
+}
+
 function priorityActionLabel(task: Task): string {
   if (task.priority === "Highest") return "必须处理";
   if (task.priority === "High") return "待跟进";
@@ -664,7 +715,9 @@ function buildTemplateMessages(form: TemplateForm): TemplateMessage[] {
 
 function App() {
   const [demoMode] = useState(isDemoMode);
-  const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
+  const [rows, setRows] = useState<CreatorRow[]>(() =>
+    markArrivedSamplesDelivered(loadCreatorRows()),
+  );
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -1113,50 +1166,6 @@ function App() {
   );
 
   useEffect(() => saveCreatorRows(rows), [rows]);
-
-  useEffect(() => {
-    const today = todayString();
-    const specialStatus =
-      /lost|returned|canceled|failed|completed|合作失败|合作完成|已归档/i;
-    setRows((currentRows) => {
-      let changed = false;
-      const nextRows = currentRows.map((row) => {
-        if (
-          row.archivedAt ||
-          specialStatus.test(
-            `${row.currentStatus} ${row.sampleShippingStatus} ${row.trackingStatus ?? ""}`,
-          )
-        )
-          return row;
-        if (
-          !isInTransitLogisticsStatus(row.sampleShippingStatus) ||
-          !row.sampleDeliveredDate ||
-          row.sampleDeliveredDate > today
-        )
-          return row;
-        changed = true;
-        return {
-          ...row,
-          sampleShippingStatus: row.sampleShippingStatus.match(/[㐀-鿿]/)
-            ? "已签收"
-            : "Delivered",
-          currentStatus: "Delivered",
-          trackingStatus: "确认样品是否收到 / 确认拍摄计划",
-          lastMessageScenario: "确认样品是否收到 / 确认拍摄计划",
-          nextFollowUpDate: today,
-          followUpHistory: [
-            ...(row.followUpHistory ?? []),
-            {
-              date: today,
-              action: "Creator Replied" as const,
-              note: "系统根据样品到货日期自动更新为 Delivered。",
-            },
-          ],
-        };
-      });
-      return changed ? nextRows : currentRows;
-    });
-  }, []);
 
   useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
   useEffect(() => {
