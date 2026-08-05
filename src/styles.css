@@ -202,3 +202,20 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
   color: #334155;
   font-size: 0.9rem;
 }
+
+.template-form-actions {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(218, 207, 190, 0.62);
+}
+
+.template-form-actions button {
+  justify-self: start;
+}
+
+.template-form-actions p {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
