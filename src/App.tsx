@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   buildDuplicateImportSummary,
   clearSavedCreatorRows,
@@ -282,6 +289,77 @@ function priorityLabel(task: Task): string {
       : task.priority === "Medium"
         ? "中"
         : "低";
+}
+
+function isHandledToday(task: Task) {
+  const today = todayString();
+  const handledActions = [
+    "Message Sent",
+    "No Reply",
+    "Skipped Today",
+    "Creator Replied",
+    "Video Posted",
+    "Completed",
+    "Failed",
+  ];
+  return (
+    task.lastHandledDate === today ||
+    task.lastMessageSentAt === today ||
+    task.followUpHistory?.some(
+      (entry) => entry.date === today && handledActions.includes(entry.action),
+    )
+  );
+}
+
+/**
+ * Rows saved while a sample was still in transit keep saying so even after the
+ * expected arrival date passes. Applied when rows are first loaded rather than
+ * from an effect, so the first render already shows the corrected state instead
+ * of causing a second one.
+ */
+function markArrivedSamplesDelivered(rows: CreatorRow[]): CreatorRow[] {
+  const today = todayString();
+  const specialStatus =
+    /lost|returned|canceled|failed|completed|合作失败|合作完成|已归档/i;
+  let changed = false;
+
+  const nextRows = rows.map((row) => {
+    if (
+      row.archivedAt ||
+      specialStatus.test(
+        `${row.currentStatus} ${row.sampleShippingStatus} ${row.trackingStatus ?? ""}`,
+      )
+    )
+      return row;
+    if (
+      !isInTransitLogisticsStatus(row.sampleShippingStatus) ||
+      !row.sampleDeliveredDate ||
+      row.sampleDeliveredDate > today
+    )
+      return row;
+
+    changed = true;
+    return {
+      ...row,
+      sampleShippingStatus: row.sampleShippingStatus.match(/[㐀-鿿]/)
+        ? "已签收"
+        : "Delivered",
+      currentStatus: "Delivered",
+      trackingStatus: "确认样品是否收到 / 确认拍摄计划",
+      lastMessageScenario: "确认样品是否收到 / 确认拍摄计划",
+      nextFollowUpDate: today,
+      followUpHistory: [
+        ...(row.followUpHistory ?? []),
+        {
+          date: today,
+          action: "Creator Replied" as const,
+          note: "系统根据样品到货日期自动更新为 Delivered。",
+        },
+      ],
+    };
+  });
+
+  return changed ? nextRows : rows;
 }
 
 function priorityActionLabel(task: Task): string {
@@ -637,7 +715,9 @@ function buildTemplateMessages(form: TemplateForm): TemplateMessage[] {
 
 function App() {
   const [demoMode] = useState(isDemoMode);
-  const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
+  const [rows, setRows] = useState<CreatorRow[]>(() =>
+    markArrivedSamplesDelivered(loadCreatorRows()),
+  );
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -804,6 +884,30 @@ function App() {
     () => parseRequiredVideos(activeFilmingRequirements),
     [activeFilmingRequirements],
   );
+  // Memoized so the derivations below can depend on these directly instead of
+  // restating their inputs, and so they are declared before their first use.
+  const campaignForRow = useCallback(
+    (
+      row: Pick<
+        CreatorRow,
+        "storeId" | "storeName" | "product" | "campaignId" | "productId"
+      >,
+    ): Campaign | undefined =>
+      mergedCampaigns.find((campaign) =>
+        rowMatchesCampaignIdentity(row, campaign),
+      ),
+    [mergedCampaigns],
+  );
+  const requiredVideosForRow = useCallback(
+    (row: CreatorRow): number =>
+      parseRequiredVideos(
+        campaignToFilmingRequirements(
+          campaignForRow(row),
+          activeFilmingRequirements,
+        ),
+      ),
+    [campaignForRow, activeFilmingRequirements],
+  );
   const scopedRows = useMemo(
     () =>
       selectedCampaign === "ALL"
@@ -821,7 +925,7 @@ function App() {
       selectedCampaign,
       activeCampaign,
       showArchivedProducts,
-      mergedCampaigns,
+      campaignForRow,
     ],
   );
   const visibleRows = useMemo(
@@ -836,7 +940,7 @@ function App() {
       visibleRows.filter((row) =>
         isActiveDailyCollaboration(row, requiredVideosForRow(row)),
       ),
-    [visibleRows, mergedCampaigns, activeFilmingRequirements],
+    [visibleRows, requiredVideosForRow],
   );
   const tasks = useMemo(
     () =>
@@ -845,14 +949,14 @@ function App() {
           analyzeCreators([row], undefined, requiredVideosForRow(row)),
         )
         .sort((a, b) => compareTasks(a, b)),
-    [dailyQueueRows, mergedCampaigns, activeFilmingRequirements],
+    [dailyQueueRows, requiredVideosForRow],
   );
   const historicalTasks = useMemo(
     () =>
       scopedRows.flatMap((row) =>
         analyzeCreators([row], undefined, requiredVideosForRow(row)),
       ),
-    [scopedRows, mergedCampaigns, activeFilmingRequirements],
+    [scopedRows, requiredVideosForRow],
   );
   const usesHistoricalTaskSource =
     workbenchFilter?.key === "published_video" ||
@@ -873,64 +977,47 @@ function App() {
       ),
     [rows],
   );
-  const matchesWorkbenchFilter = (task: Task, key: WorkbenchFilterKey) => {
-    const taskRequiredVideos = requiredVideosForRow(task);
-    const status = inferStatus(task, taskRequiredVideos);
-    const taskMeta = tasksById.get(task.id);
-    const progress = normalizeVideoProgress(
-      task.videoProgress,
-      taskRequiredVideos,
-    );
-    switch (key) {
-      case "follow_up_today":
-        return (
-          Boolean(taskMeta?.needsFollowUp || task.needsFollowUp) &&
-          !isHandledToday(task)
-        );
-      case "processed_today":
-        return isHandledToday(task);
-      case "sample_shipped":
-        return isSampleInTransitForDaily(task, taskRequiredVideos);
-      case "delivered_waiting_video":
-        return (
-          isSampleDeliveredForVideo(task, taskRequiredVideos) &&
-          (progress.postedCount ?? 0) === 0
-        );
-      case "published_video":
-        return (progress.postedCount ?? 0) > 0;
-      case "posted_this_week":
-        return (
-          isCurrentWeek(task.firstVideoPostedDate) ||
-          isCurrentWeek(task.latestVideoPostedDate ?? "")
-        );
-      case "completed":
-        return status === "Completed";
-      case "failed":
-        return status === "Lost";
-      default:
-        return true;
-    }
-  };
-  function isHandledToday(task: Task) {
-    const today = todayString();
-    const handledActions = [
-      "Message Sent",
-      "No Reply",
-      "Skipped Today",
-      "Creator Replied",
-      "Video Posted",
-      "Completed",
-      "Failed",
-    ];
-    return (
-      task.lastHandledDate === today ||
-      task.lastMessageSentAt === today ||
-      task.followUpHistory?.some(
-        (entry) =>
-          entry.date === today && handledActions.includes(entry.action),
-      )
-    );
-  }
+  const matchesWorkbenchFilter = useCallback(
+    (task: Task, key: WorkbenchFilterKey) => {
+      const taskRequiredVideos = requiredVideosForRow(task);
+      const status = inferStatus(task, taskRequiredVideos);
+      const taskMeta = tasksById.get(task.id);
+      const progress = normalizeVideoProgress(
+        task.videoProgress,
+        taskRequiredVideos,
+      );
+      switch (key) {
+        case "follow_up_today":
+          return (
+            Boolean(taskMeta?.needsFollowUp || task.needsFollowUp) &&
+            !isHandledToday(task)
+          );
+        case "processed_today":
+          return isHandledToday(task);
+        case "sample_shipped":
+          return isSampleInTransitForDaily(task, taskRequiredVideos);
+        case "delivered_waiting_video":
+          return (
+            isSampleDeliveredForVideo(task, taskRequiredVideos) &&
+            (progress.postedCount ?? 0) === 0
+          );
+        case "published_video":
+          return (progress.postedCount ?? 0) > 0;
+        case "posted_this_week":
+          return (
+            isCurrentWeek(task.firstVideoPostedDate) ||
+            isCurrentWeek(task.latestVideoPostedDate ?? "")
+          );
+        case "completed":
+          return status === "Completed";
+        case "failed":
+          return status === "Lost";
+        default:
+          return true;
+      }
+    },
+    [requiredVideosForRow, tasksById],
+  );
 
   function queueStatusLabel(task: Task) {
     const handledToday = isHandledToday(task);
@@ -996,8 +1083,7 @@ function App() {
     followupSearch,
     followupUrgency,
     workbenchFilter,
-    requiredVideos,
-    tasksById,
+    matchesWorkbenchFilter,
     showProcessedToday,
     usesHistoricalTaskSource,
   ]);
@@ -1081,50 +1167,6 @@ function App() {
 
   useEffect(() => saveCreatorRows(rows), [rows]);
 
-  useEffect(() => {
-    const today = todayString();
-    const specialStatus =
-      /lost|returned|canceled|failed|completed|合作失败|合作完成|已归档/i;
-    setRows((currentRows) => {
-      let changed = false;
-      const nextRows = currentRows.map((row) => {
-        if (
-          row.archivedAt ||
-          specialStatus.test(
-            `${row.currentStatus} ${row.sampleShippingStatus} ${row.trackingStatus ?? ""}`,
-          )
-        )
-          return row;
-        if (
-          !isInTransitLogisticsStatus(row.sampleShippingStatus) ||
-          !row.sampleDeliveredDate ||
-          row.sampleDeliveredDate > today
-        )
-          return row;
-        changed = true;
-        return {
-          ...row,
-          sampleShippingStatus: row.sampleShippingStatus.match(/[㐀-鿿]/)
-            ? "已签收"
-            : "Delivered",
-          currentStatus: "Delivered",
-          trackingStatus: "确认样品是否收到 / 确认拍摄计划",
-          lastMessageScenario: "确认样品是否收到 / 确认拍摄计划",
-          nextFollowUpDate: today,
-          followUpHistory: [
-            ...(row.followUpHistory ?? []),
-            {
-              date: today,
-              action: "Creator Replied" as const,
-              note: "系统根据样品到货日期自动更新为 Delivered。",
-            },
-          ],
-        };
-      });
-      return changed ? nextRows : currentRows;
-    });
-  }, []);
-
   useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
   useEffect(() => {
     if (
@@ -1204,7 +1246,7 @@ function App() {
             ]),
       deadline: selectedTemplateCreator.nextFollowUpDate || form.deadline,
     }));
-  }, [selectedTemplateCreator, mergedCampaigns, activeFilmingRequirements]);
+  }, [selectedTemplateCreator, campaignForRow, activeFilmingRequirements]);
 
   useEffect(() => {
     if (!toast) return;
@@ -1236,12 +1278,7 @@ function App() {
         avgViews: avgViews(row),
         gmv: gmvRange(row),
       })),
-    [
-      databaseVisibleRows,
-      tasksById,
-      mergedCampaigns,
-      activeFilmingRequirements,
-    ],
+    [databaseVisibleRows, tasksById, requiredVideosForRow],
   );
 
   const archivedSearchMatches = useMemo(() => {
@@ -2087,26 +2124,6 @@ function App() {
     setEditedCreatorReplies((current) => ({ ...current, [task.id]: value }));
     setDeepSeekChineseTranslation("");
     setDeepSeekChineseExplanation("");
-  }
-
-  function campaignForRow(
-    row: Pick<
-      CreatorRow,
-      "storeId" | "storeName" | "product" | "campaignId" | "productId"
-    >,
-  ): Campaign | undefined {
-    return mergedCampaigns.find((campaign) =>
-      rowMatchesCampaignIdentity(row, campaign),
-    );
-  }
-
-  function requiredVideosForRow(row: CreatorRow): number {
-    return parseRequiredVideos(
-      campaignToFilmingRequirements(
-        campaignForRow(row),
-        activeFilmingRequirements,
-      ),
-    );
   }
 
   function selectedTaskCampaignRequirements(
