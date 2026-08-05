@@ -71,6 +71,8 @@ import type {
   CampaignStoreCleanupView,
 } from "./features/campaigns/campaignSettingsTypes";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { SettingsPage } from "./features/settings/SettingsPage";
+import type { SettingsPromptHelperField } from "./features/settings/settingsTypes";
 import type {
   DashboardCampaignCardView,
   DashboardCreatorView,
@@ -3763,190 +3765,105 @@ function App() {
       },
     );
     return (
-      <>
-        <CampaignSettingsPage
-          data={{
-            target: campaignSettingsTarget,
-            campaignOptions: campaignSettingsOptions,
-            storeOptions: stores,
-            storeCleanupItems: campaignStoreCleanupItems,
-          }}
-          uiState={{ showArchivedProducts }}
-          actions={{
-            selectCampaign: setSelectedCampaign,
-            setShowArchivedProducts,
-            createCampaign,
-            announceEditable: () =>
-              setToast({ tone: "success", text: "可直接在下方编辑产品字段。" }),
-            duplicateCampaign: () => {
-              if (targetCampaign) duplicateCampaign(targetCampaign);
+      <SettingsPage
+        data={{
+          campaignSettingsProps: {
+            data: {
+              target: campaignSettingsTarget,
+              campaignOptions: campaignSettingsOptions,
+              storeOptions: stores,
+              storeCleanupItems: campaignStoreCleanupItems,
             },
-            archiveCampaign: () => {
-              if (targetCampaign) archiveCampaign(targetCampaign);
+            uiState: { showArchivedProducts },
+            actions: {
+              selectCampaign: setSelectedCampaign,
+              setShowArchivedProducts,
+              createCampaign,
+              announceEditable: () =>
+                setToast({ tone: "success", text: "可直接在下方编辑产品字段。" }),
+              duplicateCampaign: () => {
+                if (targetCampaign) duplicateCampaign(targetCampaign);
+              },
+              archiveCampaign: () => {
+                if (targetCampaign) archiveCampaign(targetCampaign);
+              },
+              restoreCampaign: () => {
+                if (targetCampaign) restoreCampaign(targetCampaign);
+              },
+              deleteCampaign: () => {
+                if (targetCampaign) deleteCampaign(targetCampaign);
+              },
+              assignStore: (storeId) => {
+                if (targetCampaign) assignCampaignStore(targetCampaign, storeId);
+              },
+              renameProduct: (productName) => {
+                if (targetCampaign) updateCampaignProductName(targetCampaign, productName);
+              },
+              updateKeyContentPoints: (value) =>
+                updateCampaign({ keyContentPoints: normalizeListText(value) }),
+              updateSellingPoints: (value) => updateCampaign({ sellingPoints: value }),
+              updateVideoLength: (value) => updateCampaign({ videoLength: value }),
+              updateVideoCount: (value) => updateCampaign({ videoCount: value }),
+              syncVideoCount: () => {
+                if (targetCampaign) syncCampaignVideoCount(targetCampaign);
+              },
+              updateAvoidShots: (value) => updateCampaign({ avoidShots: value }),
+              updateProductLinkRequirement: (value) =>
+                updateCampaign({ tagRequirement: value, productLink: "" }),
+              updateReferenceLinks: (value) =>
+                updateCampaign({ referenceLinks: normalizeListText(value) }),
+              inspectStore: (storeId) => {
+                const item = campaignStoreCleanupItems.find((entry) => entry.id === storeId);
+                if (!item) return;
+                setToast(
+                  item.canHide
+                    ? {
+                        tone: "success",
+                        text: `${item.name} 已无关联产品或达人记录，会从店铺下拉中隐藏。`,
+                      }
+                    : {
+                        tone: "warning",
+                        text: "该店铺仍有关联产品或达人记录，请先迁移或合并后再删除。",
+                      },
+                );
+              },
             },
-            restoreCampaign: () => {
-              if (targetCampaign) restoreCampaign(targetCampaign);
-            },
-            deleteCampaign: () => {
-              if (targetCampaign) deleteCampaign(targetCampaign);
-            },
-            assignStore: (storeId) => {
-              if (targetCampaign) assignCampaignStore(targetCampaign, storeId);
-            },
-            renameProduct: (productName) => {
-              if (targetCampaign) updateCampaignProductName(targetCampaign, productName);
-            },
-            updateKeyContentPoints: (value) =>
-              updateCampaign({ keyContentPoints: normalizeListText(value) }),
-            updateSellingPoints: (value) => updateCampaign({ sellingPoints: value }),
-            updateVideoLength: (value) => updateCampaign({ videoLength: value }),
-            updateVideoCount: (value) => updateCampaign({ videoCount: value }),
-            syncVideoCount: () => {
-              if (targetCampaign) syncCampaignVideoCount(targetCampaign);
-            },
-            updateAvoidShots: (value) => updateCampaign({ avoidShots: value }),
-            updateProductLinkRequirement: (value) =>
-              updateCampaign({ tagRequirement: value, productLink: "" }),
-            updateReferenceLinks: (value) =>
-              updateCampaign({ referenceLinks: normalizeListText(value) }),
-            inspectStore: (storeId) => {
-              const item = campaignStoreCleanupItems.find((entry) => entry.id === storeId);
-              if (!item) return;
-              setToast(
-                item.canHide
-                  ? {
-                      tone: "success",
-                      text: `${item.name} 已无关联产品或达人记录，会从店铺下拉中隐藏。`,
-                    }
-                  : {
-                      tone: "warning",
-                      text: "该店铺仍有关联产品或达人记录，请先迁移或合并后再删除。",
-                    },
-              );
-            },
-          }}
-        />
-        <section className="panel prompt-helper">
-          <div className="section-heading">
-            <div>
-              <h2>用 ChatGPT 辅助生成拍摄要求（可选）</h2>
-              <p className="muted">
-                只生成可复制提示词；不会调用 API，也不会自动修改数据。
-              </p>
-            </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() =>
-                isPromptHelperOpen
-                  ? setIsPromptHelperOpen(false)
-                  : handleOpenPromptHelper()
-              }
-            >
-              {isPromptHelperOpen ? "收起辅助生成" : "展开辅助生成"}
-            </button>
-          </div>
-          {isPromptHelperOpen && (
-            <div className="settings-form">
-              <label>
-                产品卖点
-                <input
-                  value={promptHelperForm.sellingPoints}
-                  onChange={(event) =>
-                    setPromptHelperForm((form) => ({
-                      ...form,
-                      sellingPoints: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                单条视频时长要求
-                <input
-                  value={promptHelperForm.durationRequirement}
-                  onChange={(event) =>
-                    setPromptHelperForm((form) => ({
-                      ...form,
-                      durationRequirement: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                对标视频链接（可选，每行一个）
-                <textarea
-                  value={promptHelperForm.referenceLinks}
-                  onChange={(event) =>
-                    setPromptHelperForm((form) => ({
-                      ...form,
-                      referenceLinks: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setGeneratedChatGptPrompt(buildChatGptPrompt());
-                  setPromptCopyStatus("");
-                }}
-              >
-                生成可复制提示词
-              </button>
-              {generatedChatGptPrompt && (
-                <>
-                  <p className="ai-status">
-                    提示词已生成。请复制到 ChatGPT 使用。
-                  </p>
-                  <label>
-                    ChatGPT 提示词
-                    <textarea
-                      value={generatedChatGptPrompt}
-                      readOnly
-                      rows={8}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void copyText(
-                        generatedChatGptPrompt,
-                        "已复制提示词。",
-                      ).then(() => setPromptCopyStatus("已复制提示词。"))
-                    }
-                  >
-                    复制提示词
-                  </button>
-                  {promptCopyStatus && (
-                    <p className="ai-status">{promptCopyStatus}</p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </section>
-        <section className="panel danger-zone">
-          <div className="section-heading">
-            <div>
-              <h2>危险操作</h2>
-              <p className="muted">
-                仅清空当前浏览器 localStorage 中的达人数据，不影响产品项目设置。
-              </p>
-            </div>
-            <button
-              type="button"
-              className="secondary danger"
-              onClick={() => {
-                clearSavedCreatorRows();
-                setRows([]);
-                setToast({ tone: "success", text: "已清空本地达人数据。" });
-              }}
-            >
-              清空当前数据
-            </button>
-          </div>
-        </section>
-      </>
+          },
+          generatedPrompt: generatedChatGptPrompt,
+          promptCopyStatus,
+        }}
+        uiState={{
+          promptHelperOpen: isPromptHelperOpen,
+          promptHelperForm: {
+            sellingPoints: promptHelperForm.sellingPoints,
+            durationRequirement: promptHelperForm.durationRequirement,
+            referenceLinks: promptHelperForm.referenceLinks,
+          },
+        }}
+        actions={{
+          togglePromptHelper: () =>
+            isPromptHelperOpen
+              ? setIsPromptHelperOpen(false)
+              : handleOpenPromptHelper(),
+          updatePromptHelperField: (
+            field: SettingsPromptHelperField,
+            value: string,
+          ) => setPromptHelperForm((form) => ({ ...form, [field]: value })),
+          generatePrompt: () => {
+            setGeneratedChatGptPrompt(buildChatGptPrompt());
+            setPromptCopyStatus("");
+          },
+          copyPrompt: () =>
+            void copyText(generatedChatGptPrompt, "已复制提示词。").then(() =>
+              setPromptCopyStatus("已复制提示词。"),
+            ),
+          clearLocalCreatorData: () => {
+            clearSavedCreatorRows();
+            setRows([]);
+            setToast({ tone: "success", text: "已清空本地达人数据。" });
+          },
+        }}
+      />
     );
   }
 
