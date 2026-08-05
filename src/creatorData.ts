@@ -8,6 +8,7 @@ import {
   productIdForCampaign,
 } from "./campaignData";
 import { normalizeText, normalizeVideoProgress } from "./sopRules";
+import { demoCreatorRows, isDemoMode } from "./demoMode";
 
 export const CREATOR_ROWS_STORAGE_KEY =
   "tiktok-creator-sop-tool.creatorRows.v1";
@@ -217,6 +218,8 @@ export type EditableCreatorField =
 
 function getBrowserStorage(): Storage | null {
   if (typeof window === "undefined") return null;
+  // Safe Demo Mode never reads or writes real creator records.
+  if (isDemoMode()) return null;
   return window.localStorage;
 }
 
@@ -244,6 +247,8 @@ function toStoredRow(row: CreatorRow): CreatorRow {
 }
 
 export function loadCreatorRows(): CreatorRow[] {
+  if (isDemoMode()) return demoCreatorRows();
+
   const storage = getBrowserStorage();
   if (!storage) return [];
 

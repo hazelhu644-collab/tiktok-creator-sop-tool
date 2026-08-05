@@ -274,11 +274,13 @@ The current Settings-page ChatGPT helper produces a copyable prompt and does not
 
 ### 5. Public Demo Safety
 
-Safe Demo Mode has not been merged into the current `main` branch.
+Add `?demo=1` to the URL to open Safe Demo Mode, for example `https://your-deployment/?demo=1`.
 
-Do not import real creator data, private collaboration records, production spreadsheets, or real credentials when using the app for public demonstrations, screenshots, or shared walkthroughs.
+In demo mode the app shows a fixed set of obviously-fake creators and one demo campaign, and a banner at the top of the workspace makes the mode visible. Nothing is read from or written to `localStorage` while it is on: `loadCreatorRows`, `loadCampaigns`, and the filming-requirements loader all short-circuit, and the storage accessors in `creatorData.ts` and `campaignData.ts` return `null`, so saves become no-ops. Real creator records are neither shown nor modified, and edits made during a demo live in React state only and disappear on reload.
 
-Until a dedicated safe demo mode is implemented, use manually prepared fake data in a separate browser profile or isolated deployment.
+Remove the parameter (or use the banner's "退出演示模式" link) to return to your own data, which is untouched.
+
+Demo mode is the recommended way to give public demonstrations, take screenshots, or share a walkthrough link. Outside demo mode, do not import real creator data, private collaboration records, production spreadsheets, or real credentials for those purposes.
 
 ---
 
@@ -288,7 +290,7 @@ Until a dedicated safe demo mode is implemented, use manually prepared fake data
 * Do not commit `.env`, `.env.local`, `.env.production`, or other environment files.
 * Do not commit API keys, tokens, passwords, cookies, or private credentials.
 * Do not share production `localStorage` data, because it may contain real creator workflow information.
-* The current `main` branch does not provide an isolated safe demo mode.
+* Use Safe Demo Mode (`?demo=1`) for public or shared demonstrations; it isolates the session from your real data.
 * Do not use real creator data in public or shared demonstrations.
 
 ---
@@ -306,10 +308,9 @@ Until a dedicated safe demo mode is implemented, use manually prepared fake data
 * OpenAI-backed filming-requirements draft API endpoint
 * Content review workflow and ad-ready asset tracking
 * Multi-store and multi-product campaign configuration
+* Safe Demo Mode with isolated fake data (`?demo=1`)
 
 ### Planned
-
-* Safe Demo Mode with isolated fake data
 * Direct in-app OpenAI filming-requirements draft generation
 * Browser automation support
 * TikTok Shop workflow integration

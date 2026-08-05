@@ -1,4 +1,5 @@
 import { defaultCreatorFilmingRequirements, type CreatorFilmingRequirements } from './messageGenerator';
+import { demoCampaigns, isDemoMode } from './demoMode';
 import type { CreatorRow, Campaign, Store } from './types';
 
 export const CAMPAIGNS_STORAGE_KEY = 'tiktok-creator-sop-tool.campaigns.v1';
@@ -53,6 +54,8 @@ const PRESET_REQUIREMENTS: Record<string, Partial<Campaign>> = {
 
 function storage(): Storage | null {
   if (typeof window === 'undefined') return null;
+  // Safe Demo Mode never reads or writes real campaign configuration.
+  if (isDemoMode()) return null;
   return window.localStorage;
 }
 
@@ -133,6 +136,8 @@ export function detectCampaignNames(rows: CreatorRow[]): Array<{ storeId: string
 }
 
 export function loadCampaigns(): Campaign[] {
+  if (isDemoMode()) return demoCampaigns();
+
   const saved = storage()?.getItem(CAMPAIGNS_STORAGE_KEY);
   if (!saved) return [];
   try {

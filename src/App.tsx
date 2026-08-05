@@ -72,6 +72,7 @@ import type {
 } from "./features/campaigns/campaignSettingsTypes";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { exitDemoModeUrl, isDemoMode } from "./demoMode";
 import type { SettingsPromptHelperField } from "./features/settings/settingsTypes";
 import type {
   DashboardCampaignCardView,
@@ -209,6 +210,7 @@ const navItems: Array<{ key: ModuleKey; label: string; helper: string }> = [
 
 function loadFilmingRequirements(): CreatorFilmingRequirements {
   if (typeof window === "undefined") return defaultCreatorFilmingRequirements;
+  if (isDemoMode()) return defaultCreatorFilmingRequirements;
 
   const savedRequirements = window.localStorage.getItem(
     FILMING_REQUIREMENTS_STORAGE_KEY,
@@ -660,6 +662,7 @@ function buildTemplateMessages(form: TemplateForm): TemplateMessage[] {
 }
 
 function App() {
+  const [demoMode] = useState(isDemoMode);
   const [rows, setRows] = useState<CreatorRow[]>(() => loadCreatorRows());
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [fileName, setFileName] = useState("");
@@ -3904,6 +3907,19 @@ function App() {
         </nav>
       </aside>
       <main className="workspace">
+        {demoMode && (
+          <div className="demo-banner" role="status">
+            <div>
+              <strong>演示模式</strong>
+              <p>
+                当前显示的是示例数据。本次会话不会读取或写入你的真实达人数据，所有改动刷新后即清空。
+              </p>
+            </div>
+            <a className="demo-banner-exit" href={exitDemoModeUrl()}>
+              退出演示模式
+            </a>
+          </div>
+        )}
         {renderCampaignSelector()}
         {renderActiveModule()}
       </main>
