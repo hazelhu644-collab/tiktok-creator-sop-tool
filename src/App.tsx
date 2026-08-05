@@ -1191,62 +1191,84 @@ function App() {
       });
     }
   }, [activeCampaigns, selectedCampaign, selectedStore, stores]);
-  useEffect(() => {
-    const target = activeCampaign ?? mergedCampaigns[0];
-    if (!target) return;
-    setTemplateForm((form) => ({
-      ...form,
-      productName: target.productName,
-      sellingPoint: target.sellingPoints,
-      requirement: target.keyContentPoints.filter(Boolean).join("; "),
-      length: target.videoLength || form.length,
-      videos:
-        target.videoCount ||
-        String(
-          parseRequiredVideos(
-            campaignToFilmingRequirements(target, filmingRequirements),
-          ),
-        ),
-      tagRequirement:
-        [target.tagRequirement, target.productLink]
-          .filter(Boolean)
-          .join("; ") || form.tagRequirement,
-    }));
-  }, [activeCampaign, mergedCampaigns, filmingRequirements]);
+  /**
+   * The template form refills only when the operator picks a different campaign
+   * or creator — identified here by id, not by object identity.
+   *
+   * This used to run from two effects keyed on `mergedCampaigns`, which changes
+   * whenever any campaign is edited anywhere. Editing an unrelated field on the
+   * Settings page therefore wiped whatever the operator was typing here. Edits
+   * now survive until they actually change the selection.
+   *
+   * Adjusting state during render rather than in an effect is React's own
+   * pattern for this, and avoids the extra render an effect would cause.
+   */
+  const templateCampaignTarget = activeCampaign ?? mergedCampaigns[0];
+  const templateSyncKey = `${
+    templateCampaignTarget ? campaignOptionValue(templateCampaignTarget) : ""
+  }|${selectedTemplateCreator?.id ?? ""}`;
+  const [syncedTemplateKey, setSyncedTemplateKey] = useState<string | null>(
+    null,
+  );
 
-  useEffect(() => {
-    if (!selectedTemplateCreator) return;
-    const creatorCampaign = campaignForRow(selectedTemplateCreator);
-    const creatorRequirements = campaignToFilmingRequirements(
-      creatorCampaign,
-      activeFilmingRequirements,
-    );
-    setTemplateForm((form) => ({
-      ...form,
-      creatorName: selectedTemplateCreator.username || form.creatorName,
-      productName:
-        selectedTemplateCreator.product || creatorRequirements.productName,
-      sellingPoint: creatorRequirements.sellingPoints || form.sellingPoint,
-      requirement: creatorRequirements.requiredScenes || form.requirement,
-      length: creatorRequirements.videoLength || form.length,
-      videos:
-        creatorRequirements.videoCount ||
-        String(parseRequiredVideos(creatorRequirements)),
-      tagRequirement:
-        creatorRequirements.productLinkRequirement || form.tagRequirement,
-      trackingNumber:
-        parseNumberFromNotes(selectedTemplateCreator.notes, [
-          "tracking",
-          "tracking number",
-        ]) === "—"
-          ? form.trackingNumber
-          : parseNumberFromNotes(selectedTemplateCreator.notes, [
-              "tracking",
-              "tracking number",
-            ]),
-      deadline: selectedTemplateCreator.nextFollowUpDate || form.deadline,
-    }));
-  }, [selectedTemplateCreator, campaignForRow, activeFilmingRequirements]);
+  if (templateSyncKey !== syncedTemplateKey) {
+    setSyncedTemplateKey(templateSyncKey);
+    setTemplateForm((form) => {
+      let next = form;
+
+      if (templateCampaignTarget) {
+        const target = templateCampaignTarget;
+        next = {
+          ...next,
+          productName: target.productName,
+          sellingPoint: target.sellingPoints,
+          requirement: target.keyContentPoints.filter(Boolean).join("; "),
+          length: target.videoLength || next.length,
+          videos:
+            target.videoCount ||
+            String(
+              parseRequiredVideos(
+                campaignToFilmingRequirements(target, filmingRequirements),
+              ),
+            ),
+          tagRequirement:
+            [target.tagRequirement, target.productLink]
+              .filter(Boolean)
+              .join("; ") || next.tagRequirement,
+        };
+      }
+
+      if (selectedTemplateCreator) {
+        const creatorRequirements = campaignToFilmingRequirements(
+          campaignForRow(selectedTemplateCreator),
+          activeFilmingRequirements,
+        );
+        const trackingNumber = parseNumberFromNotes(
+          selectedTemplateCreator.notes,
+          ["tracking", "tracking number"],
+        );
+        next = {
+          ...next,
+          creatorName: selectedTemplateCreator.username || next.creatorName,
+          productName:
+            selectedTemplateCreator.product || creatorRequirements.productName,
+          sellingPoint: creatorRequirements.sellingPoints || next.sellingPoint,
+          requirement: creatorRequirements.requiredScenes || next.requirement,
+          length: creatorRequirements.videoLength || next.length,
+          videos:
+            creatorRequirements.videoCount ||
+            String(parseRequiredVideos(creatorRequirements)),
+          tagRequirement:
+            creatorRequirements.productLinkRequirement || next.tagRequirement,
+          trackingNumber:
+            trackingNumber === "—" ? next.trackingNumber : trackingNumber,
+          deadline: selectedTemplateCreator.nextFollowUpDate || next.deadline,
+        };
+      }
+
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!toast) return;
