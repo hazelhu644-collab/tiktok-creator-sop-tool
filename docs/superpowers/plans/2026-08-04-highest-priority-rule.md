@@ -56,10 +56,10 @@ In `src/sopRules.test.ts`, change the default priority test so the delivered cre
 
 ```ts
 expect(tasks.map((task) => task.priority)).toEqual([
-  'Highest',
-  'High',
-  'Medium',
-  'Low',
+  "Highest",
+  "High",
+  "Medium",
+  "Low",
 ]);
 expect(buildSummary(tasks)).toMatchObject({
   totalCreators: 4,
@@ -74,8 +74,9 @@ expect(buildSummary(tasks)).toMatchObject({
 In the parameterized required-video test, change the delivered zero-progress expectation to:
 
 ```ts
-expect(tasks.find((task) => task.id === `zero-${requiredVideos}`)?.priority)
-  .toBe('Highest');
+expect(
+  tasks.find((task) => task.id === `zero-${requiredVideos}`)?.priority,
+).toBe("Highest");
 ```
 
 - [ ] **Step 2: Add failing tests for the two Highest triggers**
@@ -84,81 +85,142 @@ Add these focused tests inside `describe('MVP SOP rules', ...)`:
 
 ```ts
 it.each([1, 3, 11, 97])(
-  'marks delivered zero-progress work Highest for arbitrary requiredVideos=%i',
+  "marks delivered zero-progress work Highest for arbitrary requiredVideos=%i",
   (requiredVideos) => {
-    const [task] = analyzeCreators([
-      row({
-        sampleShippingStatus: 'Delivered',
-        sampleDeliveredDate: '2026-06-03',
-        videoProgress: `0 of ${requiredVideos}`,
-      }),
-    ], today, requiredVideos);
+    const [task] = analyzeCreators(
+      [
+        row({
+          sampleShippingStatus: "Delivered",
+          sampleDeliveredDate: "2026-06-03",
+          videoProgress: `0 of ${requiredVideos}`,
+        }),
+      ],
+      today,
+      requiredVideos,
+    );
 
     expect(task).toMatchObject({
-      priority: 'Highest',
+      priority: "Highest",
       videoProgress: `0/${requiredVideos}`,
       suggestedAction: `发送拍摄跟进，提醒达人按照达人拍摄要求完成 ${requiredVideos} 条视频。`,
     });
-    expect(task.triggerReason).toContain('产品已送达 2 天');
+    expect(task.triggerReason).toContain("产品已送达 2 天");
     expect(task.triggerReason).toContain(`0/${requiredVideos}`);
   },
 );
 
-it('marks an unhandled pending creator reply Highest', () => {
-  const [task] = analyzeCreators([
-    row({
-      trackingStatus: 'Reply Pending',
-      lastCreatorResponse: 'Can I post on Friday?',
-      notes: '暂不催',
-      nextFollowUpDate: '2026-06-20',
-    }),
-  ], today, 2);
+it("marks an unhandled pending creator reply Highest", () => {
+  const [task] = analyzeCreators(
+    [
+      row({
+        trackingStatus: "Reply Pending",
+        lastCreatorResponse: "Can I post on Friday?",
+        notes: "暂不催",
+        nextFollowUpDate: "2026-06-20",
+      }),
+    ],
+    today,
+    2,
+  );
 
   expect(task).toMatchObject({
-    priority: 'Highest',
-    triggerReason: '达人已回复，等待处理。',
+    priority: "Highest",
+    triggerReason: "达人已回复，等待处理。",
   });
-  expect(task.suggestedAction).toContain('回复达人消息');
+  expect(task.suggestedAction).toContain("回复达人消息");
 });
 ```
 
 - [ ] **Step 3: Add failing precedence and boundary tests**
 
 ```ts
-it('uses natural-day boundaries and keeps recent delivery High', () => {
-  const tasks = analyzeCreators([
-    row({ id: 'one-day', username: 'one-day', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-04', videoProgress: '0/8' }),
-    row({ id: 'two-days', username: 'two-days', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-03', videoProgress: '0/8' }),
-  ], today, 8);
+it("uses natural-day boundaries and keeps recent delivery High", () => {
+  const tasks = analyzeCreators(
+    [
+      row({
+        id: "one-day",
+        username: "one-day",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-04",
+        videoProgress: "0/8",
+      }),
+      row({
+        id: "two-days",
+        username: "two-days",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-03",
+        videoProgress: "0/8",
+      }),
+    ],
+    today,
+    8,
+  );
 
-  expect(tasks.find((task) => task.id === 'one-day')?.priority).toBe('High');
-  expect(tasks.find((task) => task.id === 'two-days')?.priority).toBe('Highest');
+  expect(tasks.find((task) => task.id === "one-day")?.priority).toBe("High");
+  expect(tasks.find((task) => task.id === "two-days")?.priority).toBe(
+    "Highest",
+  );
 });
 
-it('keeps missing or invalid delivered dates High with approved operator copy', () => {
-  for (const sampleDeliveredDate of ['', 'not-a-date']) {
-    const [task] = analyzeCreators([
-      row({ sampleShippingStatus: 'Delivered', sampleDeliveredDate, videoProgress: '0/6' }),
-    ], today, 6);
+it("keeps missing or invalid delivered dates High with approved operator copy", () => {
+  for (const sampleDeliveredDate of ["", "not-a-date"]) {
+    const [task] = analyzeCreators(
+      [
+        row({
+          sampleShippingStatus: "Delivered",
+          sampleDeliveredDate,
+          videoProgress: "0/6",
+        }),
+      ],
+      today,
+      6,
+    );
 
     expect(task).toMatchObject({
-      priority: 'High',
-      triggerReason: '已送达，但缺少到货日期。',
-      suggestedAction: '补充到货日期并确认拍摄计划。',
+      priority: "High",
+      triggerReason: "已送达，但缺少到货日期。",
+      suggestedAction: "补充到货日期并确认拍摄计划。",
     });
   }
 });
 
-it('lets operator pause suppress delivered-age Highest but not a pending reply', () => {
-  const tasks = analyzeCreators([
-    row({ id: 'paused-delivery', username: 'paused-delivery', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', notes: '暂不催' }),
-    row({ id: 'future-delivery', username: 'future-delivery', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', nextFollowUpDate: '2026-06-08' }),
-    row({ id: 'reply', username: 'reply', trackingStatus: 'Reply Pending', lastCreatorResponse: 'Friday works.', notes: '暂不催', nextFollowUpDate: '2026-06-08' }),
-  ], today, 2);
+it("lets operator pause suppress delivered-age Highest but not a pending reply", () => {
+  const tasks = analyzeCreators(
+    [
+      row({
+        id: "paused-delivery",
+        username: "paused-delivery",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-01",
+        notes: "暂不催",
+      }),
+      row({
+        id: "future-delivery",
+        username: "future-delivery",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-01",
+        nextFollowUpDate: "2026-06-08",
+      }),
+      row({
+        id: "reply",
+        username: "reply",
+        trackingStatus: "Reply Pending",
+        lastCreatorResponse: "Friday works.",
+        notes: "暂不催",
+        nextFollowUpDate: "2026-06-08",
+      }),
+    ],
+    today,
+    2,
+  );
 
-  expect(tasks.find((task) => task.id === 'paused-delivery')?.priority).toBe('Low');
-  expect(tasks.find((task) => task.id === 'future-delivery')?.priority).toBe('Low');
-  expect(tasks.find((task) => task.id === 'reply')?.priority).toBe('Highest');
+  expect(tasks.find((task) => task.id === "paused-delivery")?.priority).toBe(
+    "Low",
+  );
+  expect(tasks.find((task) => task.id === "future-delivery")?.priority).toBe(
+    "Low",
+  );
+  expect(tasks.find((task) => task.id === "reply")?.priority).toBe("Highest");
 });
 ```
 
@@ -254,23 +316,61 @@ git commit -m "Fix Highest priority triggers"
 - [ ] **Step 1: Write a failing deterministic-order test**
 
 ```ts
-it('sorts Highest replies first, then older delivery, follow-up count, and username', () => {
-  const tasks = analyzeCreators([
-    row({ id: 'delivery-b', username: 'bravo', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastFollowUpCount: 1 }),
-    row({ id: 'reply-z', username: 'zulu', trackingStatus: 'Reply Pending', lastCreatorResponse: 'Reply' }),
-    row({ id: 'delivery-a', username: 'alpha', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastFollowUpCount: 1 }),
-    row({ id: 'reply-a', username: 'alpha-reply', trackingStatus: 'Reply Pending', lastCreatorResponse: 'Reply' }),
-    row({ id: 'delivery-followups', username: 'charlie', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-01', lastFollowUpCount: 3 }),
-    row({ id: 'delivery-newer', username: 'newer', sampleShippingStatus: 'Delivered', sampleDeliveredDate: '2026-06-02', lastFollowUpCount: 9 }),
-  ], today, 2);
+it("sorts Highest replies first, then older delivery, follow-up count, and username", () => {
+  const tasks = analyzeCreators(
+    [
+      row({
+        id: "delivery-b",
+        username: "bravo",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-01",
+        lastFollowUpCount: 1,
+      }),
+      row({
+        id: "reply-z",
+        username: "zulu",
+        trackingStatus: "Reply Pending",
+        lastCreatorResponse: "Reply",
+      }),
+      row({
+        id: "delivery-a",
+        username: "alpha",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-01",
+        lastFollowUpCount: 1,
+      }),
+      row({
+        id: "reply-a",
+        username: "alpha-reply",
+        trackingStatus: "Reply Pending",
+        lastCreatorResponse: "Reply",
+      }),
+      row({
+        id: "delivery-followups",
+        username: "charlie",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-01",
+        lastFollowUpCount: 3,
+      }),
+      row({
+        id: "delivery-newer",
+        username: "newer",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-02",
+        lastFollowUpCount: 9,
+      }),
+    ],
+    today,
+    2,
+  );
 
   expect(tasks.map((task) => task.id)).toEqual([
-    'reply-a',
-    'reply-z',
-    'delivery-followups',
-    'delivery-a',
-    'delivery-b',
-    'delivery-newer',
+    "reply-a",
+    "reply-z",
+    "delivery-followups",
+    "delivery-a",
+    "delivery-b",
+    "delivery-newer",
   ]);
 });
 ```
@@ -278,19 +378,23 @@ it('sorts Highest replies first, then older delivery, follow-up count, and usern
 - [ ] **Step 2: Write a failing seven-day warning and summary test**
 
 ```ts
-it('keeps seven-day zero-progress work Highest and separately warns Failed Candidate', () => {
-  const [task] = analyzeCreators([
-    row({
-      currentStatus: 'Delivered / Waiting for Video',
-      sampleShippingStatus: 'Delivered',
-      sampleDeliveredDate: '2026-05-28',
-      videoProgress: '0/13',
-    }),
-  ], today, 13);
+it("keeps seven-day zero-progress work Highest and separately warns Failed Candidate", () => {
+  const [task] = analyzeCreators(
+    [
+      row({
+        currentStatus: "Delivered / Waiting for Video",
+        sampleShippingStatus: "Delivered",
+        sampleDeliveredDate: "2026-05-28",
+        videoProgress: "0/13",
+      }),
+    ],
+    today,
+    13,
+  );
 
-  expect(task.priority).toBe('Highest');
-  expect(task.failedWarnings[0]).toContain('样品已到货 8 天');
-  expect(task.currentStatus).toBe('Delivered / Waiting for Video');
+  expect(task.priority).toBe("Highest");
+  expect(task.failedWarnings[0]).toContain("样品已到货 8 天");
+  expect(task.currentStatus).toBe("Delivered / Waiting for Video");
   expect(buildSummary([task])).toMatchObject({ highest: 1, high: 0 });
 });
 ```
@@ -317,7 +421,7 @@ export function compareTasks(a: Task, b: Task, today = new Date()): number {
   const priorityOrder = a.priorityRank - b.priorityRank;
   if (priorityOrder !== 0) return priorityOrder;
 
-  if (a.priority === 'Highest' && b.priority === 'Highest') {
+  if (a.priority === "Highest" && b.priority === "Highest") {
     if (a.stageRank === 2 && b.stageRank === 2) {
       const aDeliveredDays = daysSince(a.sampleDeliveredDate, today) ?? -1;
       const bDeliveredDays = daysSince(b.sampleDeliveredDate, today) ?? -1;
@@ -332,17 +436,23 @@ export function compareTasks(a: Task, b: Task, today = new Date()): number {
 
   if (a.stageRank === 5 && b.stageRank === 5) {
     const arrivalOrder =
-      (arrivalDateDeltaDays(a.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY)
-      - (arrivalDateDeltaDays(b.sampleDeliveredDate, today) ?? Number.POSITIVE_INFINITY);
+      (arrivalDateDeltaDays(a.sampleDeliveredDate, today) ??
+        Number.POSITIVE_INFINITY) -
+      (arrivalDateDeltaDays(b.sampleDeliveredDate, today) ??
+        Number.POSITIVE_INFINITY);
     if (arrivalOrder !== 0) return arrivalOrder;
   }
 
-  return (daysSince(b.lastContactDate, today) ?? -1)
-      - (daysSince(a.lastContactDate, today) ?? -1)
-    || b.lastFollowUpCount - a.lastFollowUpCount
-    || (parseDate(a.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
-      - (parseDate(b.nextFollowUpDate ?? '')?.getTime() ?? Number.POSITIVE_INFINITY)
-    || a.username.localeCompare(b.username);
+  return (
+    (daysSince(b.lastContactDate, today) ?? -1) -
+      (daysSince(a.lastContactDate, today) ?? -1) ||
+    b.lastFollowUpCount - a.lastFollowUpCount ||
+    (parseDate(a.nextFollowUpDate ?? "")?.getTime() ??
+      Number.POSITIVE_INFINITY) -
+      (parseDate(b.nextFollowUpDate ?? "")?.getTime() ??
+        Number.POSITIVE_INFINITY) ||
+    a.username.localeCompare(b.username)
+  );
 }
 ```
 
@@ -392,51 +502,83 @@ git commit -m "Add deterministic Highest priority ordering"
 Freeze the UI date and seed one pending reply, one aged delivery, and one High missing-date record:
 
 ```tsx
-it('shows and filters Highest work with approved reasons and actions', async () => {
+it("shows and filters Highest work with approved reasons and actions", async () => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date('2026-06-05T12:00:00Z'));
+  vi.setSystemTime(new Date("2026-06-05T12:00:00Z"));
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   seedCreators([
-    creatorRow({ id: 'reply', username: 'reply_creator', trackingStatus: 'Reply Pending', lastCreatorResponse: 'Friday works.', sampleShippingStatus: '', sampleDeliveredDate: '' }),
-    creatorRow({ id: 'aged', username: 'aged_creator', sampleDeliveredDate: '2026-06-03', videoProgress: '0 of 2' }),
-    creatorRow({ id: 'missing-date', username: 'missing_date_creator', sampleDeliveredDate: '', videoProgress: '0 of 2' }),
+    creatorRow({
+      id: "reply",
+      username: "reply_creator",
+      trackingStatus: "Reply Pending",
+      lastCreatorResponse: "Friday works.",
+      sampleShippingStatus: "",
+      sampleDeliveredDate: "",
+    }),
+    creatorRow({
+      id: "aged",
+      username: "aged_creator",
+      sampleDeliveredDate: "2026-06-03",
+      videoProgress: "0 of 2",
+    }),
+    creatorRow({
+      id: "missing-date",
+      username: "missing_date_creator",
+      sampleDeliveredDate: "",
+      videoProgress: "0 of 2",
+    }),
   ]);
 
   render(<App />);
   await goTo(user, /达人跟进中心/);
 
   expect(screen.getByText(/最高优先级 2/)).toBeInTheDocument();
-  expect(screen.getByTestId('creator-queue').textContent).toMatch(/reply_creator[\s\S]*aged_creator/);
-  expect(screen.getByTestId('creator-queue')).toHaveTextContent('最高');
+  expect(screen.getByTestId("creator-queue").textContent).toMatch(
+    /reply_creator[\s\S]*aged_creator/,
+  );
+  expect(screen.getByTestId("creator-queue")).toHaveTextContent("最高");
 
-  await user.selectOptions(screen.getByLabelText('紧急程度'), 'Highest');
-  expect(screen.getByTestId('creator-queue')).toHaveTextContent('reply_creator');
-  expect(screen.getByTestId('creator-queue')).toHaveTextContent('aged_creator');
-  expect(screen.getByTestId('creator-queue')).not.toHaveTextContent('missing_date_creator');
+  await user.selectOptions(screen.getByLabelText("紧急程度"), "Highest");
+  expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+    "reply_creator",
+  );
+  expect(screen.getByTestId("creator-queue")).toHaveTextContent("aged_creator");
+  expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
+    "missing_date_creator",
+  );
 
-  await user.selectOptions(screen.getByLabelText('选择达人'), 'aged');
-  expect(screen.getByText('产品已送达 2 天，视频进度仍为 0/2。')).toBeInTheDocument();
-  expect(screen.getByText('发送拍摄跟进，提醒达人按照达人拍摄要求完成 2 条视频。')).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("选择达人"), "aged");
+  expect(
+    screen.getByText("产品已送达 2 天，视频进度仍为 0/2。"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("发送拍摄跟进，提醒达人按照达人拍摄要求完成 2 条视频。"),
+  ).toBeInTheDocument();
 });
 ```
 
 - [ ] **Step 2: Add a failing UI test for missing delivery date**
 
 ```tsx
-it('keeps delivered work without a delivery date High and asks for the date', async () => {
+it("keeps delivered work without a delivery date High and asks for the date", async () => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date('2026-06-05T12:00:00Z'));
+  vi.setSystemTime(new Date("2026-06-05T12:00:00Z"));
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   seedCreators([
-    creatorRow({ id: 'missing-date', username: 'missing_date_creator', sampleDeliveredDate: '', videoProgress: '0 of 9' }),
+    creatorRow({
+      id: "missing-date",
+      username: "missing_date_creator",
+      sampleDeliveredDate: "",
+      videoProgress: "0 of 9",
+    }),
   ]);
 
   render(<App />);
   await goTo(user, /达人跟进中心/);
 
-  expect(screen.getByTestId('creator-queue')).toHaveTextContent('高');
-  expect(screen.getByText('已送达，但缺少到货日期。')).toBeInTheDocument();
-  expect(screen.getByText('补充到货日期并确认拍摄计划。')).toBeInTheDocument();
+  expect(screen.getByTestId("creator-queue")).toHaveTextContent("高");
+  expect(screen.getByText("已送达，但缺少到货日期。")).toBeInTheDocument();
+  expect(screen.getByText("补充到货日期并确认拍摄计划。")).toBeInTheDocument();
 });
 ```
 
@@ -459,21 +601,21 @@ In `src/App.tsx`:
 
 ```ts
 const [followupUrgency, setFollowupUrgency] = useState<
-  'All' | 'Highest' | 'High' | 'Medium' | 'Low'
->('All');
+  "All" | "Highest" | "High" | "Medium" | "Low"
+>("All");
 ```
 
 3. Update the shared label:
 
 ```ts
 function priorityLabel(task: Task): string {
-  return task.priority === 'Highest'
-    ? '最高'
-    : task.priority === 'High'
-      ? '高'
-      : task.priority === 'Medium'
-        ? '中'
-        : '低';
+  return task.priority === "Highest"
+    ? "最高"
+    : task.priority === "High"
+      ? "高"
+      : task.priority === "Medium"
+        ? "中"
+        : "低";
 }
 ```
 
@@ -493,7 +635,7 @@ Derive the pending count from the current workbench source:
 
 ```ts
 const highestPendingCount = workbenchTasks.filter(
-  (task) => task.priority === 'Highest' && !isHandledToday(task),
+  (task) => task.priority === "Highest" && !isHandledToday(task),
 ).length;
 ```
 
@@ -518,10 +660,12 @@ Expected: both focused tests pass.
 Extend the existing “generates follow-up copy and marks a message as sent” or processed-today test so its seeded task starts as Highest. After the send/processing action, assert:
 
 ```tsx
-expect(screen.getByTestId('creator-queue')).not.toHaveTextContent('aged_creator');
-await user.click(screen.getByLabelText('显示今日已处理'));
-expect(screen.getByTestId('creator-queue')).toHaveTextContent('aged_creator');
-expect(screen.getByTestId('creator-queue')).toHaveTextContent('今日已处理');
+expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
+  "aged_creator",
+);
+await user.click(screen.getByLabelText("显示今日已处理"));
+expect(screen.getByTestId("creator-queue")).toHaveTextContent("aged_creator");
+expect(screen.getByTestId("creator-queue")).toHaveTextContent("今日已处理");
 ```
 
 Use the existing test's actual creator id/name and action button rather than duplicating its entire workflow.

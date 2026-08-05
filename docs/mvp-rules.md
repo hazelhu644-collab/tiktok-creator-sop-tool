@@ -19,42 +19,42 @@ Who should the seller follow up with today, and why?
 
 The uploaded CSV or Excel file should include these columns:
 
-* Creator username
-* Creator profile link
-* Contact method
-* Product
-* Current status
-* Sample shipping status
-* Sample delivered date
-* Video progress
-* First video posted date
-* Last contact date
-* Last follow-up count
-* Notes
+- Creator username
+- Creator profile link
+- Contact method
+- Product
+- Current status
+- Sample shipping status
+- Sample delivered date
+- Video progress
+- First video posted date
+- Last contact date
+- Last follow-up count
+- Notes
 
 ## Supported Creator Statuses
 
 Use these status options:
 
-* To Contact
-* Contacted
-* In Communication / No Reply
-* Sample Pending
-* In Transit
-* Delivered / Waiting for Video
-* Followed Up
-* Posted 1 Video / Waiting for 2nd Video
-* Completed
-* Failed
+- To Contact
+- Contacted
+- In Communication / No Reply
+- Sample Pending
+- In Transit
+- Delivered / Waiting for Video
+- Followed Up
+- Posted 1 Video / Waiting for 2nd Video
+- Completed
+- Failed
 
 ## Video Progress Format
 
 Video progress should use `X/N`, where `N` is the current Campaign's positive required-video count.
 
-* `N` may be any positive integer, without a fixed supported list or business upper limit.
-* `0/N` means no required videos have been posted.
-* `0 < X < N` means partial completion.
-* `X >= N` means complete; over-delivery remains recorded and is not capped.
+- `N` may be any positive integer, without a fixed supported list or business upper limit.
+- `0/N` means no required videos have been posted.
+- `0 < X < N` means partial completion.
+- `X >= N` means complete; over-delivery remains recorded and is not capped.
 
 ## Priority Rules
 
@@ -79,17 +79,17 @@ Handle the creator reply first, or send the first filming follow-up and remind t
 
 ### Priority Precedence
 
-* Handled-today, archived, completed, and failed records do not enter today's pending queue.
-* A pending creator reply overrides pause notes and future follow-up dates.
-* Without a pending reply, a pause note or future follow-up date suppresses automatic delivered-age Highest.
-* Delivered with a missing or invalid delivery date is High. Show `已送达，但缺少到货日期。` and suggest `补充到货日期并确认拍摄计划。`
+- Handled-today, archived, completed, and failed records do not enter today's pending queue.
+- A pending creator reply overrides pause notes and future follow-up dates.
+- Without a pending reply, a pause note or future follow-up date suppresses automatic delivered-age Highest.
+- Delivered with a missing or invalid delivery date is High. Show `已送达，但缺少到货日期。` and suggest `补充到货日期并确认拍摄计划。`
 
 ### High Priority
 
 Condition:
 
-* Normalized video progress is `X/N`, where `0 < X < N`
-* First video posted date is not empty
+- Normalized video progress is `X/N`, where `0 < X < N`
+- First video posted date is not empty
 
 Reason:
 
@@ -103,9 +103,9 @@ Ask the creator to post the remaining required videos.
 
 Condition:
 
-* Current status is Followed Up
-* Last contact date is at least 1 day ago
-* Video progress is incomplete
+- Current status is Followed Up
+- Last contact date is at least 1 day ago
+- Video progress is incomplete
 
 Reason:
 
@@ -119,9 +119,9 @@ Send a second follow-up.
 
 Condition:
 
-* Current status is Contacted
-* Last contact date is at least 2 days ago
-* Sample shipping status is empty, Pending, or Not Shipped
+- Current status is Contacted
+- Last contact date is at least 2 days ago
+- Sample shipping status is empty, Pending, or Not Shipped
 
 Reason:
 
@@ -155,9 +155,9 @@ Notes suggest long-time no reply, no filming plan, bad cooperation, or unwilling
 
 The user should choose one of these final actions:
 
-* Continue following up
-* Mark as failed
-* Wait and review later
+- Continue following up
+- Mark as failed
+- Wait and review later
 
 ## Highest Priority Explanation
 
@@ -165,11 +165,11 @@ For all Highest Priority creators, the system should show a short explanation be
 
 The explanation should include:
 
-* Creator username
-* Sample delivery timing
-* Current video progress
-* Why this creator is urgent
-* Suggested next action
+- Creator username
+- Sample delivery timing
+- Current video progress
+- Why this creator is urgent
+- Suggested next action
 
 ## Output Structure
 

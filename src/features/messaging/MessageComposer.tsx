@@ -51,7 +51,9 @@ export function MessageComposer({
             达人回复原文
             <textarea
               value={creatorReply}
-              onChange={(event) => actions.updateCreatorReply(event.target.value)}
+              onChange={(event) =>
+                actions.updateCreatorReply(event.target.value)
+              }
               placeholder="可粘贴或手动修正达人原始回复"
               rows={4}
             />
@@ -110,7 +112,9 @@ export function MessageComposer({
               <textarea
                 aria-label="编辑中文翻译"
                 value={chineseTranslation}
-                onChange={(event) => actions.updateTranslation(event.target.value)}
+                onChange={(event) =>
+                  actions.updateTranslation(event.target.value)
+                }
                 rows={3}
               />
             ) : (
@@ -133,7 +137,9 @@ export function MessageComposer({
                 <button
                   type="button"
                   className="link-button"
-                  onClick={() => actions.setTranslationEditing(!translationEditing)}
+                  onClick={() =>
+                    actions.setTranslationEditing(!translationEditing)
+                  }
                 >
                   {translationEditing ? "完成编辑" : "编辑翻译"}
                 </button>
@@ -229,8 +235,7 @@ export function MessageComposer({
             </div>
           </details>
           <p className="muted compact-helper">
-            默认先使用本地专业话术。DeepSeek
-            仅用于复杂回复或需要个性化优化时。
+            默认先使用本地专业话术。DeepSeek 仅用于复杂回复或需要个性化优化时。
           </p>
           <p className="muted compact-helper">
             DeepSeek 翻译只做直译；英文回复会把你的中文重点准确转成
@@ -244,7 +249,9 @@ export function MessageComposer({
               </p>
               <h3>英文话术</h3>
               <p className="message-source-label">
-                {messageSource === "deepseek" ? "DeepSeek 优化版" : "免费本地话术"}
+                {messageSource === "deepseek"
+                  ? "DeepSeek 优化版"
+                  : "免费本地话术"}
               </p>
               <label className="sr-only" htmlFor="generated-english-message">
                 英文话术

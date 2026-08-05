@@ -121,7 +121,6 @@ export type CreatorDatabasePageProps = {
   uiState: CreatorDatabaseUiState;
   actions: CreatorDatabaseActions;
 };
-
 ```
 
 ---
@@ -326,41 +325,41 @@ Close the fragment, the return statement, and the component function normally. P
 
 Apply these exact substitutions while moving `renderImportCard` and `renderCreatorDatabase` markup:
 
-| Existing closure | Controlled replacement |
-| --- | --- |
-| `fileName` | `uiState.fileName` |
-| `importSummary` | `uiState.importSummary` |
-| `error` | `uiState.error` |
-| `pendingDuplicateAdd` | `uiState.pendingDuplicate` |
-| `handleFile(file)` | `actions.importFile(file)` |
-| `downloadCreatorRowsCsv(rows)` | `actions.exportCsv()` |
-| `handleAddCreator()` | `actions.addCreator()` |
-| duplicate continuation | `actions.continueDuplicate()` |
-| duplicate base copy | `actions.copyDuplicateBase()` |
-| duplicate cancellation | `actions.cancelDuplicate()` |
-| `search` / `setSearch` | `uiState.search` / `actions.setSearch(value)` |
-| filter state setters | matching `uiState` field / `actions.set...` callback |
-| `creatorStatuses` and `displayStatus` | `data.statusOptions` |
-| `showArchivedCollaborations` | `uiState.showArchivedCollaborations` |
-| `archivedProductCount` | `data.archivedProductCount` |
-| `productTotalCount` | `data.productTotalCount` |
-| `filteredRows` | `data.rows` |
-| `archivedSearchMatches.length` | `data.archivedSearchMatchCount` |
-| `selectedIds` | `uiState.selectedIds` |
-| `bulkStatus` / `setBulkStatus` | `uiState.bulkStatus` / `actions.setBulkStatus(value)` |
-| `toggleSelectAll(event)` | `actions.toggleSelectAll(event.target.checked)` |
-| `toggleSelected(id)` | `actions.toggleSelected(id)` |
-| `updateRow(id, field, value)` | `actions.updateRow(id, field, value)` |
-| `handleBulkCopyOutreach()` | `actions.bulkCopyOutreach()` |
-| `handleBulkStatusUpdate()` | `actions.bulkUpdateStatus()` |
-| `displayName(entry.row)` | `entry.displayName` |
-| `isArchivedCollaboration(entry.row)` | `entry.archived` |
-| `getDuplicateCheck(...)` | `entry.duplicate` |
-| `DEFAULT_STORE_NAME` | `data.defaultStoreName` |
-| `copyText(buildOutreachForRow(row), ...)` | `actions.copyOutreach(row.id)` |
-| `archiveCreator(id)` | `actions.archiveCreator(id)` |
-| `restoreCreator(id)` | `actions.restoreCreator(id)` |
-| manual restore eligibility | `entry.canRestore` |
+| Existing closure                          | Controlled replacement                                |
+| ----------------------------------------- | ----------------------------------------------------- |
+| `fileName`                                | `uiState.fileName`                                    |
+| `importSummary`                           | `uiState.importSummary`                               |
+| `error`                                   | `uiState.error`                                       |
+| `pendingDuplicateAdd`                     | `uiState.pendingDuplicate`                            |
+| `handleFile(file)`                        | `actions.importFile(file)`                            |
+| `downloadCreatorRowsCsv(rows)`            | `actions.exportCsv()`                                 |
+| `handleAddCreator()`                      | `actions.addCreator()`                                |
+| duplicate continuation                    | `actions.continueDuplicate()`                         |
+| duplicate base copy                       | `actions.copyDuplicateBase()`                         |
+| duplicate cancellation                    | `actions.cancelDuplicate()`                           |
+| `search` / `setSearch`                    | `uiState.search` / `actions.setSearch(value)`         |
+| filter state setters                      | matching `uiState` field / `actions.set...` callback  |
+| `creatorStatuses` and `displayStatus`     | `data.statusOptions`                                  |
+| `showArchivedCollaborations`              | `uiState.showArchivedCollaborations`                  |
+| `archivedProductCount`                    | `data.archivedProductCount`                           |
+| `productTotalCount`                       | `data.productTotalCount`                              |
+| `filteredRows`                            | `data.rows`                                           |
+| `archivedSearchMatches.length`            | `data.archivedSearchMatchCount`                       |
+| `selectedIds`                             | `uiState.selectedIds`                                 |
+| `bulkStatus` / `setBulkStatus`            | `uiState.bulkStatus` / `actions.setBulkStatus(value)` |
+| `toggleSelectAll(event)`                  | `actions.toggleSelectAll(event.target.checked)`       |
+| `toggleSelected(id)`                      | `actions.toggleSelected(id)`                          |
+| `updateRow(id, field, value)`             | `actions.updateRow(id, field, value)`                 |
+| `handleBulkCopyOutreach()`                | `actions.bulkCopyOutreach()`                          |
+| `handleBulkStatusUpdate()`                | `actions.bulkUpdateStatus()`                          |
+| `displayName(entry.row)`                  | `entry.displayName`                                   |
+| `isArchivedCollaboration(entry.row)`      | `entry.archived`                                      |
+| `getDuplicateCheck(...)`                  | `entry.duplicate`                                     |
+| `DEFAULT_STORE_NAME`                      | `data.defaultStoreName`                               |
+| `copyText(buildOutreachForRow(row), ...)` | `actions.copyOutreach(row.id)`                        |
+| `archiveCreator(id)`                      | `actions.archiveCreator(id)`                          |
+| `restoreCreator(id)`                      | `actions.restoreCreator(id)`                          |
+| manual restore eligibility                | `entry.canRestore`                                    |
 
 Do not paraphrase Chinese copy or normalize formatting while moving the markup.
 
@@ -527,9 +526,7 @@ Keep existing domain operations unchanged. Add these adapters next to the corres
 
 ```tsx
 function toggleAllFilteredCreators(checked: boolean) {
-  setSelectedIds(
-    checked ? filteredRows.map((entry) => entry.row.id) : [],
-  );
+  setSelectedIds(checked ? filteredRows.map((entry) => entry.row.id) : []);
 }
 
 function copyCreatorOutreach(rowId: string) {

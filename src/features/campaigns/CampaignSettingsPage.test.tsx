@@ -101,8 +101,12 @@ describe("CampaignSettingsPage", () => {
     expect(form.getByLabelText("Campaign 产品卖点")).toHaveValue(
       "Gentle steam grooming",
     );
-    expect(screen.getByRole("button", { name: "检查店铺：TerraPaw" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "隐藏空店铺：Empty Store" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "检查店铺：TerraPaw" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "隐藏空店铺：Empty Store" }),
+    ).toBeInTheDocument();
   });
 
   it("forwards controlled selection, editing, campaign actions, and store checks", async () => {
@@ -134,11 +138,15 @@ describe("CampaignSettingsPage", () => {
     });
     expect(props.actions.updateVideoCount).toHaveBeenCalledWith("1");
 
-    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+    await user.click(
+      screen.getByRole("button", { name: "同步视频数量到达人记录" }),
+    );
     expect(props.actions.syncVideoCount).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "复制" }));
     expect(props.actions.duplicateCampaign).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: "检查店铺：TerraPaw" }));
+    await user.click(
+      screen.getByRole("button", { name: "检查店铺：TerraPaw" }),
+    );
     expect(props.actions.inspectStore).toHaveBeenCalledWith("terrapaw");
   });
 
@@ -164,7 +172,11 @@ describe("CampaignSettingsPage", () => {
         {...createProps({ data: { ...createProps().data, target: null } })}
       />,
     );
-    expect(screen.queryByTestId("campaign-settings-form")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "新增产品" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("campaign-settings-form"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新增产品" }),
+    ).not.toBeInTheDocument();
   });
 });

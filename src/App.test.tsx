@@ -1,6 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { CREATOR_ROWS_STORAGE_KEY, creatorRowsToCsv } from "./creatorData";
@@ -198,7 +204,9 @@ describe("operations workbench navigation and dashboard", () => {
       "待验收视频数量",
       "可投流素材数量",
     ].forEach((label) =>
-      expect(screen.queryByRole("button", { name: `^${label}[^周]*$` })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("button", { name: `^${label}[^周]*$` }),
+      ).not.toBeInTheDocument(),
     );
     const cardLabels = screen
       .getAllByRole("button")
@@ -225,10 +233,32 @@ describe("operations workbench navigation and dashboard", () => {
     vi.setSystemTime(new Date("2026-06-05T12:00:00Z"));
     const user = userEvent.setup();
     seedCreators([
-      creatorRow({ id: "reply", username: "reply_creator", trackingStatus: "Reply Pending", lastCreatorResponse: "Friday works.", sampleShippingStatus: "", sampleDeliveredDate: "" }),
-      creatorRow({ id: "aged-two", username: "aged_two_creator", sampleDeliveredDate: "2026-06-03", videoProgress: "0 of 2" }),
-      creatorRow({ id: "aged-four", username: "aged_four_creator", sampleDeliveredDate: "2026-06-01", videoProgress: "0 of 2" }),
-      creatorRow({ id: "missing-date", username: "missing_date_creator", sampleDeliveredDate: "", videoProgress: "0 of 2" }),
+      creatorRow({
+        id: "reply",
+        username: "reply_creator",
+        trackingStatus: "Reply Pending",
+        lastCreatorResponse: "Friday works.",
+        sampleShippingStatus: "",
+        sampleDeliveredDate: "",
+      }),
+      creatorRow({
+        id: "aged-two",
+        username: "aged_two_creator",
+        sampleDeliveredDate: "2026-06-03",
+        videoProgress: "0 of 2",
+      }),
+      creatorRow({
+        id: "aged-four",
+        username: "aged_four_creator",
+        sampleDeliveredDate: "2026-06-01",
+        videoProgress: "0 of 2",
+      }),
+      creatorRow({
+        id: "missing-date",
+        username: "missing_date_creator",
+        sampleDeliveredDate: "",
+        videoProgress: "0 of 2",
+      }),
     ]);
 
     render(<App />);
@@ -236,19 +266,35 @@ describe("operations workbench navigation and dashboard", () => {
 
     expect(screen.getByText(/最高优先级 3/)).toBeInTheDocument();
     const queueText = screen.getByTestId("creator-queue").textContent ?? "";
-    expect(queueText.indexOf("reply_creator")).toBeLessThan(queueText.indexOf("aged_four_creator"));
-    expect(queueText.indexOf("aged_four_creator")).toBeLessThan(queueText.indexOf("aged_two_creator"));
+    expect(queueText.indexOf("reply_creator")).toBeLessThan(
+      queueText.indexOf("aged_four_creator"),
+    );
+    expect(queueText.indexOf("aged_four_creator")).toBeLessThan(
+      queueText.indexOf("aged_two_creator"),
+    );
     expect(screen.getByTestId("creator-queue")).toHaveTextContent("最高");
 
     await user.selectOptions(screen.getByLabelText("紧急程度"), "Highest");
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("reply_creator");
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("aged_four_creator");
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("aged_two_creator");
-    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("missing_date_creator");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "reply_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "aged_four_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "aged_two_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
+      "missing_date_creator",
+    );
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "aged-two");
-    expect(screen.getByText("产品已送达 2 天，视频进度仍为 0/2。")).toBeInTheDocument();
-    expect(screen.getByText("发送拍摄跟进，提醒达人按照达人拍摄要求完成 2 条视频。")).toBeInTheDocument();
+    expect(
+      screen.getByText("产品已送达 2 天，视频进度仍为 0/2。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("发送拍摄跟进，提醒达人按照达人拍摄要求完成 2 条视频。"),
+    ).toBeInTheDocument();
   });
 
   it("keeps delivered work without a delivery date High and asks for the date", async () => {
@@ -256,7 +302,12 @@ describe("operations workbench navigation and dashboard", () => {
     vi.setSystemTime(new Date("2026-06-05T12:00:00Z"));
     const user = userEvent.setup();
     seedCreators([
-      creatorRow({ id: "missing-date", username: "missing_date_creator", sampleDeliveredDate: "", videoProgress: "0 of 9" }),
+      creatorRow({
+        id: "missing-date",
+        username: "missing_date_creator",
+        sampleDeliveredDate: "",
+        videoProgress: "0 of 9",
+      }),
     ]);
 
     render(<App />);
@@ -264,63 +315,105 @@ describe("operations workbench navigation and dashboard", () => {
 
     expect(screen.getByTestId("creator-queue")).toHaveTextContent("高");
     expect(screen.getByText("已送达，但缺少到货日期。")).toBeInTheDocument();
-    expect(screen.getByText("补充到货日期并确认拍摄计划。")).toBeInTheDocument();
+    expect(
+      screen.getByText("补充到货日期并确认拍摄计划。"),
+    ).toBeInTheDocument();
   });
 
-
   it("counts actual over-delivered posted video numerators in dashboard and product overview", async () => {
-    const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "over-delivery",
-        productName: "Over Delivery Product",
-        sellingPoints: "",
-        requirements: ["每位达人 1 条视频"],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "每位达人 1 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "over-delivery",
+          productName: "Over Delivery Product",
+          sellingPoints: "",
+          requirements: ["每位达人 1 条视频"],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "每位达人 1 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
-      creatorRow({ id: "zero", username: "zero_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "0/1" }),
-      creatorRow({ id: "one", username: "one_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "1/1" }),
-      creatorRow({ id: "two", username: "two_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "2/1" }),
-      creatorRow({ id: "partial", username: "partial_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "1/2" }),
-      creatorRow({ id: "three", username: "three_creator", product: "Over Delivery Product", campaignId: "over-delivery", videoProgress: "3/2" }),
+      creatorRow({
+        id: "zero",
+        username: "zero_creator",
+        product: "Over Delivery Product",
+        campaignId: "over-delivery",
+        videoProgress: "0/1",
+      }),
+      creatorRow({
+        id: "one",
+        username: "one_creator",
+        product: "Over Delivery Product",
+        campaignId: "over-delivery",
+        videoProgress: "1/1",
+      }),
+      creatorRow({
+        id: "two",
+        username: "two_creator",
+        product: "Over Delivery Product",
+        campaignId: "over-delivery",
+        videoProgress: "2/1",
+      }),
+      creatorRow({
+        id: "partial",
+        username: "partial_creator",
+        product: "Over Delivery Product",
+        campaignId: "over-delivery",
+        videoProgress: "1/2",
+      }),
+      creatorRow({
+        id: "three",
+        username: "three_creator",
+        product: "Over Delivery Product",
+        campaignId: "over-delivery",
+        videoProgress: "3/2",
+      }),
     ]);
 
     render(<App />);
 
-    expect(screen.getByRole("button", { name: /已发布视频数量7/ })).toBeInTheDocument();
-    const campaignCards = screen.getAllByRole("button", { name: /Over Delivery Product5 位达人/ });
-    expect(campaignCards.some((card) => card.textContent?.includes("已发布视频 7"))).toBe(true);
+    expect(
+      screen.getByRole("button", { name: /已发布视频数量7/ }),
+    ).toBeInTheDocument();
+    const campaignCards = screen.getAllByRole("button", {
+      name: /Over Delivery Product5 位达人/,
+    });
+    expect(
+      campaignCards.some((card) => card.textContent?.includes("已发布视频 7")),
+    ).toBe(true);
   });
 
   it("keeps historical cumulative published videos aligned between Dashboard, Campaign, and drill-down", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "history-campaign",
-        productName: "History Product",
-        sellingPoints: "",
-        requirements: ["每位达人 2 条视频"],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "每位达人 2 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "history-campaign",
+          productName: "History Product",
+          sellingPoints: "",
+          requirements: ["每位达人 2 条视频"],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "每位达人 2 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
       creatorRow({
         id: "history-active",
@@ -356,14 +449,24 @@ describe("operations workbench navigation and dashboard", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("button", { name: /已发布视频数量3/ })).toBeInTheDocument();
-    const campaignCard = screen.getByRole("button", { name: /History Product3 位达人/ });
+    expect(
+      screen.getByRole("button", { name: /已发布视频数量3/ }),
+    ).toBeInTheDocument();
+    const campaignCard = screen.getByRole("button", {
+      name: /History Product3 位达人/,
+    });
     expect(campaignCard).toHaveTextContent("已发布视频 3");
 
     await user.click(screen.getByRole("button", { name: /已发布视频数量3/ }));
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_active_creator");
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_completed_creator");
-    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("history_failed_creator");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "history_active_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "history_completed_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
+      "history_failed_creator",
+    );
     await user.click(screen.getByRole("button", { name: "生成话术" }));
     const historicalPanel = await screen.findByTestId("reply-handling-panel");
     [
@@ -376,36 +479,49 @@ describe("operations workbench navigation and dashboard", () => {
       "合作失败",
       "今日暂不跟进",
     ].forEach((name) =>
-      expect(within(historicalPanel).getByRole("button", { name })).toBeDisabled(),
+      expect(
+        within(historicalPanel).getByRole("button", { name }),
+      ).toBeDisabled(),
     );
 
     await user.click(screen.getByRole("button", { name: /合作完成数量1/ }));
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_completed_creator");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "history_completed_creator",
+    );
 
     await user.click(screen.getByRole("button", { name: /合作失败数量1/ }));
-    expect(screen.getByTestId("creator-queue")).toHaveTextContent("history_failed_creator");
+    expect(screen.getByTestId("creator-queue")).toHaveTextContent(
+      "history_failed_creator",
+    );
   });
 
   it.each([
     ["2/1", "two_of_one"],
     ["3/2", "three_of_two"],
-  ])("treats %s as completed and removes it from active follow-up", async (videoProgress, username) => {
-    seedCreators([
-      creatorRow({
-        id: username,
-        username,
-        product: "Completion Product",
-        videoProgress,
-        currentStatus: "",
-        trackingStatus: "",
-      }),
-    ]);
+  ])(
+    "treats %s as completed and removes it from active follow-up",
+    async (videoProgress, username) => {
+      seedCreators([
+        creatorRow({
+          id: username,
+          username,
+          product: "Completion Product",
+          videoProgress,
+          currentStatus: "",
+          trackingStatus: "",
+        }),
+      ]);
 
-    render(<App />);
+      render(<App />);
 
-    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain(username);
-    expect(screen.getByRole("button", { name: /合作完成数量1/ })).toBeInTheDocument();
-  });
+      expect(
+        screen.queryByTestId("creator-queue")?.textContent ?? "",
+      ).not.toContain(username);
+      expect(
+        screen.getByRole("button", { name: /合作完成数量1/ }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("keeps overview card clicks on 今日工作台 and reveals processed creators from the processed card", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
@@ -652,7 +768,9 @@ describe("creator database redesigned table", () => {
     const user = userEvent.setup();
     await goTo(user, /达人数据库/);
 
-    const headers = within(screen.getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent ?? "");
+    const headers = within(screen.getByRole("table"))
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent ?? "");
     expect(headers.slice(1, 18)).toEqual([
       "达人账号",
       "主页链接",
@@ -677,7 +795,6 @@ describe("creator database redesigned table", () => {
     expect(screen.queryByLabelText("样品物流状态")).not.toBeInTheDocument();
     expect(screen.getByText("样品到货日期")).toBeInTheDocument();
   });
-
 
   it("hides legacy sample logistics data in the database table without crashing", async () => {
     seedCreators([
@@ -774,10 +891,18 @@ describe("creator database redesigned table", () => {
     render(<App />);
     await goTo(user, /达人数据库/);
 
-    expect(screen.getByRole("button", { name: "批量复制邀约话术" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "批量更新状态" })).toBeInTheDocument();
     expect(
-      within(screen.getByText("已选择：0").closest(".sticky-action-bar") as HTMLElement).getByRole("combobox"),
+      screen.getByRole("button", { name: "批量复制邀约话术" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "批量更新状态" }),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        screen
+          .getByText("已选择：0")
+          .closest(".sticky-action-bar") as HTMLElement,
+      ).getByRole("combobox"),
     ).toBeInTheDocument();
 
     await user.click(screen.getByLabelText("选择 alpha_creator"));
@@ -820,7 +945,9 @@ describe("creator database redesigned table", () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
     seedCreators([creatorRow({ id: "alpha", username: "alpha_creator" })]);
-    vi.spyOn(window, "prompt").mockReturnValueOnce("").mockReturnValueOnce("智能宠物饮水机");
+    vi.spyOn(window, "prompt")
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce("智能宠物饮水机");
 
     render(<App />);
     await goTo(user, /达人数据库/);
@@ -830,7 +957,9 @@ describe("creator database redesigned table", () => {
 
     const alphaRow = screen.getByDisplayValue("alpha_creator").closest("tr");
     expect(alphaRow).not.toBeNull();
-    await user.click(within(alphaRow as HTMLElement).getByRole("button", { name: "归档达人" }));
+    await user.click(
+      within(alphaRow as HTMLElement).getByRole("button", { name: "归档达人" }),
+    );
     await waitFor(() => {
       const saved = JSON.parse(
         window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
@@ -841,7 +970,8 @@ describe("creator database redesigned table", () => {
         archiveReason: "Manual",
         nextFollowUpDate: "",
       });
-      const history = saved.find((row) => row.id === "alpha")?.followUpHistory ?? [];
+      const history =
+        saved.find((row) => row.id === "alpha")?.followUpHistory ?? [];
       expect(history[history.length - 1]).toMatchObject({
         date: "2026-06-11",
         action: "Archived",
@@ -852,7 +982,9 @@ describe("creator database redesigned table", () => {
 
     const archiveToggles = screen.getAllByLabelText("显示已归档合作");
     await user.click(archiveToggles[archiveToggles.length - 1]);
-    const archivedAlphaRow = screen.getByDisplayValue("alpha_creator").closest("tr");
+    const archivedAlphaRow = screen
+      .getByDisplayValue("alpha_creator")
+      .closest("tr");
     expect(archivedAlphaRow).not.toBeNull();
     await user.click(
       within(archivedAlphaRow as HTMLElement).getByRole("button", {
@@ -877,20 +1009,36 @@ describe("creator database redesigned table", () => {
 
   it("shows duplicate options when manually adding an existing creator", async () => {
     const user = userEvent.setup();
-    seedCreators([creatorRow({ id: "alpha", username: "alpha_creator", product: "Pet Brush" })]);
+    seedCreators([
+      creatorRow({
+        id: "alpha",
+        username: "alpha_creator",
+        product: "Pet Brush",
+      }),
+    ]);
     const prompt = vi.spyOn(window, "prompt");
-    prompt.mockReturnValueOnce("alpha_creator").mockReturnValueOnce("Cat Teaser Wand");
+    prompt
+      .mockReturnValueOnce("alpha_creator")
+      .mockReturnValueOnce("Cat Teaser Wand");
 
     render(<App />);
     await goTo(user, /达人数据库/);
     await user.click(screen.getByRole("button", { name: "新增达人" }));
 
     expect(screen.getByText("该达人已存在。你可以选择：")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "继续新增为不同样品" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制已有达人基础信息" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "取消新增" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "继续新增为不同样品" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "复制已有达人基础信息" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "取消新增" }),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "复制已有达人基础信息" }));
+    await user.click(
+      screen.getByRole("button", { name: "复制已有达人基础信息" }),
+    );
 
     await waitFor(() => {
       const saved = JSON.parse(
@@ -903,14 +1051,29 @@ describe("creator database redesigned table", () => {
 
   it("keeps multi-sample creator rows separate in the workbench and current panel", () => {
     seedCreators([
-      creatorRow({ id: "brush", username: "multi_creator", product: "Pet Brush", sampleShippingStatus: "In Transit", currentStatus: "Sample Shipped", sampleDeliveredDate: "2026-06-08" }),
-      creatorRow({ id: "wand", username: "multi_creator", product: "Cat Teaser Wand", sampleShippingStatus: "Delivered", currentStatus: "Delivered", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({
+        id: "brush",
+        username: "multi_creator",
+        product: "Pet Brush",
+        sampleShippingStatus: "In Transit",
+        currentStatus: "Sample Shipped",
+        sampleDeliveredDate: "2026-06-08",
+      }),
+      creatorRow({
+        id: "wand",
+        username: "multi_creator",
+        product: "Cat Teaser Wand",
+        sampleShippingStatus: "Delivered",
+        currentStatus: "Delivered",
+        sampleDeliveredDate: "2026-06-01",
+      }),
     ]);
 
     render(<App />);
 
-    const queue = screen.getByTestId("creator-queue");
-    expect(screen.getAllByText(/Pet Brush|Cat Teaser Wand/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Pet Brush|Cat Teaser Wand/).length,
+    ).toBeGreaterThan(0);
 
     expect(screen.getAllByText("同达人多样品").length).toBeGreaterThan(0);
     expect(screen.getByText(/该达人还有 1 个其他样品合作/)).toBeInTheDocument();
@@ -920,9 +1083,24 @@ describe("creator database redesigned table", () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
     seedCreators([
-      creatorRow({ id: "complete-me", username: "complete_creator", product: "Pet Fountain", sampleDeliveredDate: "2026-06-01" }),
-      creatorRow({ id: "fail-me", username: "fail_creator", product: "Pet Fountain", sampleDeliveredDate: "2026-06-01" }),
-      creatorRow({ id: "active", username: "active_creator", product: "Pet Fountain", sampleDeliveredDate: "2026-06-01" }),
+      creatorRow({
+        id: "complete-me",
+        username: "complete_creator",
+        product: "Pet Fountain",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+      creatorRow({
+        id: "fail-me",
+        username: "fail_creator",
+        product: "Pet Fountain",
+        sampleDeliveredDate: "2026-06-01",
+      }),
+      creatorRow({
+        id: "active",
+        username: "active_creator",
+        product: "Pet Fountain",
+        sampleDeliveredDate: "2026-06-01",
+      }),
     ]);
 
     render(<App />);
@@ -933,40 +1111,89 @@ describe("creator database redesigned table", () => {
     await user.click(screen.getAllByRole("button", { name: "合作失败" })[0]);
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       expect(saved).toHaveLength(3);
-      expect(saved.find((row) => row.id === "complete-me")).toMatchObject({ currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-11" });
-      expect(saved.find((row) => row.id === "fail-me")).toMatchObject({ currentStatus: "Lost", trackingStatus: "合作失败", archivedAt: "2026-06-11" });
+      expect(saved.find((row) => row.id === "complete-me")).toMatchObject({
+        currentStatus: "Completed",
+        trackingStatus: "合作完成",
+        archivedAt: "2026-06-11",
+      });
+      expect(saved.find((row) => row.id === "fail-me")).toMatchObject({
+        currentStatus: "Lost",
+        trackingStatus: "合作失败",
+        archivedAt: "2026-06-11",
+      });
     });
 
-    const expandQueueButton = screen.queryByRole("button", { name: "展开达人队列" });
+    const expandQueueButton = screen.queryByRole("button", {
+      name: "展开达人队列",
+    });
     if (expandQueueButton) await user.click(expandQueueButton);
-    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("complete_creator");
-    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent("fail_creator");
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
+      "complete_creator",
+    );
+    expect(screen.getByTestId("creator-queue")).not.toHaveTextContent(
+      "fail_creator",
+    );
 
     await goTo(user, /达人数据库/);
-    await user.selectOptions(screen.getAllByLabelText("当前产品项目")[0], "Pet Fountain");
+    await user.selectOptions(
+      screen.getAllByLabelText("当前产品项目")[0],
+      "Pet Fountain",
+    );
     expect(screen.getByText("当前产品总记录：3")).toBeInTheDocument();
     expect(screen.getByText("当前显示：1")).toBeInTheDocument();
     expect(screen.getByText("已归档合作：2")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("complete_creator")).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("complete_creator"),
+    ).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("搜索"), "complete_creator");
-    expect(screen.getByText("该达人存在于已归档合作中，可开启显示已归档合作查看。")).toBeInTheDocument();
-    await user.click(screen.getAllByLabelText("显示已归档合作")[screen.getAllByLabelText("显示已归档合作").length - 1]);
-    expect(screen.getAllByDisplayValue("complete_creator").length).toBeGreaterThan(1);
+    expect(
+      screen.getByText("该达人存在于已归档合作中，可开启显示已归档合作查看。"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getAllByLabelText("显示已归档合作")[
+        screen.getAllByLabelText("显示已归档合作").length - 1
+      ],
+    );
+    expect(
+      screen.getAllByDisplayValue("complete_creator").length,
+    ).toBeGreaterThan(1);
   });
 
   it("reconciles product card totals with database total and keeps selected count separate", async () => {
     const user = userEvent.setup();
     seedCreators([
-      ...Array.from({ length: 20 }, (_, index) => creatorRow({ id: `active-${index}`, username: `active_${index}`, product: "Count Product" })),
-      ...Array.from({ length: 11 }, (_, index) => creatorRow({ id: `archived-${index}`, username: `archived_${index}`, product: "Count Product", currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-01" })),
+      ...Array.from({ length: 20 }, (_, index) =>
+        creatorRow({
+          id: `active-${index}`,
+          username: `active_${index}`,
+          product: "Count Product",
+        }),
+      ),
+      ...Array.from({ length: 11 }, (_, index) =>
+        creatorRow({
+          id: `archived-${index}`,
+          username: `archived_${index}`,
+          product: "Count Product",
+          currentStatus: "Completed",
+          trackingStatus: "合作完成",
+          archivedAt: "2026-06-01",
+        }),
+      ),
     ]);
 
     render(<App />);
-    expect(screen.getByRole("button", { name: /Count Product31 位达人/ })).toBeInTheDocument();
-    await user.selectOptions(screen.getAllByLabelText("当前产品项目")[0], "Count Product");
+    expect(
+      screen.getByRole("button", { name: /Count Product31 位达人/ }),
+    ).toBeInTheDocument();
+    await user.selectOptions(
+      screen.getAllByLabelText("当前产品项目")[0],
+      "Count Product",
+    );
     await goTo(user, /达人数据库/);
     expect(screen.getByText("当前产品总记录：31")).toBeInTheDocument();
     expect(screen.getByText("当前显示：20")).toBeInTheDocument();
@@ -978,8 +1205,20 @@ describe("creator database redesigned table", () => {
   it("exports completed failed and archived rows without silently dropping history", () => {
     const csv = creatorRowsToCsv([
       creatorRow({ id: "active", username: "active_export" }),
-      creatorRow({ id: "complete", username: "complete_export", currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-11" }),
-      creatorRow({ id: "failed", username: "failed_export", currentStatus: "Lost", trackingStatus: "合作失败", archivedAt: "2026-06-11" }),
+      creatorRow({
+        id: "complete",
+        username: "complete_export",
+        currentStatus: "Completed",
+        trackingStatus: "合作完成",
+        archivedAt: "2026-06-11",
+      }),
+      creatorRow({
+        id: "failed",
+        username: "failed_export",
+        currentStatus: "Lost",
+        trackingStatus: "合作失败",
+        archivedAt: "2026-06-11",
+      }),
     ]);
 
     expect(csv).toContain("active_export");
@@ -1141,8 +1380,12 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 
     render(<App />);
     await goTo(user, /达人跟进中心/);
-    expect(screen.getByRole("button", { name: /今日待跟进达人数量2/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "发布 1 条视频" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /今日待跟进达人数量2/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "发布 1 条视频" }),
+    ).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "video-one");
     await user.click(screen.getByRole("button", { name: "发布 1 条视频" }));
@@ -1156,16 +1399,26 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       expect(updated?.currentStatus).toBe("已发布 1 条 / 待补剩余视频");
       expect(updated?.trackingStatus).toBe("已发布部分视频");
       expect(updated?.firstVideoPostedDate).toBe("2026-06-11");
-      expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
+      expect(
+        updated?.followUpHistory?.[
+          Number(updated?.followUpHistory?.length) - 1
+        ],
+      ).toMatchObject({
         action: "Video Posted",
         note: "已记录达人发布 1 条视频，当前进度 1/2。",
       });
     });
-    expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
-    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain("video_one_creator");
+    expect(
+      screen.getByRole("button", { name: /今日已处理达人人数1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("creator-queue")?.textContent ?? "",
+    ).not.toContain("video_one_creator");
 
     await user.selectOptions(screen.getByLabelText("选择达人"), "video-two");
-    const localEnglish = (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value;
+    const localEnglish = (
+      screen.getByLabelText("英文话术") as HTMLTextAreaElement
+    ).value;
     expect(localEnglish).toContain("There is still 1 remaining video");
     expect(localEnglish).toContain("post the second video");
 
@@ -1178,33 +1431,42 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
       expect(updated?.videoProgress).toBe("1/2");
       expect(updated?.currentStatus).toBe("Completed");
       expect(updated?.trackingStatus).toBe("合作完成");
-      expect(updated?.followUpHistory?.[Number(updated?.followUpHistory?.length) - 1]).toMatchObject({
+      expect(
+        updated?.followUpHistory?.[
+          Number(updated?.followUpHistory?.length) - 1
+        ],
+      ).toMatchObject({
         action: "Completed",
         note: "今日合作完成。",
       });
     });
-    expect(screen.getByRole("button", { name: /今日已处理达人人数1/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /今日已处理达人人数1/ }),
+    ).toBeInTheDocument();
   });
 
   it("uses the row per-campaign video requirement when editing progress in the database", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "database-one-video",
-        productName: "Database One Video Product",
-        sellingPoints: "",
-        requirements: ["每位达人 1 条视频"],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "每位达人 1 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "database-one-video",
+          productName: "Database One Video Product",
+          sellingPoints: "",
+          requirements: ["每位达人 1 条视频"],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "每位达人 1 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
       creatorRow({
         id: "database-one-video-row",
@@ -1218,10 +1480,14 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 
     render(<App />);
     await goTo(user, /达人数据库/);
-    fireEvent.change(screen.getByDisplayValue("0/1"), { target: { value: "1/1" } });
+    fireEvent.change(screen.getByDisplayValue("0/1"), {
+      target: { value: "1/1" },
+    });
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       expect(saved[0]).toMatchObject({
         videoProgress: "1/1",
         currentStatus: "合作完成",
@@ -1234,23 +1500,26 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
   it("uses the row per-campaign video requirement for manual workbench progress", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "manual-one-video",
-        productName: "Manual One Video Product",
-        sellingPoints: "",
-        requirements: ["每位达人 1 条视频"],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "每位达人 1 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "manual-one-video",
+          productName: "Manual One Video Product",
+          sellingPoints: "",
+          requirements: ["每位达人 1 条视频"],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "每位达人 1 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
       creatorRow({
         id: "manual-one-video-row",
@@ -1271,7 +1540,9 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     await user.click(screen.getByRole("button", { name: "手动更新视频进度" }));
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       expect(saved[0]).toMatchObject({
         videoProgress: "1/1",
         currentStatus: "合作完成",
@@ -1284,23 +1555,26 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
   it("allows manual progress to preserve a valid 2/1 actual published count", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "one-video-campaign",
-        productName: "One Video Product",
-        sellingPoints: "",
-        requirements: ["每位达人 1 条视频"],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "每位达人 1 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "one-video-campaign",
+          productName: "One Video Product",
+          sellingPoints: "",
+          requirements: ["每位达人 1 条视频"],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "每位达人 1 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
       creatorRow({
         id: "over-click",
@@ -1318,7 +1592,9 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     fireEvent.change(progressInput, { target: { value: "2/1" } });
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       const updated = saved.find((row) => row.id === "over-click");
       expect(updated?.videoProgress).toBe("2/1");
       expect(updated?.videoProgressWarning).toBe("超额发布");
@@ -1543,7 +1819,8 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
 
   it("uses compact creator selector labels and keeps details in current creator panel", async () => {
     const user = userEvent.setup();
-    const longProduct = "Pet Brush for Shedding & Grooming Extra Long Campaign Product Name";
+    const longProduct =
+      "Pet Brush for Shedding & Grooming Extra Long Campaign Product Name";
     const longActionStatus = "Delivered / Waiting for Video";
     seedCreators([
       creatorRow({
@@ -1571,25 +1848,45 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     await goTo(user, /达人跟进中心/);
 
     const selector = screen.getByLabelText("选择达人") as HTMLSelectElement;
-    const firstOption = within(selector).getByRole("option", { name: /@callie\.the\.weenie · 最高 · 已发送待回复/ });
-    expect(firstOption).toHaveTextContent("@callie.the.weenie · 最高 · 已发送待回复");
+    const firstOption = within(selector).getByRole("option", {
+      name: /@callie\.the\.weenie · 最高 · 已发送待回复/,
+    });
+    expect(firstOption).toHaveTextContent(
+      "@callie.the.weenie · 最高 · 已发送待回复",
+    );
     expect(firstOption).not.toHaveTextContent(longProduct);
     expect(firstOption).not.toHaveTextContent("发送第一次拍摄跟进");
     expect(firstOption).not.toHaveTextContent(longActionStatus);
 
     await user.selectOptions(selector, "compact-b");
-    expect(selector.selectedOptions[0].textContent).toBe("@happyfeet111 · 中 · 待跟进");
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("happyfeet111");
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("另一个产品");
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("Invited");
-    expect((screen.getByLabelText("英文话术") as HTMLTextAreaElement).value).toContain("happyfeet111");
+    expect(selector.selectedOptions[0].textContent).toBe(
+      "@happyfeet111 · 中 · 待跟进",
+    );
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "happyfeet111",
+    );
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "另一个产品",
+    );
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "Invited",
+    );
+    expect(
+      (screen.getByLabelText("英文话术") as HTMLTextAreaElement).value,
+    ).toContain("happyfeet111");
 
     await user.click(screen.getByRole("button", { name: "展开达人队列" }));
     const search = screen.getByLabelText("搜索队列");
     await user.clear(search);
     await user.type(search, "Grooming Extra Long");
-    expect(within(screen.getByTestId("creator-queue")).getByText(/@callie\.the\.weenie/)).toBeInTheDocument();
-    expect(within(screen.getByTestId("creator-queue")).queryByText(/@happyfeet111/)).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("creator-queue")).getByText(
+        /@callie\.the\.weenie/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("creator-queue")).queryByText(/@happyfeet111/),
+    ).not.toBeInTheDocument();
   });
 
   it("shows short priority reason in the current creator panel", async () => {
@@ -1608,8 +1905,12 @@ describe("templates, follow-up, samples, review, and ads modules", () => {
     render(<App />);
     await goTo(user, /达人跟进中心/);
 
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("优先级原因");
-    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent("达人已回复，等待处理。");
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "优先级原因",
+    );
+    expect(screen.getByTestId("current-creator-panel")).toHaveTextContent(
+      "达人已回复，等待处理。",
+    );
   });
 
   it("generates follow-up copy and marks a message as sent", async () => {
@@ -2184,156 +2485,563 @@ describe("settings and prompt helper", () => {
     );
   });
 
-
   it("uses a store selector for campaigns and allows multiple products under the same store", async () => {
     const user = userEvent.setup();
-    seedCreators([creatorRow({ id: "linked-row", storeId: "terrapaw", storeName: "TerraPaw", product: "Pet Brush", campaignId: "pet-brush" })]);
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      { id: "pet-brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "cat-toy-wand", storeId: "terrapaw", storeName: "TerraPaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "cat-toy-wand", storeId: "pinepaw", storeName: "PinePaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-    ]));
+    seedCreators([
+      creatorRow({
+        id: "linked-row",
+        storeId: "terrapaw",
+        storeName: "TerraPaw",
+        product: "Pet Brush",
+        campaignId: "pet-brush",
+      }),
+    ]);
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "pet-brush",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Pet Brush",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+        {
+          id: "cat-toy-wand",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Cat Toy Wand",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+        {
+          id: "cat-toy-wand",
+          storeId: "pinepaw",
+          storeName: "PinePaw",
+          productName: "Cat Toy Wand",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
 
     render(<App />);
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terrapaw" } });
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
+      target: { value: "terrapaw" },
+    });
     await goTo(user, /设置/);
 
     const form = within(screen.getByTestId("campaign-settings-form"));
     expect(form.getByLabelText("店铺 / 品牌")).toHaveValue("terrapaw");
     expect(form.getByLabelText("店铺 / 品牌").tagName).toBe("SELECT");
-    expect(screen.queryByText("该店铺 / 品牌名称已存在，请换一个名称。")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("当前产品项目")).toHaveTextContent("Pet Brush");
-    expect(screen.getByLabelText("当前产品项目")).toHaveTextContent("Cat Toy Wand");
+    expect(
+      screen.queryByText("该店铺 / 品牌名称已存在，请换一个名称。"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前产品项目")).toHaveTextContent(
+      "Pet Brush",
+    );
+    expect(screen.getByLabelText("当前产品项目")).toHaveTextContent(
+      "Cat Toy Wand",
+    );
   });
 
   it("validates duplicate product names only within the selected store", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      { id: "brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "wand", storeId: "terrapaw", storeName: "TerraPaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "pine-wand", storeId: "pinepaw", storeName: "PinePaw", productName: "Cat Toy Wand", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "brush",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Pet Brush",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+        {
+          id: "wand",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Cat Toy Wand",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+        {
+          id: "pine-wand",
+          storeId: "pinepaw",
+          storeName: "PinePaw",
+          productName: "Cat Toy Wand",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
 
     render(<App />);
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terrapaw" } });
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
+      target: { value: "terrapaw" },
+    });
     await goTo(user, /设置/);
 
-    fireEvent.change(within(screen.getByTestId("campaign-settings-form")).getByLabelText("产品名称"), { target: { value: "Cat Toy Wand" } });
-    expect(screen.getByRole("status")).toHaveTextContent("当前店铺下已存在同名产品，请换一个产品名称。");
-    expect(screen.queryByText("该店铺 / 品牌名称已存在，请换一个名称。")).not.toBeInTheDocument();
+    fireEvent.change(
+      within(screen.getByTestId("campaign-settings-form")).getByLabelText(
+        "产品名称",
+      ),
+      { target: { value: "Cat Toy Wand" } },
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "当前店铺下已存在同名产品，请换一个产品名称。",
+    );
+    expect(
+      screen.queryByText("该店铺 / 品牌名称已存在，请换一个名称。"),
+    ).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "pinepaw" } });
-    await waitFor(() => expect(screen.getByLabelText("当前产品项目")).toHaveTextContent("Cat Toy Wand"));
-    expect(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌")).toHaveValue("pinepaw");
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
+      target: { value: "pinepaw" },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("当前产品项目")).toHaveTextContent(
+        "Cat Toy Wand",
+      ),
+    );
+    expect(
+      within(screen.getByTestId("campaign-settings-form")).getByLabelText(
+        "店铺 / 品牌",
+      ),
+    ).toHaveValue("pinepaw");
   });
-
 
   it("moves a campaign to another store and keeps linked creator history", async () => {
     const user = userEvent.setup();
-    seedCreators([creatorRow({ id: "wrong-row", storeId: "terra-pa-w", storeName: "Terra pa w", product: "Pet Dental Wipes", campaignId: "pet-dental-wipes", sampleShippingStatus: "Shipped", videoProgress: "1/2", notes: "keep note", trackingStatus: "Completed", archivedAt: "2026-06-10" })]);
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      { id: "pet-dental-wipes", storeId: "terra-pa-w", storeName: "Terra pa w", productName: "Pet Dental Wipes", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "pet-brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-    ]));
+    seedCreators([
+      creatorRow({
+        id: "wrong-row",
+        storeId: "terra-pa-w",
+        storeName: "Terra pa w",
+        product: "Pet Dental Wipes",
+        campaignId: "pet-dental-wipes",
+        sampleShippingStatus: "Shipped",
+        videoProgress: "1/2",
+        notes: "keep note",
+        trackingStatus: "Completed",
+        archivedAt: "2026-06-10",
+      }),
+    ]);
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "pet-dental-wipes",
+          storeId: "terra-pa-w",
+          storeName: "Terra pa w",
+          productName: "Pet Dental Wipes",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+        {
+          id: "pet-brush",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Pet Brush",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
 
     render(<App />);
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terra-pa-w" } });
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
+      target: { value: "terra-pa-w" },
+    });
     await goTo(user, /设置/);
-    fireEvent.change(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌"), { target: { value: "terrapaw" } });
+    fireEvent.change(
+      within(screen.getByTestId("campaign-settings-form")).getByLabelText(
+        "店铺 / 品牌",
+      ),
+      { target: { value: "terrapaw" } },
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent("迁移 1 条达人记录");
-    const rows = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]");
-    expect(rows[0]).toEqual(expect.objectContaining({ storeId: "terrapaw", storeName: "TerraPaw", campaignId: "pet-dental-wipes", product: "Pet Dental Wipes", sampleShippingStatus: "Shipped", videoProgress: "1/2", notes: "keep note", trackingStatus: "Completed", archivedAt: "2026-06-10" }));
+    const rows = JSON.parse(
+      window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+    );
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        storeId: "terrapaw",
+        storeName: "TerraPaw",
+        campaignId: "pet-dental-wipes",
+        product: "Pet Dental Wipes",
+        sampleShippingStatus: "Shipped",
+        videoProgress: "1/2",
+        notes: "keep note",
+        trackingStatus: "Completed",
+        archivedAt: "2026-06-10",
+      }),
+    );
   });
 
   it("merges duplicate product campaigns across stores after confirmation without overwriting target requirements", async () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    seedCreators([creatorRow({ id: "wrong-row", storeId: "terra-pa-w", storeName: "Terra pa w", product: "Pet Dental Wipes", campaignId: "wrong-dental", sampleShippingStatus: "Delivered", videoProgress: "1/2", notes: "preserve note", trackingStatus: "Completed", lastContactDate: "2026-06-20", followUpHistory: [{ date: "2026-06-20", action: "Message Sent", scenario: "Follow-up", channel: "TikTok DM", message: "ping" }] })]);
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      { id: "wrong-dental", storeId: "terra-pa-w", storeName: "Terra pa w", productName: "Pet Dental Wipes", sellingPoints: "source only", requirements: ["source requirement"], keyContentPoints: ["source shot"], avoidShots: "", videoCount: "3", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "target-dental", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Dental Wipes", sellingPoints: "target", requirements: ["target requirement"], keyContentPoints: ["target shot"], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-    ]));
+    seedCreators([
+      creatorRow({
+        id: "wrong-row",
+        storeId: "terra-pa-w",
+        storeName: "Terra pa w",
+        product: "Pet Dental Wipes",
+        campaignId: "wrong-dental",
+        sampleShippingStatus: "Delivered",
+        videoProgress: "1/2",
+        notes: "preserve note",
+        trackingStatus: "Completed",
+        lastContactDate: "2026-06-20",
+        followUpHistory: [
+          {
+            date: "2026-06-20",
+            action: "Message Sent",
+            scenario: "Follow-up",
+            channel: "TikTok DM",
+            message: "ping",
+          },
+        ],
+      }),
+    ]);
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "wrong-dental",
+          storeId: "terra-pa-w",
+          storeName: "Terra pa w",
+          productName: "Pet Dental Wipes",
+          sellingPoints: "source only",
+          requirements: ["source requirement"],
+          keyContentPoints: ["source shot"],
+          avoidShots: "",
+          videoCount: "3",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+        {
+          id: "target-dental",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Pet Dental Wipes",
+          sellingPoints: "target",
+          requirements: ["target requirement"],
+          keyContentPoints: ["target shot"],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
 
     render(<App />);
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terra-pa-w" } });
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
+      target: { value: "terra-pa-w" },
+    });
     await goTo(user, /设置/);
-    fireEvent.change(within(screen.getByTestId("campaign-settings-form")).getByLabelText("店铺 / 品牌"), { target: { value: "terrapaw" } });
+    fireEvent.change(
+      within(screen.getByTestId("campaign-settings-form")).getByLabelText(
+        "店铺 / 品牌",
+      ),
+      { target: { value: "terrapaw" } },
+    );
 
-    expect(confirm).toHaveBeenCalledWith("目标店铺下已存在同名产品。是否将当前产品及其达人记录合并到目标产品？");
-    expect(screen.getByRole("status")).toHaveTextContent("已将 1 条达人记录合并到 TerraPaw · Pet Dental Wipes");
+    expect(confirm).toHaveBeenCalledWith(
+      "目标店铺下已存在同名产品。是否将当前产品及其达人记录合并到目标产品？",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "已将 1 条达人记录合并到 TerraPaw · Pet Dental Wipes",
+    );
     expect(screen.getByRole("status")).toHaveTextContent("已保留目标产品配置");
-    const rows = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]");
-    expect(rows[0]).toEqual(expect.objectContaining({ storeId: "terrapaw", storeName: "TerraPaw", campaignId: "target-dental", product: "Pet Dental Wipes", sampleShippingStatus: "Delivered", videoProgress: "1/2", notes: "preserve note", trackingStatus: "Completed", lastContactDate: "2026-06-20" }));
+    const rows = JSON.parse(
+      window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+    );
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        storeId: "terrapaw",
+        storeName: "TerraPaw",
+        campaignId: "target-dental",
+        product: "Pet Dental Wipes",
+        sampleShippingStatus: "Delivered",
+        videoProgress: "1/2",
+        notes: "preserve note",
+        trackingStatus: "Completed",
+        lastContactDate: "2026-06-20",
+      }),
+    );
     expect(rows[0].followUpHistory).toHaveLength(1);
-    const campaigns = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
-    expect(campaigns).toContainEqual(expect.objectContaining({ id: "target-dental", requirements: ["target requirement"], keyContentPoints: ["target shot"] }));
-    expect(campaigns).toContainEqual(expect.objectContaining({ id: "wrong-dental", archivedAt: expect.any(String) }));
+    const campaigns = JSON.parse(
+      window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]",
+    );
+    expect(campaigns).toContainEqual(
+      expect.objectContaining({
+        id: "target-dental",
+        requirements: ["target requirement"],
+        keyContentPoints: ["target shot"],
+      }),
+    );
+    expect(campaigns).toContainEqual(
+      expect.objectContaining({
+        id: "wrong-dental",
+        archivedAt: expect.any(String),
+      }),
+    );
   });
-
 
   it("hides empty archived typo stores from the top selector unless archived products are shown", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      { id: "wrong-dental", storeId: "terra-pa-w", storeName: "Terra pa w", productName: "Pet Dental Wipes", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "", archivedAt: "2026-06-22" },
-      { id: "target-dental", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Dental Wipes", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "wrong-dental",
+          storeId: "terra-pa-w",
+          storeName: "Terra pa w",
+          productName: "Pet Dental Wipes",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+          archivedAt: "2026-06-22",
+        },
+        {
+          id: "target-dental",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Pet Dental Wipes",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
 
     render(<App />);
-    expect(screen.getByLabelText("当前店铺 / 品牌")).not.toHaveTextContent("Terra pa w");
+    expect(screen.getByLabelText("当前店铺 / 品牌")).not.toHaveTextContent(
+      "Terra pa w",
+    );
     await goTo(user, /设置/);
     await user.click(screen.getByLabelText("显示已归档产品"));
-    expect(screen.getByLabelText("当前店铺 / 品牌")).toHaveTextContent("Terra pa w");
+    expect(screen.getByLabelText("当前店铺 / 品牌")).toHaveTextContent(
+      "Terra pa w",
+    );
   });
 
   it("creates new campaigns under the current store and requires a store in all-store view", async () => {
     const user = userEvent.setup();
     const prompt = vi.spyOn(window, "prompt");
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      { id: "brush", storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-      { id: "pine-brush", storeId: "pinepaw", storeName: "PinePaw", productName: "Pet Brush", sellingPoints: "", requirements: [], keyContentPoints: [], avoidShots: "", videoCount: "2", videoLength: "", tagRequirement: "", productLink: "", referenceLinks: [], defaultMessageSetting: "", notes: "" },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "brush",
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Pet Brush",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+        {
+          id: "pine-brush",
+          storeId: "pinepaw",
+          storeName: "PinePaw",
+          productName: "Pet Brush",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
 
     render(<App />);
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "terrapaw" } });
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
+      target: { value: "terrapaw" },
+    });
     await goTo(user, /设置/);
     prompt.mockReturnValueOnce("Pet Ear Finger Wipes");
     await user.click(screen.getByRole("button", { name: "新增产品" }));
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]");
-      expect(saved).toContainEqual(expect.objectContaining({ storeId: "terrapaw", storeName: "TerraPaw", productName: "Pet Ear Finger Wipes" }));
+      const saved = JSON.parse(
+        window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]",
+      );
+      expect(saved).toContainEqual(
+        expect.objectContaining({
+          storeId: "terrapaw",
+          storeName: "TerraPaw",
+          productName: "Pet Ear Finger Wipes",
+        }),
+      );
     });
 
-    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), { target: { value: "ALL_STORES" } });
-    prompt.mockReturnValueOnce("Cat Scratching Patches").mockReturnValueOnce("Missing Store");
+    fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
+      target: { value: "ALL_STORES" },
+    });
+    prompt
+      .mockReturnValueOnce("Cat Scratching Patches")
+      .mockReturnValueOnce("Missing Store");
     await user.click(screen.getByRole("button", { name: "新增产品" }));
-    expect(screen.getByRole("status")).toHaveTextContent("创建产品前必须选择已有店铺 / 品牌。");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "创建产品前必须选择已有店铺 / 品牌。",
+    );
   });
 
   it("migrates missing storeId data and stays usable when selected campaign lookup is missing", async () => {
     const user = userEvent.setup();
-    seedCreators([creatorRow({ id: "legacy", storeId: undefined, storeName: undefined, product: "Legacy Product" })]);
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([{
-      id: "legacy-product",
-      storeName: undefined,
-      productName: "Legacy Product",
-      sellingPoints: "",
-      requirements: [],
-      keyContentPoints: [],
-      avoidShots: "",
-      videoCount: "2",
-      videoLength: "",
-      tagRequirement: "",
-      productLink: "",
-      referenceLinks: [],
-      defaultMessageSetting: "",
-      notes: "",
-    }]));
+    seedCreators([
+      creatorRow({
+        id: "legacy",
+        storeId: undefined,
+        storeName: undefined,
+        product: "Legacy Product",
+      }),
+    ]);
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "legacy-product",
+          storeName: undefined,
+          productName: "Legacy Product",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "2",
+          videoLength: "",
+          tagRequirement: "",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
 
     render(<App />);
-    fireEvent.change(screen.getByLabelText("当前产品项目"), { target: { value: "missing-store::missing-campaign" } });
-    expect(await screen.findByText(/当前产品项目不存在或不属于当前店铺/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("当前产品项目"), {
+      target: { value: "missing-store::missing-campaign" },
+    });
+    expect(
+      await screen.findByText(/当前产品项目不存在或不属于当前店铺/),
+    ).toBeInTheDocument();
     await goTo(user, /达人数据库/);
     expect(screen.getByDisplayValue("默认店铺")).toBeInTheDocument();
     expect(screen.getByText("Legacy Product")).toBeInTheDocument();
@@ -2343,21 +3051,23 @@ describe("settings and prompt helper", () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       CAMPAIGNS_STORAGE_KEY,
-      JSON.stringify([{
-        id: "蒸汽梳毛器",
-        productName: "蒸汽梳毛器",
-        sellingPoints: "",
-        requirements: ["每位达人 2 条视频"],
-        keyContentPoints: ["展示雾化功能"],
-        avoidShots: "",
-        videoCount: "每位达人 2 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: ["https://tiktok.com/prefill-reference"],
-        defaultMessageSetting: "",
-        notes: "",
-      }]),
+      JSON.stringify([
+        {
+          id: "蒸汽梳毛器",
+          productName: "蒸汽梳毛器",
+          sellingPoints: "",
+          requirements: ["每位达人 2 条视频"],
+          keyContentPoints: ["展示雾化功能"],
+          avoidShots: "",
+          videoCount: "每位达人 2 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: ["https://tiktok.com/prefill-reference"],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
     );
 
     render(<App />);
@@ -2382,7 +3092,10 @@ describe("settings and prompt helper", () => {
     render(<App />);
     await goTo(user, /设置/);
     await user.click(screen.getByRole("button", { name: "展开辅助生成" }));
-    await user.type(screen.getAllByLabelText("产品卖点").slice(-1)[0] as HTMLElement, "静音循环水");
+    await user.type(
+      screen.getAllByLabelText("产品卖点").slice(-1)[0] as HTMLElement,
+      "静音循环水",
+    );
     await user.click(screen.getByRole("button", { name: "生成可复制提示词" }));
 
     const prompt = screen.getByLabelText("ChatGPT 提示词");
@@ -2399,7 +3112,9 @@ describe("settings and prompt helper", () => {
   it("clears local creator data from Settings", async () => {
     const user = userEvent.setup();
     seedCreators([creatorRow({ id: "alpha", username: "alpha_creator" })]);
-    vi.spyOn(window, "prompt").mockReturnValueOnce("").mockReturnValueOnce("智能宠物饮水机");
+    vi.spyOn(window, "prompt")
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce("智能宠物饮水机");
 
     render(<App />);
     await goTo(user, /设置/);
@@ -2415,38 +3130,70 @@ describe("settings and prompt helper", () => {
 
   it("syncs product video count to creator progress and shows database ledger counts", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "cat-patches",
-        productName: "Cat Scratching Patches",
-        sellingPoints: "",
-        requirements: ["每位达人 1 条视频"],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "每位达人 1 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "cat-patches",
+          productName: "Cat Scratching Patches",
+          sellingPoints: "",
+          requirements: ["每位达人 1 条视频"],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "每位达人 1 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
-      creatorRow({ id: "safe", username: "safe_creator", product: "Cat Scratching Patches", videoProgress: "0/2" }),
-      creatorRow({ id: "posted", username: "posted_creator", product: "Cat Scratching Patches", videoProgress: "1/2", firstVideoPostedDate: "2026-06-10" }),
-      creatorRow({ id: "done", username: "done_creator", product: "Cat Scratching Patches", videoProgress: "1/1", currentStatus: "Completed", trackingStatus: "合作完成", archivedAt: "2026-06-11", archiveReason: "Completed" }),
+      creatorRow({
+        id: "safe",
+        username: "safe_creator",
+        product: "Cat Scratching Patches",
+        videoProgress: "0/2",
+      }),
+      creatorRow({
+        id: "posted",
+        username: "posted_creator",
+        product: "Cat Scratching Patches",
+        videoProgress: "1/2",
+        firstVideoPostedDate: "2026-06-10",
+      }),
+      creatorRow({
+        id: "done",
+        username: "done_creator",
+        product: "Cat Scratching Patches",
+        videoProgress: "1/1",
+        currentStatus: "Completed",
+        trackingStatus: "合作完成",
+        archivedAt: "2026-06-11",
+        archiveReason: "Completed",
+      }),
     ]);
 
     render(<App />);
     await goTo(user, /设置/);
-    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "default-store::cat-patches");
-    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+    await user.selectOptions(
+      screen.getByLabelText("选择产品 / Campaign"),
+      "default-store::cat-patches",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "同步视频数量到达人记录" }),
+    );
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       expect(saved.find((row) => row.id === "safe")?.videoProgress).toBe("0/1");
-      expect(saved.find((row) => row.id === "posted")?.videoProgress).toBe("1/1");
+      expect(saved.find((row) => row.id === "posted")?.videoProgress).toBe(
+        "1/1",
+      );
       expect(saved.find((row) => row.id === "done")?.videoProgress).toBe("1/1");
     });
 
@@ -2457,40 +3204,54 @@ describe("settings and prompt helper", () => {
     expect(screen.getByText("已归档合作：1")).toBeInTheDocument();
   });
 
-
   it("syncs immediately edited campaign video count 1 instead of stale fallback 2", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "cat-patches",
-        productName: "Cat Scratching Patches",
-        sellingPoints: "",
-        requirements: ["每位达人 2 条视频"],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "每位达人 2 条视频",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "cat-patches",
+          productName: "Cat Scratching Patches",
+          sellingPoints: "",
+          requirements: ["每位达人 2 条视频"],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "每位达人 2 条视频",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
-      creatorRow({ id: "safe", username: "safe_creator", product: "Cat Scratching Patches", videoProgress: "0/2" }),
+      creatorRow({
+        id: "safe",
+        username: "safe_creator",
+        product: "Cat Scratching Patches",
+        videoProgress: "0/2",
+      }),
     ]);
 
     render(<App />);
     await goTo(user, /设置/);
-    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "default-store::cat-patches");
+    await user.selectOptions(
+      screen.getByLabelText("选择产品 / Campaign"),
+      "default-store::cat-patches",
+    );
     const videoCountInput = screen.getByLabelText("视频数量要求");
     await user.clear(videoCountInput);
     await user.type(videoCountInput, "1");
-    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+    await user.click(
+      screen.getByRole("button", { name: "同步视频数量到达人记录" }),
+    );
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
       expect(saved.find((row) => row.id === "safe")?.videoProgress).toBe("0/1");
     });
     expect(screen.getByRole("status")).toHaveTextContent("目标视频数量：1");
@@ -2502,53 +3263,101 @@ describe("settings and prompt helper", () => {
 
   it("matches sync rows by campaignId before product fallback and preserves over-delivered counts", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(CAMPAIGNS_STORAGE_KEY, JSON.stringify([
-      {
-        id: "cat-patches-stable",
-        productName: "Cat Scratching Patches",
-        sellingPoints: "",
-        requirements: [],
-        keyContentPoints: [],
-        avoidShots: "",
-        videoCount: "1",
-        videoLength: "",
-        tagRequirement: "必须挂 TikTok Shop 产品链接",
-        productLink: "",
-        referenceLinks: [],
-        defaultMessageSetting: "",
-        notes: "",
-      },
-    ]));
+    window.localStorage.setItem(
+      CAMPAIGNS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "cat-patches-stable",
+          productName: "Cat Scratching Patches",
+          sellingPoints: "",
+          requirements: [],
+          keyContentPoints: [],
+          avoidShots: "",
+          videoCount: "1",
+          videoLength: "",
+          tagRequirement: "必须挂 TikTok Shop 产品链接",
+          productLink: "",
+          referenceLinks: [],
+          defaultMessageSetting: "",
+          notes: "",
+        },
+      ]),
+    );
     seedCreators([
-      { ...creatorRow({ id: "stable-match", username: "stable_creator", product: "Old Display Name", videoProgress: "0/2" }), campaignId: "cat-patches-stable" } as CreatorRow,
-      creatorRow({ id: "preserve", username: "preserve_creator", product: "Cat Scratching Patches", videoProgress: "1/2" }),
-      creatorRow({ id: "invalid", username: "invalid_creator", product: "Cat Scratching Patches", videoProgress: "2/2" }),
+      {
+        ...creatorRow({
+          id: "stable-match",
+          username: "stable_creator",
+          product: "Old Display Name",
+          videoProgress: "0/2",
+        }),
+        campaignId: "cat-patches-stable",
+      } as CreatorRow,
+      creatorRow({
+        id: "preserve",
+        username: "preserve_creator",
+        product: "Cat Scratching Patches",
+        videoProgress: "1/2",
+      }),
+      creatorRow({
+        id: "invalid",
+        username: "invalid_creator",
+        product: "Cat Scratching Patches",
+        videoProgress: "2/2",
+      }),
     ]);
 
     render(<App />);
     await goTo(user, /设置/);
-    await user.selectOptions(screen.getByLabelText("选择产品 / Campaign"), "default-store::cat-patches-stable");
-    await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+    await user.selectOptions(
+      screen.getByLabelText("选择产品 / Campaign"),
+      "default-store::cat-patches-stable",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "同步视频数量到达人记录" }),
+    );
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
-      expect(saved.find((row) => row.id === "stable-match")?.videoProgress).toBe("0/1");
-      expect(saved.find((row) => row.id === "preserve")?.videoProgress).toBe("1/1");
-      expect(saved.find((row) => row.id === "invalid")?.videoProgress).toBe("2/1");
-      expect(saved.find((row) => row.id === "invalid")?.videoProgressWarning).toBe("超额发布");
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      expect(
+        saved.find((row) => row.id === "stable-match")?.videoProgress,
+      ).toBe("0/1");
+      expect(saved.find((row) => row.id === "preserve")?.videoProgress).toBe(
+        "1/1",
+      );
+      expect(saved.find((row) => row.id === "invalid")?.videoProgress).toBe(
+        "2/1",
+      );
+      expect(
+        saved.find((row) => row.id === "invalid")?.videoProgressWarning,
+      ).toBe("超额发布");
     });
     expect(screen.getByRole("status")).toHaveTextContent("目标视频数量：1");
     expect(screen.getByRole("status")).toHaveTextContent("已同步 3 条达人记录");
-    expect(screen.getByRole("status")).toHaveTextContent("保留 2 条已有发布进度");
-    expect(screen.getByRole("status")).toHaveTextContent("跳过 0 条需要手动检查");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "保留 2 条已有发布进度",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "跳过 0 条需要手动检查",
+    );
   });
 
   it("keeps completed and failed collaborations in the Creator Database, hides them from today queue, and searches archived rows", async () => {
     vi.setSystemTime(new Date("2026-06-11T10:00:00Z"));
     const user = userEvent.setup();
     seedCreators([
-      creatorRow({ id: "complete", username: "complete_creator", product: "Pet Brush" }),
-      creatorRow({ id: "fail", username: "fail_creator", product: "Pet Brush" }),
+      creatorRow({
+        id: "complete",
+        username: "complete_creator",
+        product: "Pet Brush",
+      }),
+      creatorRow({
+        id: "fail",
+        username: "fail_creator",
+        product: "Pet Brush",
+      }),
     ]);
 
     render(<App />);
@@ -2559,23 +3368,40 @@ describe("settings and prompt helper", () => {
     await user.click(screen.getAllByRole("button", { name: "合作失败" })[0]);
 
     await waitFor(() => {
-      const saved = JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[];
-      expect(saved.find((row) => row.id === "complete")?.trackingStatus).toBe("合作完成");
-      expect(saved.find((row) => row.id === "fail")?.trackingStatus).toBe("合作失败");
+      const saved = JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[];
+      expect(saved.find((row) => row.id === "complete")?.trackingStatus).toBe(
+        "合作完成",
+      );
+      expect(saved.find((row) => row.id === "fail")?.trackingStatus).toBe(
+        "合作失败",
+      );
       expect(saved).toHaveLength(2);
     });
-    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain("complete_creator");
-    expect(screen.queryByTestId("creator-queue")?.textContent ?? "").not.toContain("fail_creator");
+    expect(
+      screen.queryByTestId("creator-queue")?.textContent ?? "",
+    ).not.toContain("complete_creator");
+    expect(
+      screen.queryByTestId("creator-queue")?.textContent ?? "",
+    ).not.toContain("fail_creator");
 
     await goTo(user, /达人数据库/);
     await user.type(screen.getByLabelText("搜索"), "complete_creator");
-    expect(screen.getByText("该达人存在于已归档合作中，可开启显示已归档合作查看。")).toBeInTheDocument();
+    expect(
+      screen.getByText("该达人存在于已归档合作中，可开启显示已归档合作查看。"),
+    ).toBeInTheDocument();
     await user.click(screen.getAllByLabelText("显示已归档合作")[0]);
-    expect(screen.getAllByDisplayValue("complete_creator").length).toBeGreaterThan(1);
+    expect(
+      screen.getAllByDisplayValue("complete_creator").length,
+    ).toBeGreaterThan(1);
 
-    const csv = creatorRowsToCsv(JSON.parse(window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]") as CreatorRow[]);
+    const csv = creatorRowsToCsv(
+      JSON.parse(
+        window.localStorage.getItem(CREATOR_ROWS_STORAGE_KEY) ?? "[]",
+      ) as CreatorRow[],
+    );
     expect(csv).toContain("complete_creator");
     expect(csv).toContain("fail_creator");
   });
-
 });

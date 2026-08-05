@@ -241,4 +241,3 @@ Only one business hook is extracted per PR. If Stage 1 sufficiently improves saf
 - **Stale static-analysis results:** verify JSX references in source and tests before treating code as unused.
 - **Merge conflicts:** start each PR from the latest `main` and merge sequentially.
 - **Local Node.js differences:** use the Node.js 22 CI result as the required verification environment.
-

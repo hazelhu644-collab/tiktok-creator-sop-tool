@@ -147,14 +147,18 @@ export function CampaignSettingsPage({
               视频时长要求
               <input
                 value={target.campaign.videoLength}
-                onChange={(event) => actions.updateVideoLength(event.target.value)}
+                onChange={(event) =>
+                  actions.updateVideoLength(event.target.value)
+                }
               />
             </label>
             <label>
               视频数量要求
               <input
                 value={target.campaign.videoCount}
-                onChange={(event) => actions.updateVideoCount(event.target.value)}
+                onChange={(event) =>
+                  actions.updateVideoCount(event.target.value)
+                }
               />
             </label>
             <div className="inline-actions">
@@ -173,7 +177,9 @@ export function CampaignSettingsPage({
               不希望达人这样拍
               <textarea
                 value={target.campaign.avoidShots}
-                onChange={(event) => actions.updateAvoidShots(event.target.value)}
+                onChange={(event) =>
+                  actions.updateAvoidShots(event.target.value)
+                }
                 rows={3}
               />
             </label>
@@ -191,7 +197,9 @@ export function CampaignSettingsPage({
               参考视频链接
               <textarea
                 value={target.referenceLinksText}
-                onChange={(event) => actions.updateReferenceLinks(event.target.value)}
+                onChange={(event) =>
+                  actions.updateReferenceLinks(event.target.value)
+                }
                 rows={3}
               />
             </label>

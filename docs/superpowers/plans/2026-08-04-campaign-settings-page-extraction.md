@@ -228,8 +228,12 @@ describe("CampaignSettingsPage", () => {
     expect(form.getByLabelText("Campaign 产品卖点")).toHaveValue(
       "Gentle steam grooming",
     );
-    expect(screen.getByRole("button", { name: "检查店铺：TerraPaw" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "隐藏空店铺：Empty Store" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "检查店铺：TerraPaw" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "隐藏空店铺：Empty Store" }),
+    ).toBeInTheDocument();
   });
 });
 ```
@@ -260,27 +264,27 @@ Create `CampaignSettingsPage.tsx`. It must:
 
 The field mapping is locked:
 
-| Existing UI event | Controlled callback |
-| --- | --- |
-| Campaign select | `actions.selectCampaign(value)` |
-| archived checkbox | `actions.setShowArchivedProducts(checked)` |
-| 新增产品 | `actions.createCampaign()` |
-| 编辑 | `actions.announceEditable()` |
-| 复制 | `actions.duplicateCampaign()` |
-| 归档 | `actions.archiveCampaign()` |
-| 恢复 | `actions.restoreCampaign()` |
-| 删除 | `actions.deleteCampaign()` |
-| 店铺 / 品牌 | `actions.assignStore(value)` |
-| 产品名称 | `actions.renameProduct(value)` |
-| 必须展示内容 | `actions.updateKeyContentPoints(value)` |
-| 产品卖点 | `actions.updateSellingPoints(value)` |
-| 视频时长要求 | `actions.updateVideoLength(value)` |
-| 视频数量要求 | `actions.updateVideoCount(value)` |
-| 同步视频数量 | `actions.syncVideoCount()` |
-| 不希望达人这样拍 | `actions.updateAvoidShots(value)` |
-| 挂车要求 | `actions.updateProductLinkRequirement(value)` |
-| 参考视频链接 | `actions.updateReferenceLinks(value)` |
-| store cleanup button | `actions.inspectStore(item.id)` |
+| Existing UI event    | Controlled callback                           |
+| -------------------- | --------------------------------------------- |
+| Campaign select      | `actions.selectCampaign(value)`               |
+| archived checkbox    | `actions.setShowArchivedProducts(checked)`    |
+| 新增产品             | `actions.createCampaign()`                    |
+| 编辑                 | `actions.announceEditable()`                  |
+| 复制                 | `actions.duplicateCampaign()`                 |
+| 归档                 | `actions.archiveCampaign()`                   |
+| 恢复                 | `actions.restoreCampaign()`                   |
+| 删除                 | `actions.deleteCampaign()`                    |
+| 店铺 / 品牌          | `actions.assignStore(value)`                  |
+| 产品名称             | `actions.renameProduct(value)`                |
+| 必须展示内容         | `actions.updateKeyContentPoints(value)`       |
+| 产品卖点             | `actions.updateSellingPoints(value)`          |
+| 视频时长要求         | `actions.updateVideoLength(value)`            |
+| 视频数量要求         | `actions.updateVideoCount(value)`             |
+| 同步视频数量         | `actions.syncVideoCount()`                    |
+| 不希望达人这样拍     | `actions.updateAvoidShots(value)`             |
+| 挂车要求             | `actions.updateProductLinkRequirement(value)` |
+| 参考视频链接         | `actions.updateReferenceLinks(value)`         |
+| store cleanup button | `actions.inspectStore(item.id)`               |
 
 - [ ] **Step 5: Run the rendering test and confirm GREEN**
 
@@ -320,7 +324,9 @@ it("forwards controlled selection, editing, campaign actions, and store checks",
   });
   expect(props.actions.updateVideoCount).toHaveBeenCalledWith("1");
 
-  await user.click(screen.getByRole("button", { name: "同步视频数量到达人记录" }));
+  await user.click(
+    screen.getByRole("button", { name: "同步视频数量到达人记录" }),
+  );
   expect(props.actions.syncVideoCount).toHaveBeenCalledTimes(1);
   await user.click(screen.getByRole("button", { name: "复制" }));
   expect(props.actions.duplicateCampaign).toHaveBeenCalledTimes(1);
@@ -350,8 +356,12 @@ it("preserves archived restore controls and the no-target state", async () => {
       {...createProps({ data: { ...createProps().data, target: null } })}
     />,
   );
-  expect(screen.queryByTestId("campaign-settings-form")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "新增产品" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByTestId("campaign-settings-form"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "新增产品" }),
+  ).not.toBeInTheDocument();
 });
 ```
 
@@ -375,25 +385,24 @@ import type {
 Inside `renderSettings`, retain every existing business helper from `targetCampaign` through `deleteCampaign` byte-for-byte except for formatting required by moved line numbers. After those helpers, derive:
 
 ```tsx
-const campaignSettingsTarget: CampaignSettingsTargetView | null =
-  targetCampaign
-    ? {
-        campaign: targetCampaign,
-        selectValue: campaignSelectValue(targetCampaign),
-        storeId: normalizeStoreId(
-          targetCampaign.storeId,
-          targetCampaign.storeName,
-        ),
-        keyContentPointsText: listToText(targetCampaign.keyContentPoints),
-        productLinkRequirementText: [
-          targetCampaign.tagRequirement,
-          targetCampaign.productLink,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        referenceLinksText: listToText(targetCampaign.referenceLinks),
-      }
-    : null;
+const campaignSettingsTarget: CampaignSettingsTargetView | null = targetCampaign
+  ? {
+      campaign: targetCampaign,
+      selectValue: campaignSelectValue(targetCampaign),
+      storeId: normalizeStoreId(
+        targetCampaign.storeId,
+        targetCampaign.storeName,
+      ),
+      keyContentPointsText: listToText(targetCampaign.keyContentPoints),
+      productLinkRequirementText: [
+        targetCampaign.tagRequirement,
+        targetCampaign.productLink,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      referenceLinksText: listToText(targetCampaign.referenceLinks),
+    }
+  : null;
 
 const campaignSettingsOptions: CampaignSettingsOption[] = activeCampaigns.map(
   (campaign) => ({
@@ -411,7 +420,9 @@ const campaignStoreCleanupItems: CampaignStoreCleanupView[] = stores.map(
         normalizeStoreId(campaign.storeId, campaign.storeName) === store.id &&
         !campaign.archivedAt,
     ).length;
-    const linkedRows = rows.filter((row) => rowStoreId(row) === store.id).length;
+    const linkedRows = rows.filter(
+      (row) => rowStoreId(row) === store.id,
+    ).length;
     return {
       id: store.id,
       name: store.name,
@@ -454,7 +465,8 @@ Render `CampaignSettingsPage` first in the returned fragment. Wire actions exact
       if (targetCampaign) assignCampaignStore(targetCampaign, storeId);
     },
     renameProduct: (productName) => {
-      if (targetCampaign) updateCampaignProductName(targetCampaign, productName);
+      if (targetCampaign)
+        updateCampaignProductName(targetCampaign, productName);
     },
     updateKeyContentPoints: (value) =>
       updateCampaign({ keyContentPoints: normalizeListText(value) }),
@@ -470,7 +482,9 @@ Render `CampaignSettingsPage` first in the returned fragment. Wire actions exact
     updateReferenceLinks: (value) =>
       updateCampaign({ referenceLinks: normalizeListText(value) }),
     inspectStore: (storeId) => {
-      const item = campaignStoreCleanupItems.find((entry) => entry.id === storeId);
+      const item = campaignStoreCleanupItems.find(
+        (entry) => entry.id === storeId,
+      );
       if (!item) return;
       setToast(
         item.canHide

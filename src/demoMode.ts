@@ -52,7 +52,9 @@ function daysAgo(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function demoRow(patch: Partial<CreatorRow> & Pick<CreatorRow, "id">): CreatorRow {
+function demoRow(
+  patch: Partial<CreatorRow> & Pick<CreatorRow, "id">,
+): CreatorRow {
   return {
     username: "",
     profileLink: "",

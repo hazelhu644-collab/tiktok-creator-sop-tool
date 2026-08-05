@@ -1,122 +1,191 @@
-import { describe, expect, it } from 'vitest';
-import { campaignIdentity, campaignIdFromName, campaignToFilmingRequirements, createCampaignFromName, detectCampaignNames, mergeDetectedCampaigns, productIdForCampaign, rowMatchesCampaignIdentity } from './campaignData';
-import { defaultCreatorFilmingRequirements } from './messageGenerator';
-import type { CreatorRow } from './types';
+import { describe, expect, it } from "vitest";
+import {
+  campaignIdentity,
+  campaignIdFromName,
+  campaignToFilmingRequirements,
+  createCampaignFromName,
+  detectCampaignNames,
+  mergeDetectedCampaigns,
+  productIdForCampaign,
+  rowMatchesCampaignIdentity,
+} from "./campaignData";
+import { defaultCreatorFilmingRequirements } from "./messageGenerator";
+import type { CreatorRow } from "./types";
 
-function row(product: string, storeName = '默认店铺', storeId = 'default-store'): CreatorRow {
+function row(
+  product: string,
+  storeName = "默认店铺",
+  storeId = "default-store",
+): CreatorRow {
   return {
-    id: product || 'missing',
+    id: product || "missing",
     username: `creator-${product}`,
-    profileLink: '',
-    contactMethod: 'TikTok DM',
+    profileLink: "",
+    contactMethod: "TikTok DM",
     storeId,
     storeName,
     campaignId: campaignIdFromName(product),
     productId: productIdForCampaign(storeId, campaignIdFromName(product)),
     product,
-    currentStatus: 'Delivered',
-    sampleShippingStatus: 'Delivered',
-    sampleDeliveredDate: '2026-06-01',
-    videoProgress: '0 of 2',
-    firstVideoPostedDate: '',
-    lastContactDate: '',
+    currentStatus: "Delivered",
+    sampleShippingStatus: "Delivered",
+    sampleDeliveredDate: "2026-06-01",
+    videoProgress: "0 of 2",
+    firstVideoPostedDate: "",
+    lastContactDate: "",
     lastFollowUpCount: 0,
-    notes: '',
-    trackingStatus: '',
-    lastMessageScenario: '',
-    lastMessageChannel: '',
-    lastMessageSentAt: '',
-    nextFollowUpDate: '',
-    lastCreatorResponse: '',
+    notes: "",
+    trackingStatus: "",
+    lastMessageScenario: "",
+    lastMessageChannel: "",
+    lastMessageSentAt: "",
+    nextFollowUpDate: "",
+    lastCreatorResponse: "",
     followUpHistory: [],
   };
 }
 
-describe('campaign data helpers', () => {
-  it('detects unique product campaigns from uploaded creator rows', () => {
-    expect(detectCampaignNames([row('宠物蒸汽梳毛器'), row('逗猫棒'), row('宠物蒸汽梳毛器'), row('')]).map((item) => item.productName)).toEqual(['宠物蒸汽梳毛器', '逗猫棒']);
+describe("campaign data helpers", () => {
+  it("detects unique product campaigns from uploaded creator rows", () => {
+    expect(
+      detectCampaignNames([
+        row("宠物蒸汽梳毛器"),
+        row("逗猫棒"),
+        row("宠物蒸汽梳毛器"),
+        row(""),
+      ]).map((item) => item.productName),
+    ).toEqual(["宠物蒸汽梳毛器", "逗猫棒"]);
   });
 
-  it('merges detected products into campaign objects with product-specific presets', () => {
-    const campaigns = mergeDetectedCampaigns([], [row('宠物蒸汽梳毛器'), row('逗猫棒'), row('宠物清洁手套')], defaultCreatorFilmingRequirements);
+  it("merges detected products into campaign objects with product-specific presets", () => {
+    const campaigns = mergeDetectedCampaigns(
+      [],
+      [row("宠物蒸汽梳毛器"), row("逗猫棒"), row("宠物清洁手套")],
+      defaultCreatorFilmingRequirements,
+    );
 
-    expect(campaigns.map((campaign) => campaign.productName)).toEqual(['宠物蒸汽梳毛器', '逗猫棒', '宠物清洁手套']);
-    expect(campaigns.find((campaign) => campaign.productName === '逗猫棒')?.keyContentPoints).toContain('展示猫咪真实互动');
-    expect(campaigns.find((campaign) => campaign.productName === '宠物清洁手套')?.requirements).toContain('每条视频 40 秒以上');
+    expect(campaigns.map((campaign) => campaign.productName)).toEqual([
+      "宠物蒸汽梳毛器",
+      "逗猫棒",
+      "宠物清洁手套",
+    ]);
+    expect(
+      campaigns.find((campaign) => campaign.productName === "逗猫棒")
+        ?.keyContentPoints,
+    ).toContain("展示猫咪真实互动");
+    expect(
+      campaigns.find((campaign) => campaign.productName === "宠物清洁手套")
+        ?.requirements,
+    ).toContain("每条视频 40 秒以上");
   });
 
-  it('scopes same product names by store when merging detected campaigns', () => {
-    const campaigns = mergeDetectedCampaigns([], [
-      row('Pet Dental Wipes', 'TerraPaw', 'terrapaw'),
-      row('Pet Dental Wipes', 'PinePaw', 'pinepaw'),
-    ], defaultCreatorFilmingRequirements);
+  it("scopes same product names by store when merging detected campaigns", () => {
+    const campaigns = mergeDetectedCampaigns(
+      [],
+      [
+        row("Pet Dental Wipes", "TerraPaw", "terrapaw"),
+        row("Pet Dental Wipes", "PinePaw", "pinepaw"),
+      ],
+      defaultCreatorFilmingRequirements,
+    );
 
     expect(campaigns).toHaveLength(2);
-    expect(campaigns.map((campaign) => campaignIdentity(campaign.storeId!, campaign.id)).sort()).toEqual([
-      'pinepaw::pet-dental-wipes',
-      'terrapaw::pet-dental-wipes',
-    ]);
-    expect(new Set(campaigns.map((campaign) => campaign.productId)).size).toBe(2);
-    expect(campaigns.every((campaign) => Boolean(campaign.productId))).toBe(true);
+    expect(
+      campaigns
+        .map((campaign) => campaignIdentity(campaign.storeId!, campaign.id))
+        .sort(),
+    ).toEqual(["pinepaw::pet-dental-wipes", "terrapaw::pet-dental-wipes"]);
+    expect(new Set(campaigns.map((campaign) => campaign.productId)).size).toBe(
+      2,
+    );
+    expect(campaigns.every((campaign) => Boolean(campaign.productId))).toBe(
+      true,
+    );
   });
 
-  it('uses stable ids instead of a matching product name when a row has explicit identity', () => {
+  it("uses stable ids instead of a matching product name when a row has explicit identity", () => {
     const campaign = {
-      ...createCampaignFromName('Pet Brush', defaultCreatorFilmingRequirements, 'TerraPaw', 'terrapaw'),
-      id: 'campaign-a',
-      productId: 'product-a',
+      ...createCampaignFromName(
+        "Pet Brush",
+        defaultCreatorFilmingRequirements,
+        "TerraPaw",
+        "terrapaw",
+      ),
+      id: "campaign-a",
+      productId: "product-a",
     };
     const otherCampaignRow = {
-      ...row('Pet Brush', 'TerraPaw', 'terrapaw'),
-      campaignId: 'campaign-b',
-      productId: 'product-b',
+      ...row("Pet Brush", "TerraPaw", "terrapaw"),
+      campaignId: "campaign-b",
+      productId: "product-b",
     };
 
     expect(rowMatchesCampaignIdentity(otherCampaignRow, campaign)).toBe(false);
   });
 
-  it('converts a campaign into isolated filming requirements for message generation', () => {
-    const campaign = createCampaignFromName('逗猫棒', defaultCreatorFilmingRequirements);
-    const requirements = campaignToFilmingRequirements({ ...campaign, referenceLinks: ['https://example.com/cat'] }, defaultCreatorFilmingRequirements);
+  it("converts a campaign into isolated filming requirements for message generation", () => {
+    const campaign = createCampaignFromName(
+      "逗猫棒",
+      defaultCreatorFilmingRequirements,
+    );
+    const requirements = campaignToFilmingRequirements(
+      { ...campaign, referenceLinks: ["https://example.com/cat"] },
+      defaultCreatorFilmingRequirements,
+    );
 
-    expect(requirements.productName).toBe('逗猫棒');
-    expect(requirements.keyContentPoints).toContain('展示逗猫棒弹性');
-    expect(requirements.referenceLinks).toEqual(['https://example.com/cat']);
+    expect(requirements.productName).toBe("逗猫棒");
+    expect(requirements.keyContentPoints).toContain("展示逗猫棒弹性");
+    expect(requirements.referenceLinks).toEqual(["https://example.com/cat"]);
   });
-  it('keeps the eight campaign filming fields independent per product', () => {
-    const petBrush = createCampaignFromName('Pet Brush', defaultCreatorFilmingRequirements);
-    const catWand = createCampaignFromName('Cat Wand', defaultCreatorFilmingRequirements);
-    petBrush.keyContentPoints = ['show brushing scene'];
-    petBrush.sellingPoints = 'removes loose fur';
-    petBrush.videoLength = '45 seconds+';
-    petBrush.videoCount = '2 videos';
-    petBrush.avoidShots = 'do not show unsafe use';
-    petBrush.tagRequirement = 'attach product link';
-    petBrush.referenceLinks = ['https://example.com/brush'];
-    catWand.keyContentPoints = ['show cat jumping'];
-    catWand.sellingPoints = 'interactive play';
-    catWand.videoLength = '30 seconds+';
-    catWand.videoCount = '1 video';
-    catWand.avoidShots = 'do not force the cat';
-    catWand.tagRequirement = 'attach wand product link';
-    catWand.referenceLinks = ['https://example.com/wand'];
+  it("keeps the eight campaign filming fields independent per product", () => {
+    const petBrush = createCampaignFromName(
+      "Pet Brush",
+      defaultCreatorFilmingRequirements,
+    );
+    const catWand = createCampaignFromName(
+      "Cat Wand",
+      defaultCreatorFilmingRequirements,
+    );
+    petBrush.keyContentPoints = ["show brushing scene"];
+    petBrush.sellingPoints = "removes loose fur";
+    petBrush.videoLength = "45 seconds+";
+    petBrush.videoCount = "2 videos";
+    petBrush.avoidShots = "do not show unsafe use";
+    petBrush.tagRequirement = "attach product link";
+    petBrush.referenceLinks = ["https://example.com/brush"];
+    catWand.keyContentPoints = ["show cat jumping"];
+    catWand.sellingPoints = "interactive play";
+    catWand.videoLength = "30 seconds+";
+    catWand.videoCount = "1 video";
+    catWand.avoidShots = "do not force the cat";
+    catWand.tagRequirement = "attach wand product link";
+    catWand.referenceLinks = ["https://example.com/wand"];
 
-    const brushRequirements = campaignToFilmingRequirements(petBrush, defaultCreatorFilmingRequirements);
-    const wandRequirements = campaignToFilmingRequirements(catWand, defaultCreatorFilmingRequirements);
+    const brushRequirements = campaignToFilmingRequirements(
+      petBrush,
+      defaultCreatorFilmingRequirements,
+    );
+    const wandRequirements = campaignToFilmingRequirements(
+      catWand,
+      defaultCreatorFilmingRequirements,
+    );
 
     expect(brushRequirements).toMatchObject({
-      productName: 'Pet Brush',
-      requiredScenes: 'show brushing scene',
-      sellingPoints: 'removes loose fur',
-      videoLength: '45 seconds+',
-      videoCount: '2 videos',
-      avoidShots: 'do not show unsafe use',
-      productLinkRequirement: 'attach product link',
-      referenceVideoLinks: 'https://example.com/brush',
+      productName: "Pet Brush",
+      requiredScenes: "show brushing scene",
+      sellingPoints: "removes loose fur",
+      videoLength: "45 seconds+",
+      videoCount: "2 videos",
+      avoidShots: "do not show unsafe use",
+      productLinkRequirement: "attach product link",
+      referenceVideoLinks: "https://example.com/brush",
     });
-    expect(wandRequirements.requiredScenes).toBe('show cat jumping');
-    expect(wandRequirements.productLinkRequirement).toBe('attach wand product link');
-    expect(wandRequirements.requiredScenes).not.toBe(brushRequirements.requiredScenes);
+    expect(wandRequirements.requiredScenes).toBe("show cat jumping");
+    expect(wandRequirements.productLinkRequirement).toBe(
+      "attach wand product link",
+    );
+    expect(wandRequirements.requiredScenes).not.toBe(
+      brushRequirements.requiredScenes,
+    );
   });
-
 });

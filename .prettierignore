@@ -1,0 +1,11 @@
+dist
+node_modules
+.worktrees
+package-lock.json
+tsconfig.tsbuildinfo
+templates
+*.csv
+
+# The stylesheet is deliberately written one dense rule per line; reformatting
+# it would balloon the file without making the CSS any clearer.
+src/styles.css

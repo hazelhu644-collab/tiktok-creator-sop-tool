@@ -85,8 +85,12 @@ describe("MessageComposer", () => {
   it("renders controlled reply, translation, English message, and tracking UI", () => {
     render(<MessageComposer {...createProps()} />);
 
-    expect(screen.getByRole("heading", { name: "达人回复处理" })).toBeInTheDocument();
-    expect(screen.getByLabelText("达人回复原文")).toHaveValue("I can post Friday.");
+    expect(
+      screen.getByRole("heading", { name: "达人回复处理" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("达人回复原文")).toHaveValue(
+      "I can post Friday.",
+    );
     expect(screen.getByText("我可以周五发布。")).toBeInTheDocument();
     expect(screen.getByLabelText("英文话术")).toHaveValue(
       "Thanks! Please confirm the posting time.",
@@ -104,15 +108,21 @@ describe("MessageComposer", () => {
     fireEvent.change(screen.getByLabelText("达人回复原文"), {
       target: { value: "Updated reply" },
     });
-    expect(props.actions.updateCreatorReply).toHaveBeenCalledWith("Updated reply");
+    expect(props.actions.updateCreatorReply).toHaveBeenCalledWith(
+      "Updated reply",
+    );
     fireEvent.change(screen.getByLabelText("处理备注 / 达人备注"), {
       target: { value: "Updated note" },
     });
     expect(props.actions.updateNotes).toHaveBeenCalledWith("Updated note");
 
-    await user.click(screen.getByRole("button", { name: "DeepSeek 翻译达人回复" }));
+    await user.click(
+      screen.getByRole("button", { name: "DeepSeek 翻译达人回复" }),
+    );
     expect(props.actions.translateCreatorReply).toHaveBeenCalledTimes(1);
-    await user.click(screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0]);
+    await user.click(
+      screen.getAllByRole("button", { name: "根据上方重点生成英文回复" })[0],
+    );
     expect(props.actions.generateDeepSeekReply).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "复制翻译" }));
     expect(props.actions.copyTranslation).toHaveBeenCalledTimes(1);
@@ -132,7 +142,9 @@ describe("MessageComposer", () => {
     fireEvent.change(screen.getByLabelText("英文话术"), {
       target: { value: "Edited English" },
     });
-    expect(props.actions.updateEnglishMessage).toHaveBeenCalledWith("Edited English");
+    expect(props.actions.updateEnglishMessage).toHaveBeenCalledWith(
+      "Edited English",
+    );
     await user.click(screen.getByRole("button", { name: "复制英文话术" }));
     expect(props.actions.copyEnglishMessage).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "标记为已发送" }));
@@ -166,9 +178,13 @@ describe("MessageComposer", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。",
     );
-    expect(screen.getByLabelText("编辑中文翻译")).toHaveValue("我可以周五发布。");
+    expect(screen.getByLabelText("编辑中文翻译")).toHaveValue(
+      "我可以周五发布。",
+    );
     expect(screen.getByRole("button", { name: "收起" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "完成编辑" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "完成编辑" }),
+    ).toBeInTheDocument();
   });
 
   it("forwards tracking actions and preserves historical disabled states", async () => {
@@ -189,11 +205,17 @@ describe("MessageComposer", () => {
     render(<MessageComposer {...props} />);
 
     expect(screen.getByRole("button", { name: "标记为已发送" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "标记达人已回复" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "标记达人已回复" }),
+    ).toBeDisabled();
     expect(screen.getByRole("button", { name: "标记未回复" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "发布 1 条视频" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "发布 1 条视频" }),
+    ).toBeDisabled();
     expect(screen.getByRole("button", { name: "今日暂不跟进" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "处理下一个达人" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "处理下一个达人" }),
+    ).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "留在当前达人" }));
     expect(props.actions.stayOnCurrentCreator).toHaveBeenCalledTimes(1);

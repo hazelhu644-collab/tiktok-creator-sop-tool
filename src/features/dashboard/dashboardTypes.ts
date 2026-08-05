@@ -12,12 +12,7 @@ export type WorkbenchFilterKey =
   | "failed"
   | "sample_shipped";
 
-export type DashboardUrgency =
-  | "All"
-  | "Highest"
-  | "High"
-  | "Medium"
-  | "Low";
+export type DashboardUrgency = "All" | "Highest" | "High" | "Medium" | "Low";
 
 export type DashboardCampaignCardView = {
   value: string;

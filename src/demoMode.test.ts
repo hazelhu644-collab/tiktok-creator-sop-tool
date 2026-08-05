@@ -100,7 +100,9 @@ describe("demo seed data", () => {
 describe("demo mode storage isolation", () => {
   it("serves demo data instead of saved rows and campaigns", () => {
     saveCreatorRows([REAL_ROW]);
-    saveCampaigns(demoCampaigns().map((c) => ({ ...c, productName: "真实产品" })));
+    saveCampaigns(
+      demoCampaigns().map((c) => ({ ...c, productName: "真实产品" })),
+    );
 
     enterDemoMode();
 

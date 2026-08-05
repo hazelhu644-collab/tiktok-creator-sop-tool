@@ -3,9 +3,7 @@ import type { ReplyTone } from "../../messageGenerator";
 import type { Channel, GeneratedMessage } from "../../types";
 
 export type MessageComposerLoadingAction =
-  | "translate_creator_reply"
-  | "generate_personalized_reply"
-  | null;
+  "translate_creator_reply" | "generate_personalized_reply" | null;
 
 export type MessageComposerData = {
   creatorReply: string;
