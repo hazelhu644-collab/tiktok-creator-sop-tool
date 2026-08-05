@@ -124,3 +124,53 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
   font-size: 0.75rem;
   font-weight: 700;
 }
+
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 14px 18px;
+  border: 1px solid #e5c18b;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fff7ed, #fdf1dc);
+  color: #9a5b12;
+  box-shadow: 0 14px 34px rgba(154, 91, 18, 0.08);
+}
+
+.demo-banner strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 1rem;
+}
+
+.demo-banner p {
+  margin: 0;
+  color: #8a6431;
+  font-size: 0.86rem;
+}
+
+.demo-banner-exit {
+  flex-shrink: 0;
+  padding: 9px 14px;
+  border: 1px solid rgba(154, 91, 18, 0.35);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #9a5b12;
+  font-weight: 850;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.demo-banner-exit:hover {
+  background: #fff;
+  border-color: #9a5b12;
+}
+
+@media (max-width: 640px) {
+  .demo-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
