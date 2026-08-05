@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   buildDuplicateImportSummary,
   clearSavedCreatorRows,
@@ -804,6 +811,30 @@ function App() {
     () => parseRequiredVideos(activeFilmingRequirements),
     [activeFilmingRequirements],
   );
+  // Memoized so the derivations below can depend on these directly instead of
+  // restating their inputs, and so they are declared before their first use.
+  const campaignForRow = useCallback(
+    (
+      row: Pick<
+        CreatorRow,
+        "storeId" | "storeName" | "product" | "campaignId" | "productId"
+      >,
+    ): Campaign | undefined =>
+      mergedCampaigns.find((campaign) =>
+        rowMatchesCampaignIdentity(row, campaign),
+      ),
+    [mergedCampaigns],
+  );
+  const requiredVideosForRow = useCallback(
+    (row: CreatorRow): number =>
+      parseRequiredVideos(
+        campaignToFilmingRequirements(
+          campaignForRow(row),
+          activeFilmingRequirements,
+        ),
+      ),
+    [campaignForRow, activeFilmingRequirements],
+  );
   const scopedRows = useMemo(
     () =>
       selectedCampaign === "ALL"
@@ -821,7 +852,7 @@ function App() {
       selectedCampaign,
       activeCampaign,
       showArchivedProducts,
-      mergedCampaigns,
+      campaignForRow,
     ],
   );
   const visibleRows = useMemo(
@@ -836,7 +867,7 @@ function App() {
       visibleRows.filter((row) =>
         isActiveDailyCollaboration(row, requiredVideosForRow(row)),
       ),
-    [visibleRows, mergedCampaigns, activeFilmingRequirements],
+    [visibleRows, requiredVideosForRow],
   );
   const tasks = useMemo(
     () =>
@@ -845,14 +876,14 @@ function App() {
           analyzeCreators([row], undefined, requiredVideosForRow(row)),
         )
         .sort((a, b) => compareTasks(a, b)),
-    [dailyQueueRows, mergedCampaigns, activeFilmingRequirements],
+    [dailyQueueRows, requiredVideosForRow],
   );
   const historicalTasks = useMemo(
     () =>
       scopedRows.flatMap((row) =>
         analyzeCreators([row], undefined, requiredVideosForRow(row)),
       ),
-    [scopedRows, mergedCampaigns, activeFilmingRequirements],
+    [scopedRows, requiredVideosForRow],
   );
   const usesHistoricalTaskSource =
     workbenchFilter?.key === "published_video" ||
@@ -2087,26 +2118,6 @@ function App() {
     setEditedCreatorReplies((current) => ({ ...current, [task.id]: value }));
     setDeepSeekChineseTranslation("");
     setDeepSeekChineseExplanation("");
-  }
-
-  function campaignForRow(
-    row: Pick<
-      CreatorRow,
-      "storeId" | "storeName" | "product" | "campaignId" | "productId"
-    >,
-  ): Campaign | undefined {
-    return mergedCampaigns.find((campaign) =>
-      rowMatchesCampaignIdentity(row, campaign),
-    );
-  }
-
-  function requiredVideosForRow(row: CreatorRow): number {
-    return parseRequiredVideos(
-      campaignToFilmingRequirements(
-        campaignForRow(row),
-        activeFilmingRequirements,
-      ),
-    );
   }
 
   function selectedTaskCampaignRequirements(
