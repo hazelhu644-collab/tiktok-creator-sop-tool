@@ -1246,7 +1246,7 @@ function App() {
             ]),
       deadline: selectedTemplateCreator.nextFollowUpDate || form.deadline,
     }));
-  }, [selectedTemplateCreator, mergedCampaigns, activeFilmingRequirements]);
+  }, [selectedTemplateCreator, campaignForRow, activeFilmingRequirements]);
 
   useEffect(() => {
     if (!toast) return;
