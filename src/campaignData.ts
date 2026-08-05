@@ -213,9 +213,7 @@ export function createCampaignFromName(
   };
 }
 
-export function detectCampaignNames(
-  rows: CreatorRow[],
-): Array<{
+export function detectCampaignNames(rows: CreatorRow[]): Array<{
   storeId: string;
   storeName: string;
   campaignId: string;

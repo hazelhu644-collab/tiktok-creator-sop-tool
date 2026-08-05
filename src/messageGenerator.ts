@@ -158,19 +158,6 @@ function progressForTask(task: Task, configuredRequiredVideos?: number) {
   return normalizeVideoProgress(task.videoProgress, fallbackRequiredVideos);
 }
 
-function isPartialVideoCompletionTask(
-  task: Task,
-  configuredRequiredVideos?: number,
-): boolean {
-  const progress = progressForTask(task, configuredRequiredVideos);
-  return (
-    typeof progress.postedCount === "number" &&
-    progress.postedCount > 0 &&
-    typeof progress.requiredVideos === "number" &&
-    progress.postedCount < progress.requiredVideos
-  );
-}
-
 function isCompletedTask(
   task: Task,
   configuredRequiredVideos: number,
@@ -550,22 +537,6 @@ function scenarioForTask(
   );
 }
 
-function matchesFilmingRequirementsProduct(
-  task: Task,
-  filmingRequirements: CreatorFilmingRequirements,
-): boolean {
-  const taskProduct = task.product.trim().toLowerCase();
-  const requirementProduct = filmingRequirements.productName
-    .trim()
-    .toLowerCase();
-
-  if (!taskProduct || !requirementProduct) return false;
-  return (
-    taskProduct.includes(requirementProduct) ||
-    requirementProduct.includes(taskProduct)
-  );
-}
-
 function toEnglishProductName(product: string): string {
   const normalized = product.trim();
   const translationMap: Record<string, string> = {
@@ -825,7 +796,7 @@ export function generateMessage(
       : null;
   const remainingVideos = remainingVideoPhrase(missingVideos);
 
-  let english = "";
+  let english: string;
 
   if (scenario === "First Outreach") {
     english = firstOutreachMessage(channel, name, product);

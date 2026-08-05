@@ -58,7 +58,6 @@ import type {
   CreatorDatabaseRowView,
   CreatorStatusOption,
 } from "./features/creators/creatorDatabaseTypes";
-import { CampaignSettingsPage } from "./features/campaigns/CampaignSettingsPage";
 import type {
   CampaignSettingsOption,
   CampaignSettingsTargetView,
@@ -241,14 +240,6 @@ function loadFilmingRequirements(): CreatorFilmingRequirements {
   }
 }
 
-function saveFilmingRequirements(requirements: CreatorFilmingRequirements) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    FILMING_REQUIREMENTS_STORAGE_KEY,
-    JSON.stringify(requirements),
-  );
-}
-
 function todayString() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -293,24 +284,11 @@ function priorityLabel(task: Task): string {
         : "低";
 }
 
-function compactCreatorLabel(task: Task): string {
-  return `${creatorHandle(task)} · ${priorityLabel(task)} · ${queueStatusLabelText(task)}`;
-}
-
 function priorityActionLabel(task: Task): string {
   if (task.priority === "Highest") return "必须处理";
   if (task.priority === "High") return "待跟进";
   if (task.priority === "Medium") return "轻跟进";
   return "稍后复查";
-}
-
-function queueStatusLabelText(task: Task): string {
-  if (task.trackingStatus?.trim()) return task.trackingStatus.trim();
-  if (task.priority === "Low" && task.triggerReason.includes("今日已处理"))
-    return "今日已处理";
-  if (task.priority === "Low" && task.triggerReason.includes("暂不催"))
-    return "暂不催";
-  return priorityActionLabel(task);
 }
 
 function containsChinese(value: string): boolean {
@@ -421,7 +399,6 @@ function isSampleInTransitForDaily(row: CreatorRow, requiredVideos: number) {
 
 function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
   const status = safeLower(row.currentStatus);
-  const shipping = safeLower(row.sampleShippingStatus);
   const progress = normalizeVideoProgress(row.videoProgress, requiredVideos);
   const notes = safeLower(row.notes);
   const tracking = safeLower(row.trackingStatus);
@@ -696,25 +673,14 @@ function App() {
   const [templateForm, setTemplateForm] = useState<TemplateForm>(
     () => emptyTemplateForm,
   );
-  const [filmingRequirements, setFilmingRequirements] =
-    useState<CreatorFilmingRequirements>(() => loadFilmingRequirements());
+  // Campaign settings own the editable filming requirements now; this holds the
+  // saved fallback used when no campaign is selected, and is never reassigned.
+  const [filmingRequirements] = useState<CreatorFilmingRequirements>(() =>
+    loadFilmingRequirements(),
+  );
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => loadCampaigns());
   const [selectedStore, setSelectedStore] = useState(ALL_STORES);
   const [selectedCampaign, setSelectedCampaign] = useState("ALL");
-  const [isEditingFilmingRequirements, setIsEditingFilmingRequirements] =
-    useState(false);
-  const [filmingProductNameDraft, setFilmingProductNameDraft] = useState(
-    () => defaultCreatorFilmingRequirements.productName,
-  );
-  const [filmingRequirementsDraft, setFilmingRequirementsDraft] = useState(() =>
-    listToText(defaultCreatorFilmingRequirements.requirements),
-  );
-  const [keyContentPointsDraft, setKeyContentPointsDraft] = useState(() =>
-    listToText(defaultCreatorFilmingRequirements.keyContentPoints),
-  );
-  const [referenceLinksDraft, setReferenceLinksDraft] = useState(() =>
-    listToText(defaultCreatorFilmingRequirements.referenceLinks),
-  );
   const [isPromptHelperOpen, setIsPromptHelperOpen] = useState(false);
   const [promptHelperForm, setPromptHelperForm] = useState({
     sellingPoints: "",
@@ -736,13 +702,8 @@ function App() {
   const [deepSeekError, setDeepSeekError] = useState("");
   const [deepSeekChineseTranslation, setDeepSeekChineseTranslation] =
     useState("");
-  const [deepSeekDetectedIntent, setDeepSeekDetectedIntent] = useState("");
   const [deepSeekChineseExplanation, setDeepSeekChineseExplanation] =
     useState("");
-  const [
-    deepSeekRecommendedTrackingStatus,
-    setDeepSeekRecommendedTrackingStatus,
-  ] = useState("");
   const [workbenchFilter, setWorkbenchFilter] = useState<{
     key: WorkbenchFilterKey;
     label: string;
@@ -1093,8 +1054,6 @@ function App() {
     setDeepSeekError("");
     setDeepSeekChineseTranslation("");
     setDeepSeekChineseExplanation("");
-    setDeepSeekDetectedIntent("");
-    setDeepSeekRecommendedTrackingStatus("");
     setIsTranslationEditing(false);
     setMessageSource("local");
     const selected = workbenchTasks.find((task) => task.id === creatorId);
@@ -1367,25 +1326,6 @@ function App() {
 
   const creatorStatusOptions: CreatorStatusOption[] = creatorStatuses.map(
     (status) => ({ value: status, label: displayStatus(status) }),
-  );
-
-  const todayTodo = useMemo(
-    () =>
-      tasks
-        .filter(
-          (task) =>
-            task.needsFollowUp ||
-            task.failedWarnings.length > 0 ||
-            inferStatus(task, requiredVideosForRow(task)) ===
-              "Product Tag Missing" ||
-            inferStatus(task, requiredVideosForRow(task)) === "Ready for Ads",
-        )
-        .sort(
-          (a, b) =>
-            a.stageRank - b.stageRank || a.priorityRank - b.priorityRank,
-        )
-        .slice(0, 12),
-    [tasks, mergedCampaigns, activeFilmingRequirements],
   );
 
   const processedTodayCount = tasks.filter((task) =>
@@ -2147,8 +2087,6 @@ function App() {
     setEditedCreatorReplies((current) => ({ ...current, [task.id]: value }));
     setDeepSeekChineseTranslation("");
     setDeepSeekChineseExplanation("");
-    setDeepSeekDetectedIntent("");
-    setDeepSeekRecommendedTrackingStatus("");
   }
 
   function campaignForRow(
@@ -2283,7 +2221,6 @@ function App() {
 
       if (action === "translate_creator_reply") {
         setDeepSeekChineseTranslation(result.chineseTranslation || "");
-        setDeepSeekDetectedIntent("");
         return;
       }
 
@@ -2295,11 +2232,7 @@ function App() {
           result.chineseExplanation || localFallback.chineseExplanation,
       });
       setMessageSource(result.englishMessage ? "deepseek" : "local");
-      setDeepSeekDetectedIntent(result.detectedIntent || "");
       setDeepSeekChineseExplanation(result.chineseExplanation || "");
-      setDeepSeekRecommendedTrackingStatus(
-        result.recommendedTrackingStatus || "",
-      );
     } catch (error) {
       setDeepSeekError(deepSeekErrorMessage(error));
     } finally {
@@ -2590,68 +2523,6 @@ function App() {
       ),
     );
     finishProcessing("已记录达人回复。");
-  }
-
-  function handleSaveFilmingRequirements() {
-    const keyContentPoints = normalizeListText(keyContentPointsDraft);
-    const requirements = normalizeListText(filmingRequirementsDraft);
-    const referenceLinks = normalizeListText(referenceLinksDraft);
-    const next: CreatorFilmingRequirements = {
-      ...defaultCreatorFilmingRequirements,
-      productName:
-        filmingProductNameDraft.trim() ||
-        defaultCreatorFilmingRequirements.productName,
-      requiredScenes:
-        keyContentPoints.join("；") ||
-        defaultCreatorFilmingRequirements.requiredScenes,
-      videoCount:
-        requirements.find((item) => item.includes("条视频")) ||
-        defaultCreatorFilmingRequirements.videoCount,
-      videoLength:
-        requirements.find((item) => item.includes("秒")) ||
-        defaultCreatorFilmingRequirements.videoLength,
-      productLinkRequirement:
-        requirements.find((item) => item.includes("链接")) ||
-        defaultCreatorFilmingRequirements.productLinkRequirement,
-      requirements,
-      keyContentPoints,
-      referenceLinks,
-      referenceVideoLinks: referenceLinks.join("\n"),
-    };
-    setFilmingRequirements(next);
-    setTemplateForm((form) => ({
-      ...form,
-      productName: next.productName,
-      videos: String(parseRequiredVideos(next)),
-    }));
-    saveFilmingRequirements(next);
-    setIsEditingFilmingRequirements(false);
-    setToast({ tone: "success", text: "拍摄要求已保存。" });
-  }
-
-  function handleEditFilmingRequirements() {
-    setFilmingProductNameDraft(filmingRequirements.productName);
-    setFilmingRequirementsDraft(listToText(filmingRequirements.requirements));
-    setKeyContentPointsDraft(listToText(filmingRequirements.keyContentPoints));
-    setReferenceLinksDraft(listToText(filmingRequirements.referenceLinks));
-    setIsEditingFilmingRequirements(true);
-  }
-
-  function handleRestoreDefaultFilmingRequirements() {
-    setFilmingProductNameDraft(defaultCreatorFilmingRequirements.productName);
-    setFilmingRequirementsDraft(
-      listToText(defaultCreatorFilmingRequirements.requirements),
-    );
-    setKeyContentPointsDraft(
-      listToText(defaultCreatorFilmingRequirements.keyContentPoints),
-    );
-    setReferenceLinksDraft(
-      listToText(defaultCreatorFilmingRequirements.referenceLinks),
-    );
-    setFilmingRequirements(defaultCreatorFilmingRequirements);
-    saveFilmingRequirements(defaultCreatorFilmingRequirements);
-    setIsEditingFilmingRequirements(false);
-    setToast({ tone: "success", text: "已恢复默认拍摄要求。" });
   }
 
   function handleOpenPromptHelper() {

@@ -698,7 +698,6 @@ export function analyzeCreator(
         "stuck",
         "lost",
       ]);
-    const isArrivingSoon = arrivalDeltaDays !== null && arrivalDeltaDays <= 1;
     priority = hasLogisticsException ? "High" : "Medium";
     if (arrivalDeltaDays !== null && arrivalDeltaDays < 0) {
       triggerReason = "样品到货日期已过，需确认物流 / 是否签收。";

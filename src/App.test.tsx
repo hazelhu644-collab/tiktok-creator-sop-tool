@@ -321,7 +321,6 @@ describe("operations workbench navigation and dashboard", () => {
   });
 
   it("counts actual over-delivered posted video numerators in dashboard and product overview", async () => {
-    const user = userEvent.setup();
     window.localStorage.setItem(
       CAMPAIGNS_STORAGE_KEY,
       JSON.stringify([
@@ -1072,7 +1071,6 @@ describe("creator database redesigned table", () => {
 
     render(<App />);
 
-    const queue = screen.getByTestId("creator-queue");
     expect(
       screen.getAllByText(/Pet Brush|Cat Teaser Wand/).length,
     ).toBeGreaterThan(0);

@@ -23,6 +23,21 @@ export default tseslint.config(
     },
   },
   {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      // A leading underscore is the codebase's marker for a binding that only
+      // exists to document a signature, as in `vi.fn(async (_text: string) => …)`.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
+  {
     files: ["**/*.test.{ts,tsx}"],
     rules: {
       // Test doubles legitimately take loosely-typed arguments.
