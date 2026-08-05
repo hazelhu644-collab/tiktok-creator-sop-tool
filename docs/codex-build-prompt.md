@@ -88,7 +88,7 @@ Table columns:
 
 ### 4. Priority Logic
 
-Use the rules from `docs/mvp-rules.md`.
+Use the rules from [`src/sopRules.ts`](../src/sopRules.ts).
 
 Priority order:
 
@@ -113,7 +113,7 @@ Each explanation should include:
 
 Do not automatically mark creators as failed.
 
-Only show a “Failed Candidate” warning if the creator matches the rules in `docs/mvp-rules.md`.
+Only show a “Failed Candidate” warning if the creator matches the rules in [`src/sopRules.ts`](../src/sopRules.ts).
 
 The user should still make the final decision.
 
