@@ -1168,29 +1168,35 @@ function App() {
   useEffect(() => saveCreatorRows(rows), [rows]);
 
   useEffect(() => saveCampaigns(mergedCampaigns), [mergedCampaigns]);
-  useEffect(() => {
-    if (
-      selectedStore !== ALL_STORES &&
-      !stores.some((store) => store.id === selectedStore)
-    ) {
-      setSelectedStore(stores[0]?.id ?? ALL_STORES);
-      setSelectedCampaign("ALL");
-      setToast({ tone: "warning", text: "当前店铺不存在，已切换到可用店铺。" });
-      return;
-    }
-    if (
-      selectedCampaign !== "ALL" &&
-      !activeCampaigns.some(
-        (campaign) => campaignOptionValue(campaign) === selectedCampaign,
-      )
-    ) {
-      setSelectedCampaign("ALL");
-      setToast({
-        tone: "warning",
-        text: "当前产品项目不存在或不属于当前店铺，已切换到全部产品。",
-      });
-    }
-  }, [activeCampaigns, selectedCampaign, selectedStore, stores]);
+  /*
+   * A store or campaign can stop existing while it is selected — deleted,
+   * archived, or merged away in Settings. Correcting that during render rather
+   * than from an effect means the invalid selection is never rendered and no
+   * second render is needed.
+   *
+   * Both branches terminate: the replacement store is either ALL_STORES or one
+   * that exists, and the replacement campaign is "ALL", so neither condition
+   * can still hold on the immediate re-render.
+   */
+  if (
+    selectedStore !== ALL_STORES &&
+    !stores.some((store) => store.id === selectedStore)
+  ) {
+    setSelectedStore(stores[0]?.id ?? ALL_STORES);
+    setSelectedCampaign("ALL");
+    setToast({ tone: "warning", text: "当前店铺不存在，已切换到可用店铺。" });
+  } else if (
+    selectedCampaign !== "ALL" &&
+    !activeCampaigns.some(
+      (campaign) => campaignOptionValue(campaign) === selectedCampaign,
+    )
+  ) {
+    setSelectedCampaign("ALL");
+    setToast({
+      tone: "warning",
+      text: "当前产品项目不存在或不属于当前店铺，已切换到全部产品。",
+    });
+  }
   /**
    * The template form refills only when the operator picks a different campaign
    * or creator — identified here by id, not by object identity.
