@@ -70,7 +70,14 @@ import type {
   CampaignSettingsTargetView,
   CampaignStoreCleanupView,
 } from "./features/campaigns/campaignSettingsTypes";
-import { MessageComposer } from "./features/messaging/MessageComposer";
+import { DashboardPage } from "./features/dashboard/DashboardPage";
+import type {
+  DashboardCampaignCardView,
+  DashboardCreatorView,
+  DashboardMetricCardView,
+  WorkbenchFilterKey,
+} from "./features/dashboard/dashboardTypes";
+import type { MessageComposerProps } from "./features/messaging/messageComposerTypes";
 import "./styles.css";
 
 const FILMING_REQUIREMENTS_STORAGE_KEY = "tiktokCreatorSop.filmingRequirements";
@@ -107,15 +114,6 @@ type Toast = { tone: "success" | "warning"; text: string } | null;
 type DeepSeekAction = "translate_creator_reply" | "generate_personalized_reply";
 type MessageSource = "local" | "deepseek";
 type PendingDuplicateAdd = { draft: CreatorRow; existing: CreatorRow } | null;
-type WorkbenchFilterKey =
-  | "follow_up_today"
-  | "processed_today"
-  | "delivered_waiting_video"
-  | "published_video"
-  | "posted_this_week"
-  | "completed"
-  | "failed"
-  | "sample_shipped";
 type DeepSeekTranslateResult = { chineseTranslation: string };
 type DeepSeekGenerateResult = {
   englishMessage: string;
@@ -298,16 +296,20 @@ function compactCreatorLabel(task: Task): string {
   return `${creatorHandle(task)} · ${priorityLabel(task)} · ${queueStatusLabelText(task)}`;
 }
 
+function priorityActionLabel(task: Task): string {
+  if (task.priority === "Highest") return "必须处理";
+  if (task.priority === "High") return "待跟进";
+  if (task.priority === "Medium") return "轻跟进";
+  return "稍后复查";
+}
+
 function queueStatusLabelText(task: Task): string {
   if (task.trackingStatus?.trim()) return task.trackingStatus.trim();
   if (task.priority === "Low" && task.triggerReason.includes("今日已处理"))
     return "今日已处理";
   if (task.priority === "Low" && task.triggerReason.includes("暂不催"))
     return "暂不催";
-  if (task.priority === "Highest") return "必须处理";
-  if (task.priority === "High") return "待跟进";
-  if (task.priority === "Medium") return "轻跟进";
-  return "稍后复查";
+  return priorityActionLabel(task);
 }
 
 function containsChinese(value: string): boolean {
@@ -979,7 +981,7 @@ function App() {
     if (handledToday && task.trackingStatus)
       return `今日已处理 · ${task.trackingStatus}`;
     if (task.trackingStatus) return task.trackingStatus;
-    return priorityLabel(task);
+    return priorityActionLabel(task);
   }
 
   const filteredTasks = useMemo(() => {
@@ -1421,11 +1423,7 @@ function App() {
     return count + dateSet.size;
   }, 0);
 
-  const dashboardCards: Array<{
-    label: string;
-    value: number;
-    filterKey: WorkbenchFilterKey;
-  }> = [
+  const dashboardCards: DashboardMetricCardView[] = [
     {
       label: "今日待跟进达人数量",
       value: pendingFollowUpCount,
@@ -1479,6 +1477,162 @@ function App() {
       filterKey: "sample_shipped",
     },
   ];
+
+  const dashboardCampaignCards: DashboardCampaignCardView[] =
+    storeFilteredCampaigns.map((campaign) => {
+      const stats = campaignStats(campaign);
+      const label = campaignLabel(campaign, showStoreLabels);
+      return {
+        value: campaignOptionValue(campaign),
+        label,
+        ariaLabel: `${label}${stats.creatorCount} 位达人`,
+        creatorCount: stats.creatorCount,
+        activeCount: stats.activeCount,
+        todayFollowUp: stats.todayFollowUp,
+        highPriority: stats.highPriority,
+        inTransit: stats.inTransit,
+        deliveredPending: stats.deliveredPending,
+        postedVideos: stats.postedVideos,
+        completed: stats.completed,
+        failed: stats.failed,
+      };
+    });
+
+  const dashboardQueueItems = filteredTasks.map((task) => ({
+    id: task.id,
+    creatorHandle: creatorHandle(task),
+    priorityLabel: priorityLabel(task),
+    statusLabel: queueStatusLabel(task),
+    multiSample: (activeSampleCounts.get(task.id) ?? 0) > 1,
+    subLine: `${selectedStore === ALL_STORES ? `${task.storeName || DEFAULT_STORE_NAME} · ` : ""}${task.product || "缺少产品名称"} · ${task.currentStatus || displayStatus(inferStatus(task, requiredVideosForRow(task)))}`,
+  }));
+
+  const dashboardSelectedCreator: DashboardCreatorView | null = selectedTask
+    ? {
+        id: selectedTask.id,
+        displayName: displayName(selectedTask),
+        storeName: selectedTask.storeName || DEFAULT_STORE_NAME,
+        productName: selectedTask.product || "缺少产品名称",
+        statusLabel:
+          selectedTask.currentStatus ||
+          displayStatus(inferStatus(selectedTask, requiredVideosForRow(selectedTask))),
+        priorityLabel: priorityLabel(selectedTask),
+        triggerReason: selectedTask.triggerReason,
+        suggestedAction: selectedTask.suggestedAction,
+        trackingStatus: selectedTask.trackingStatus || "—",
+        notes: selectedTask.notes.trim() || "—",
+        crossStoreCreator: getDuplicateCheck(selectedTask, rows).crossStoreCreator,
+        otherActiveSampleCount: Math.max(
+          (activeSampleCounts.get(selectedTask.id) ?? 1) - 1,
+          0,
+        ),
+        filmingRequirements: campaignRequirementEntries(
+          selectedTaskCampaignRequirements(selectedTask),
+        ),
+        moreInfo: [
+          { label: "联系渠道", value: channel },
+          { label: "最近联系日期", value: selectedTask.lastContactDate || "—" },
+          { label: "样品状态", value: selectedTask.sampleShippingStatus || "—" },
+          { label: "样品到货日期", value: selectedTask.sampleDeliveredDate || "—" },
+          { label: "视频进度", value: selectedTask.videoProgress || "—" },
+          {
+            label: "首条视频发布时间",
+            value: selectedTask.firstVideoPostedDate || "—",
+          },
+          {
+            label: "最近回复日期",
+            value:
+              selectedTask.followUpHistory
+                ?.slice()
+                .reverse()
+                .find((entry) => entry.action === "Creator Replied")?.date || "—",
+          },
+          { label: "主页链接", value: selectedTask.profileLink || "—" },
+        ],
+      }
+    : null;
+
+  const shouldShowReplyBlock = Boolean(
+    selectedTask &&
+      (message ||
+        (selectedTask.trackingStatus ?? "").match(
+          /Replied|Reply Pending|达人已回复|达人回复待处理/i,
+        ) ||
+        selectedTask.lastCreatorResponse?.trim() ||
+        selectedTask.notes.trim()),
+  );
+  const isHistoricalReadOnly = Boolean(
+    selectedTask &&
+      (usesHistoricalTaskSource || isArchivedCollaboration(selectedTask)),
+  );
+  const deepSeekDisplayError = deepSeekError
+    ? deepSeekError.includes("DEEPSEEK_API_KEY")
+      ? "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。"
+      : "DeepSeek 调用失败，请检查 API Key 或稍后重试。"
+    : "";
+  const dashboardMessageComposerProps: MessageComposerProps | null =
+    shouldShowReplyBlock && selectedTask
+      ? {
+          data: {
+            creatorReply: currentCreatorReply(selectedTask),
+            notes: selectedTask.notes,
+            channel,
+            chineseTranslation: deepSeekChineseTranslation,
+            errorMessage: deepSeekDisplayError,
+            message,
+            messageSource,
+            chineseExplanation: deepSeekChineseExplanation,
+            trackingStatus,
+            lastProcessingResult,
+            hasNextTask: Boolean(nextTask),
+          },
+          uiState: {
+            historicalReadOnly: isHistoricalReadOnly,
+            loadingAction: deepSeekLoadingAction,
+            translationExpanded: isTranslationExpanded,
+            translationEditing: isTranslationEditing,
+            advancedReplyOpen: isAdvancedReplyOpen,
+            replyFocus,
+            relationshipNote: replyRelationshipNote,
+            replyTone,
+            replyGoal,
+            replyConcession,
+            showNextCreatorPrompt,
+            messageOutputRef: messageAreaRef,
+          },
+          actions: {
+            updateCreatorReply: (value) =>
+              updateCurrentCreatorReply(selectedTask, value),
+            updateNotes: (value) => updateRow(selectedTask.id, "notes", value),
+            generateDeepSeekReply: () =>
+              void callDeepSeek("generate_personalized_reply"),
+            translateCreatorReply: () =>
+              void callDeepSeek("translate_creator_reply"),
+            copyTranslation: () =>
+              void copyText(deepSeekChineseTranslation, "已复制中文翻译。"),
+            updateTranslation: setDeepSeekChineseTranslation,
+            setTranslationExpanded: setIsTranslationExpanded,
+            setTranslationEditing: setIsTranslationEditing,
+            setReplyFocus,
+            setReplyTone,
+            setAdvancedReplyOpen: setIsAdvancedReplyOpen,
+            setRelationshipNote: setReplyRelationshipNote,
+            setReplyGoal,
+            setReplyConcession,
+            updateEnglishMessage: updateGeneratedEnglishMessage,
+            copyEnglishMessage: () => void handleCopyGeneratedMessage(),
+            markMessageSent: handleMarkMessageSent,
+            markCreatorReplied: handleMarkCreatorReplied,
+            markCreatorNoReply,
+            markVideoProgress,
+            updateVideoProgressManually: handleManualVideoProgressUpdate,
+            markCreatorOutcome,
+            markCreatorSkippedToday,
+            processNextCreator: handleProcessNextCreator,
+            stayOnCurrentCreator: () => setShowNextCreatorPrompt(false),
+          },
+        }
+      : null;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -2674,70 +2828,6 @@ function App() {
     };
   }
 
-  function renderCampaignOverview() {
-    return (
-      <section className="campaign-overview">
-        <div className="section-heading">
-          <div>
-            <h2>产品项目概览</h2>
-            <p className="muted">
-              按产品 Campaign 分离达人、样品、视频履约和失败风险。
-            </p>
-          </div>
-        </div>
-        <div className="campaign-card-grid">
-          {storeFilteredCampaigns.map((campaign) => {
-            const stats = campaignStats(campaign);
-            return (
-              <button
-                type="button"
-                key={campaignOptionValue(campaign)}
-                className="campaign-card"
-                aria-label={`${campaignLabel(campaign, showStoreLabels)}${stats.creatorCount} 位达人`}
-                onClick={() =>
-                  setSelectedCampaign(campaignOptionValue(campaign))
-                }
-              >
-                <span className="product-badge">
-                  {campaignLabel(campaign, showStoreLabels)}
-                </span>
-                <strong>
-                  总合作记录 / 总达人数：{stats.creatorCount} 位达人
-                </strong>
-                <div className="campaign-metrics">
-                  <span>
-                    进行中 <b>{stats.activeCount}</b>
-                  </span>
-                  <span>
-                    今日需跟进 <b>{stats.todayFollowUp}</b>
-                  </span>
-                  <span>
-                    高优先级 <b>{stats.highPriority}</b>
-                  </span>
-                  <span>
-                    样品运输中 <b>{stats.inTransit}</b>
-                  </span>
-                  <span>
-                    到货待拍 <b>{stats.deliveredPending}</b>
-                  </span>
-                  <span>
-                    已发布视频 <b>{stats.postedVideos}</b>
-                  </span>
-                  <span>
-                    已完成 <b>{stats.completed}</b>
-                  </span>
-                  <span>
-                    已失败 <b>{stats.failed}</b>
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-    );
-  }
-
   function handleLocateCreator() {
     const normalized = followupSearch.trim().toLowerCase();
     if (!normalized) {
@@ -2765,476 +2855,69 @@ function App() {
   }
 
   function renderDashboard() {
-    const shouldShowReplyBlock = Boolean(
-      selectedTask &&
-      (message ||
-        (selectedTask.trackingStatus ?? "").match(
-          /Replied|Reply Pending|达人已回复|达人回复待处理/i,
-        ) ||
-        selectedTask.lastCreatorResponse?.trim() ||
-        selectedTask.notes.trim()),
-    );
-    const priorityText = priorityLabel;
-    const selectedStatus = selectedTask
-      ? inferStatus(selectedTask, requiredVideosForRow(selectedTask))
-      : "Not Contacted";
-    const isHistoricalReadOnly = Boolean(
-      selectedTask &&
-        (usesHistoricalTaskSource || isArchivedCollaboration(selectedTask)),
-    );
-    const deepSeekDisplayError = deepSeekError
-      ? deepSeekError.includes("DEEPSEEK_API_KEY")
-        ? "未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek。"
-        : "DeepSeek 调用失败，请检查 API Key 或稍后重试。"
-      : "";
-
     return (
-      <>
-        {renderPageHeader(
-          "今日工作台",
-          "每天打开后，先选产品项目，再按优先级处理今天要联系的达人。",
-          <button type="button" onClick={() => setActiveModule("creators")}>
-            打开达人数据库
-          </button>,
-        )}
-        {renderCampaignOverview()}
-        <section className="dashboard-grid" aria-label="今日概览">
-          {dashboardCards.map((card) => (
-            <button
-              type="button"
-              key={card.label}
-              className="metric-card"
-              onClick={() => handleDashboardCardClick(card)}
-            >
-              <span>{card.label}</span>
-              <strong>{card.value}</strong>
-              <small>
-                {selectedCampaignName}
-              </small>
-            </button>
-          ))}
-        </section>
-        <section
-          className="panel generator-panel workbench-panel"
-          ref={queueRef}
-        >
-          <div className="section-heading">
-            <div>
-              <h2>今日待处理达人队列</h2>
-              <p className="muted">
-                当前队列已按「
-                {selectedCampaignName}
-                」过滤{workbenchFilter ? ` · ${workbenchFilter.label}` : ""}
-                。选择达人后会自动收起长队列，直接进入处理区。
-              </p>
-              <p className="muted">最高优先级 {highestPendingCount}</p>
-            </div>
-            <div className="inline-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setOnlyCurrentCreator((value) => !value)}
-              >
-                {onlyCurrentCreator ? "显示达人队列" : "只看当前达人"}
-              </button>
-              {workbenchFilter && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setWorkbenchFilter(null);
-                    setSelectedCreatorId("");
-                  }}
-                >
-                  清除卡片筛选
-                </button>
-              )}
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setIsQueueExpanded((value) => !value)}
-              >
-                {isQueueExpanded ? "收起达人队列" : "展开达人队列"}
-              </button>
-            </div>
-          </div>
-          <div className="generator-controls workbench-controls">
-            <label>
-              搜索队列
-              <input
-                value={followupSearch}
-                onChange={(event) => setFollowupSearch(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") handleLocateCreator();
-                }}
-                placeholder="达人 / 产品 / 状态 / 跟进状态 / 紧急程度"
-              />
-            </label>
-            <button
-              type="button"
-              className="secondary"
-              onClick={handleLocateCreator}
-            >
-              定位达人
-            </button>
-            {creatorSearchStatus && (
-              <p className="ai-status">{creatorSearchStatus}</p>
-            )}
-            <label className="checkbox-field">
-              <input
-                aria-label="显示已归档合作"
-                type="checkbox"
-                checked={showArchivedCollaborations}
-                onChange={(event) =>
-                  setShowArchivedCollaborations(event.target.checked)
-                }
-              />
-              显示归档达人
-            </label>
-            <label>
-              紧急程度
-              <select
-                value={followupUrgency}
-                onChange={(event) =>
-                  setFollowupUrgency(
-                    event.target.value as typeof followupUrgency,
-                  )
-                }
-              >
-                <option value="All">全部</option>
-                <option value="Highest">最高</option>
-                <option value="High">高</option>
-                <option value="Medium">中</option>
-                <option value="Low">低</option>
-              </select>
-            </label>
-            <label className="checkbox-field">
-              <input
-                type="checkbox"
-                checked={showProcessedToday}
-                onChange={(event) =>
-                  setShowProcessedToday(event.target.checked)
-                }
-              />
-              显示今日已处理
-            </label>
-            <label>
-              选择达人
-              <select
-                aria-label="选择达人"
-                value={selectedTask?.id ?? ""}
-                onChange={(event) => handleSelectCreator(event.target.value)}
-              >
-                {filteredTasks.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {compactCreatorLabel(task)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              联系渠道
-              <select
-                value={channel}
-                onChange={(event) => setChannel(event.target.value as Channel)}
-              >
-                {CHANNELS.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={handleGenerateMessage}
-              disabled={!selectedTask}
-            >
-              生成话术
-            </button>
-          </div>
-          {!onlyCurrentCreator && isQueueExpanded && (
-            <div
-              className="queue-list compact-queue"
-              data-testid="creator-queue"
-            >
-              {filteredTasks.length > 0 ? (
-                filteredTasks.map((task) => (
-                  <button
-                    type="button"
-                    key={task.id}
-                    className={`queue-item ${selectedTask?.id === task.id ? "active" : ""}`}
-                    onClick={() => handleSelectCreator(task.id)}
-                  >
-                    <span className="queue-main-line">
-                      <strong>{creatorHandle(task)}</strong>
-                      <span className="queue-badges">
-                        <em>{priorityLabel(task)}</em>
-                        <em>{queueStatusLabel(task)}</em>
-                        {(activeSampleCounts.get(task.id) ?? 0) > 1 && (
-                          <em>同达人多样品</em>
-                        )}
-                      </span>
-                    </span>
-                    <span className="queue-sub-line">
-                      {selectedStore === ALL_STORES
-                        ? `${task.storeName || DEFAULT_STORE_NAME} · `
-                        : ""}
-                      {task.product || "缺少产品名称"} ·{" "}
-                      {task.currentStatus ||
-                        displayStatus(
-                          inferStatus(task, requiredVideosForRow(task)),
-                        )}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="empty-state compact-empty">
-                  <strong>当前筛选下暂无待处理达人。</strong>
-                </div>
-              )}
-            </div>
-          )}
-          {!onlyCurrentCreator && !isQueueExpanded && (
-            <div className="collapsed-copy queue-collapsed">
-              <strong>达人队列已收起。</strong>
-              <span>
-                当前只显示处理区，点击「展开达人队列」可继续查看全部待处理达人。
-              </span>
-            </div>
-          )}
-          {selectedTask ? (
-            <div
-              ref={currentCreatorRef}
-              className="current-creator-panel"
-              data-testid="current-creator-panel"
-            >
-              <div className="section-heading">
-                <div>
-                  <h2>当前处理达人</h2>
-                  <p className="muted">
-                    先确认状态，再生成 / 复制英文话术，发送后回到工具标记。
-                  </p>
-                  {isHistoricalReadOnly && (
-                    <p className="ai-status">
-                      当前为历史统计下钻，只读展示；如需继续合作，请先恢复达人。
-                    </p>
-                  )}
-                </div>
-                {nextTask && (
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={handleProcessNextCreator}
-                  >
-                    处理下一个达人
-                  </button>
-                )}
-              </div>
-              <div className="current-creator-grid">
-                <span>
-                  达人账号<b>{displayName(selectedTask)}</b>
-                </span>
-                <span>
-                  店铺 / 品牌
-                  <b>{selectedTask.storeName || DEFAULT_STORE_NAME}</b>
-                </span>
-                <span>
-                  产品项目<b>{selectedTask.product || "缺少产品名称"}</b>
-                </span>
-                <span>
-                  当前状态
-                  <b>
-                    {selectedTask.currentStatus ||
-                      displayStatus(selectedStatus)}
-                  </b>
-                </span>
-                <span>
-                  紧急程度<b>{priorityText(selectedTask)}</b>
-                </span>
-                <span>
-                  优先级原因<b>{selectedTask.triggerReason}</b>
-                </span>
-                <span>
-                  沟通动作<b>{selectedTask.suggestedAction}</b>
-                </span>
-                <span>
-                  跟进状态<b>{selectedTask.trackingStatus || "—"}</b>
-                </span>
-                <span className="creator-note-preview">
-                  处理备注 / 达人备注<b>{selectedTask.notes.trim() || "—"}</b>
-                </span>
-              </div>
-              {getDuplicateCheck(selectedTask, rows).crossStoreCreator && (
-                <div className="inline-warning duplicate-warning">
-                  <strong>跨店铺达人</strong>
-                  <span>
-                    该达人在其他店铺也有合作记录，请确认本次沟通是否需要区分店铺。
-                  </span>
-                </div>
-              )}
-              {(activeSampleCounts.get(selectedTask.id) ?? 0) > 1 && (
-                <div className="inline-warning duplicate-warning">
-                  <strong>同达人多样品</strong>
-                  <span>
-                    该达人还有{" "}
-                    {(activeSampleCounts.get(selectedTask.id) ?? 1) - 1}{" "}
-                    个其他样品合作。该达人存在多个样品合作，请确认是否需要合并沟通。
-                  </span>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      setFollowupSearch(displayName(selectedTask));
-                      setOnlyCurrentCreator(false);
-                      setIsQueueExpanded(true);
-                    }}
-                  >
-                    查看其他样品记录
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() =>
-                      setToast({
-                        tone: "success",
-                        text: "生成多样品合并提醒：请在一条消息中列出多个产品，并分别确认每个样品的到货、拍摄和发布时间。",
-                      })
-                    }
-                  >
-                    生成多样品合并提醒
-                  </button>
-                </div>
-              )}
-              <details
-                className="more-info-card current-product-brief"
-                data-testid="current-product-filming-requirements"
-              >
-                <summary>当前产品拍摄要求</summary>
-                <div className="current-creator-grid secondary-grid">
-                  {campaignRequirementEntries(
-                    selectedTaskCampaignRequirements(selectedTask),
-                  ).map((item) => (
-                    <span key={item.label}>
-                      {item.label}
-                      <b>{item.value || "—"}</b>
-                    </span>
-                  ))}
-                </div>
-              </details>
-              <details className="more-info-card">
-                <summary>更多信息</summary>
-                <div className="current-creator-grid secondary-grid">
-                  <span>
-                    联系渠道<b>{channel}</b>
-                  </span>
-                  <span>
-                    最近联系日期<b>{selectedTask.lastContactDate || "—"}</b>
-                  </span>
-                  <span>
-                    样品状态<b>{selectedTask.sampleShippingStatus || "—"}</b>
-                  </span>
-                  <span>
-                    样品到货日期<b>{selectedTask.sampleDeliveredDate || "—"}</b>
-                  </span>
-                  <span>
-                    视频进度<b>{selectedTask.videoProgress || "—"}</b>
-                  </span>
-                  <span>
-                    首条视频发布时间
-                    <b>{selectedTask.firstVideoPostedDate || "—"}</b>
-                  </span>
-                  <span>
-                    最近回复日期
-                    <b>
-                      {selectedTask.followUpHistory
-                        ?.slice()
-                        .reverse()
-                        .find((entry) => entry.action === "Creator Replied")
-                        ?.date || "—"}
-                    </b>
-                  </span>
-                  <span>
-                    主页链接<b>{selectedTask.profileLink || "—"}</b>
-                  </span>
-                </div>
-              </details>
-            </div>
-          ) : (
-            <div className="empty-state">
-              <strong>暂无待处理达人。</strong>
-              <span>
-                {workbenchFilter
-                  ? "当前筛选下暂无待处理达人。"
-                  : "请导入达人数据，或切换到「全部产品」查看完整队列。"}
-              </span>
-            </div>
-          )}
-          {shouldShowReplyBlock && selectedTask && (
-            <MessageComposer
-              data={{
-                creatorReply: currentCreatorReply(selectedTask),
-                notes: selectedTask.notes,
-                channel,
-                chineseTranslation: deepSeekChineseTranslation,
-                errorMessage: deepSeekDisplayError,
-                message,
-                messageSource,
-                chineseExplanation: deepSeekChineseExplanation,
-                trackingStatus,
-                lastProcessingResult,
-                hasNextTask: Boolean(nextTask),
-              }}
-              uiState={{
-                historicalReadOnly: isHistoricalReadOnly,
-                loadingAction: deepSeekLoadingAction,
-                translationExpanded: isTranslationExpanded,
-                translationEditing: isTranslationEditing,
-                advancedReplyOpen: isAdvancedReplyOpen,
-                replyFocus,
-                relationshipNote: replyRelationshipNote,
-                replyTone,
-                replyGoal,
-                replyConcession,
-                showNextCreatorPrompt,
-                messageOutputRef: messageAreaRef,
-              }}
-              actions={{
-                updateCreatorReply: (value) =>
-                  updateCurrentCreatorReply(selectedTask, value),
-                updateNotes: (value) => updateRow(selectedTask.id, "notes", value),
-                generateDeepSeekReply: () =>
-                  void callDeepSeek("generate_personalized_reply"),
-                translateCreatorReply: () =>
-                  void callDeepSeek("translate_creator_reply"),
-                copyTranslation: () =>
-                  void copyText(deepSeekChineseTranslation, "已复制中文翻译。"),
-                updateTranslation: setDeepSeekChineseTranslation,
-                setTranslationExpanded: setIsTranslationExpanded,
-                setTranslationEditing: setIsTranslationEditing,
-                setReplyFocus,
-                setReplyTone,
-                setAdvancedReplyOpen: setIsAdvancedReplyOpen,
-                setRelationshipNote: setReplyRelationshipNote,
-                setReplyGoal,
-                setReplyConcession,
-                updateEnglishMessage: updateGeneratedEnglishMessage,
-                copyEnglishMessage: () => void handleCopyGeneratedMessage(),
-                markMessageSent: handleMarkMessageSent,
-                markCreatorReplied: handleMarkCreatorReplied,
-                markCreatorNoReply,
-                markVideoProgress,
-                updateVideoProgressManually: handleManualVideoProgressUpdate,
-                markCreatorOutcome,
-                markCreatorSkippedToday,
-                processNextCreator: handleProcessNextCreator,
-                stayOnCurrentCreator: () => setShowNextCreatorPrompt(false),
-              }}
-            />
-          )}
-        </section>
-      </>
+      <DashboardPage
+        data={{
+          campaignCards: dashboardCampaignCards,
+          metricCards: dashboardCards,
+          selectedCampaignName,
+          workbenchFilterLabel: workbenchFilter?.label ?? "",
+          highestPendingCount,
+          queueItems: dashboardQueueItems,
+          selectedCreator: dashboardSelectedCreator,
+          hasNextTask: Boolean(nextTask),
+          channelOptions: CHANNELS,
+          messageComposerProps: dashboardMessageComposerProps,
+        }}
+        uiState={{
+          onlyCurrentCreator,
+          queueExpanded: isQueueExpanded,
+          followupSearch,
+          creatorSearchStatus,
+          showArchivedCollaborations,
+          urgency: followupUrgency,
+          showProcessedToday,
+          selectedCreatorId: selectedTask?.id ?? "",
+          channel,
+          historicalReadOnly: isHistoricalReadOnly,
+          queueRef,
+          currentCreatorRef,
+        }}
+        actions={{
+          openCreatorDatabase: () => setActiveModule("creators"),
+          selectCampaignCard: setSelectedCampaign,
+          selectMetricCard: handleDashboardCardClick,
+          toggleOnlyCurrentCreator: () =>
+            setOnlyCurrentCreator((value) => !value),
+          clearWorkbenchFilter: () => {
+            setWorkbenchFilter(null);
+            setSelectedCreatorId("");
+          },
+          toggleQueue: () => setIsQueueExpanded((value) => !value),
+          setFollowupSearch,
+          locateCreator: handleLocateCreator,
+          setShowArchivedCollaborations,
+          setUrgency: setFollowupUrgency,
+          setShowProcessedToday,
+          selectCreator: handleSelectCreator,
+          setChannel,
+          generateMessage: handleGenerateMessage,
+          processNextCreator: handleProcessNextCreator,
+          showOtherSamples: () => {
+            if (!selectedTask) return;
+            setFollowupSearch(displayName(selectedTask));
+            setOnlyCurrentCreator(false);
+            setIsQueueExpanded(true);
+          },
+          showMultiSampleReminder: () =>
+            setToast({
+              tone: "success",
+              text: "生成多样品合并提醒：请在一条消息中列出多个产品，并分别确认每个样品的到货、拍摄和发布时间。",
+            }),
+        }}
+      />
     );
   }
-
   function renderCreatorDatabase() {
     return (
       <CreatorDatabasePage
