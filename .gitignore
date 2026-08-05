@@ -11,3 +11,4 @@ creator-data.csv
 exports/
 private-data/
 .worktrees/
+.claude/
