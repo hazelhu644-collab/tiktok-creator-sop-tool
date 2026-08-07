@@ -119,6 +119,7 @@ type ModuleKey =
 type Toast = { tone: "success" | "warning"; text: string } | null;
 type DeepSeekAction = "translate_creator_reply" | "generate_personalized_reply";
 type MessageSource = "local" | "deepseek";
+type MessageOverride = { message: GeneratedMessage; source: MessageSource };
 type PendingDuplicateAdd = { draft: CreatorRow; existing: CreatorRow } | null;
 type DeepSeekTranslateResult = { chineseTranslation: string };
 type DeepSeekGenerateResult = {
@@ -737,8 +738,13 @@ function App() {
   const [bulkStatus, setBulkStatus] = useState<CreatorStatus>("Invited");
   const [channel, setChannel] = useState<Channel>("TikTok DM");
   const [selectedCreatorId, setSelectedCreatorId] = useState("");
-  const [message, setMessage] = useState<GeneratedMessage | null>(null);
-  const [messageSource, setMessageSource] = useState<MessageSource>("local");
+  /**
+   * The shown message is normally derived from the selected task (see
+   * `localMessage` below). This holds the exceptions — a DeepSeek result, or an
+   * English edit made by hand — and is cleared to fall back to the derived one.
+   */
+  const [messageOverride, setMessageOverride] =
+    useState<MessageOverride | null>(null);
   const [trackingStatus, setTrackingStatus] = useState("");
   const [templateCreatorId, setTemplateCreatorId] = useState("");
   const [followupSearch, setFollowupSearch] = useState("");
@@ -907,6 +913,38 @@ function App() {
         ),
       ),
     [campaignForRow, activeFilmingRequirements],
+  );
+  /**
+   * Builds the message the local rules produce for a task. Memoized and hoisted
+   * above `selectedTask` so the derived `localMessage` below can depend on it.
+   */
+  const buildLocalMessageForTask = useCallback(
+    (task: Task): GeneratedMessage =>
+      generateMessage(
+        task,
+        channel,
+        campaignToFilmingRequirements(
+          campaignForRow(task),
+          activeFilmingRequirements,
+        ),
+        replyFocus,
+        {
+          relationshipNote: replyRelationshipNote,
+          replyTone,
+          replyGoal,
+          acceptableConcession: replyConcession,
+        },
+      ),
+    [
+      channel,
+      campaignForRow,
+      activeFilmingRequirements,
+      replyFocus,
+      replyRelationshipNote,
+      replyTone,
+      replyGoal,
+      replyConcession,
+    ],
   );
   const scopedRows = useMemo(
     () =>
@@ -1091,6 +1129,18 @@ function App() {
     (selectedCreatorId &&
       workbenchTasks.find((task) => task.id === selectedCreatorId)) ||
     filteredTasks[0];
+  /**
+   * The message the local rules produce for the current selection. Derived
+   * during render rather than regenerated from an effect, so it always matches
+   * the selected task and the reply inputs without an extra render.
+   */
+  const localMessage = useMemo(
+    () => (selectedTask ? buildLocalMessageForTask(selectedTask) : null),
+    [selectedTask, buildLocalMessageForTask],
+  );
+  const message = messageOverride?.message ?? localMessage;
+  const messageSource: MessageSource = messageOverride?.source ?? "local";
+
   const selectedTemplateCreator =
     visibleRows.find((row) => row.id === templateCreatorId) ??
     visibleRows.find((row) => row.id === selectedCreatorId);
@@ -1141,9 +1191,8 @@ function App() {
     setDeepSeekChineseTranslation("");
     setDeepSeekChineseExplanation("");
     setIsTranslationEditing(false);
-    setMessageSource("local");
-    const selected = workbenchTasks.find((task) => task.id === creatorId);
-    setMessage(selected ? buildLocalMessageForTask(selected) : null);
+    // The message for the newly selected creator is derived, not assigned.
+    setMessageOverride(null);
     scrollToCurrentCreator();
   }
 
@@ -1153,11 +1202,11 @@ function App() {
       setLastProcessingResult("当前筛选下暂无更多待处理达人。");
       return;
     }
-    setMessageSource("local");
     setTrackingStatus("");
     setLastProcessingResult("");
     setShowNextCreatorPrompt(false);
     setIsQueueExpanded(false);
+    // handleSelectCreator clears the override.
     handleSelectCreator(nextTask.id);
   }
   const templateMessages = useMemo(
@@ -1779,8 +1828,7 @@ function App() {
         return updated;
       }),
     );
-    setMessage(null);
-    setMessageSource("local");
+    setMessageOverride(null);
   }
 
   function archiveCreator(rowId: string) {
@@ -1851,8 +1899,7 @@ function App() {
       matchesWorkbenchFilter(task, card.filterKey),
     );
     setSelectedCreatorId(firstMatch?.id ?? "");
-    setMessage(firstMatch ? buildLocalMessageForTask(firstMatch) : null);
-    setMessageSource("local");
+    setMessageOverride(null);
     setShowNextCreatorPrompt(false);
     scrollToQueue();
   }
@@ -2086,57 +2133,11 @@ function App() {
     );
   }
 
-  function buildLocalMessageForTask(task: Task): GeneratedMessage {
-    const creatorCampaign = campaignForRow(task);
-    return generateMessage(
-      task,
-      channel,
-      campaignToFilmingRequirements(creatorCampaign, activeFilmingRequirements),
-      replyFocus,
-      {
-        relationshipNote: replyRelationshipNote,
-        replyTone,
-        replyGoal,
-        acceptableConcession: replyConcession,
-      },
-    );
-  }
-
-  useEffect(() => {
-    if (!selectedTask) {
-      setMessage(null);
-      setMessageSource("local");
-      return;
-    }
-    if (messageSource === "deepseek") return;
-    setMessage(buildLocalMessageForTask(selectedTask));
-    setMessageSource("local");
-  }, [
-    selectedTask?.id,
-    selectedTask?.currentStatus,
-    selectedTask?.sampleShippingStatus,
-    selectedTask?.sampleDeliveredDate,
-    selectedTask?.videoProgress,
-    selectedTask?.lastFollowUpCount,
-    selectedTask?.trackingStatus,
-    selectedTask?.lastCreatorResponse,
-    selectedTask?.notes,
-    channel,
-    replyFocus,
-    replyRelationshipNote,
-    replyTone,
-    replyGoal,
-    replyConcession,
-    activeFilmingRequirements,
-    mergedCampaigns,
-    messageSource,
-  ]);
-
   function handleGenerateMessage() {
     if (!selectedTask) return;
-    const generated = buildLocalMessageForTask(selectedTask);
-    setMessage(generated);
-    setMessageSource("local");
+    // Dropping the override reveals the derived local message, which is exactly
+    // what this button used to assign.
+    setMessageOverride(null);
     setSelectedCreatorId(selectedTask.id);
     setIsQueueExpanded(false);
     scrollToMessageArea();
@@ -2144,7 +2145,11 @@ function App() {
 
   function updateGeneratedEnglishMessage(english: string) {
     if (!message) return;
-    setMessage({ ...message, english });
+    // A hand edit becomes an override, keeping whatever produced the text.
+    setMessageOverride({
+      message: { ...message, english },
+      source: messageSource,
+    });
   }
 
   function baseCreatorReply(task: Task): string {
@@ -2262,11 +2267,8 @@ function App() {
     setDeepSeekLoadingAction(action);
     setDeepSeekError("");
     try {
-      if (action === "generate_personalized_reply" && !message) {
-        setMessage(buildLocalMessageForTask(selectedTask));
-        setMessageSource("local");
-      }
-
+      // No need to seed a local message first: `message` is derived from the
+      // selected task, and this function already returned if there is none.
       const response = await fetch("/api/deepseek-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2286,13 +2288,15 @@ function App() {
       }
 
       const localFallback = message ?? buildLocalMessageForTask(selectedTask);
-      setMessage({
-        ...localFallback,
-        english: result.englishMessage || localFallback.english,
-        chineseExplanation:
-          result.chineseExplanation || localFallback.chineseExplanation,
+      setMessageOverride({
+        message: {
+          ...localFallback,
+          english: result.englishMessage || localFallback.english,
+          chineseExplanation:
+            result.chineseExplanation || localFallback.chineseExplanation,
+        },
+        source: result.englishMessage ? "deepseek" : "local",
       });
-      setMessageSource(result.englishMessage ? "deepseek" : "local");
       setDeepSeekChineseExplanation(result.chineseExplanation || "");
     } catch (error) {
       setDeepSeekError(deepSeekErrorMessage(error));
@@ -2722,8 +2726,7 @@ function App() {
               setSelectedCampaign("ALL");
               setSelectedIds([]);
               setSelectedCreatorId("");
-              setMessage(null);
-              setMessageSource("local");
+              setMessageOverride(null);
             }}
           >
             <option value={ALL_STORES}>全部店铺</option>
@@ -2742,8 +2745,7 @@ function App() {
               setSelectedCampaign(event.target.value);
               setSelectedIds([]);
               setSelectedCreatorId("");
-              setMessage(null);
-              setMessageSource("local");
+              setMessageOverride(null);
               setIsQueueExpanded(true);
               setOnlyCurrentCreator(false);
             }}
@@ -2854,7 +2856,6 @@ function App() {
     }
     if (matches.length === 1) {
       handleSelectCreator(matches[0].id);
-      setMessage(buildLocalMessageForTask(matches[0]));
       setCreatorSearchStatus(`已定位 ${displayName(matches[0])}。`);
       return;
     }
