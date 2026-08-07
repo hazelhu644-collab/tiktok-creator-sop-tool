@@ -2994,12 +2994,45 @@ describe("settings and prompt helper", () => {
     fireEvent.change(screen.getByLabelText("当前店铺 / 品牌"), {
       target: { value: "ALL_STORES" },
     });
+    // A store name that does not exist yet creates that store, which is the
+    // only way to add one — stores are derived from what references them.
     prompt
       .mockReturnValueOnce("Cat Scratching Patches")
-      .mockReturnValueOnce("Missing Store");
+      .mockReturnValueOnce("BrandNewStore");
     await user.click(screen.getByRole("button", { name: "新增产品" }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(CAMPAIGNS_STORAGE_KEY) ?? "[]",
+      );
+      expect(saved).toContainEqual(
+        expect.objectContaining({
+          storeName: "BrandNewStore",
+          productName: "Cat Scratching Patches",
+        }),
+      );
+    });
+
+    expect(
+      within(screen.getByLabelText("当前店铺 / 品牌")).getByRole("option", {
+        name: "BrandNewStore",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("requires a store name when creating a product", async () => {
+    const user = userEvent.setup();
+    const prompt = vi.spyOn(window, "prompt");
+    render(<App />);
+
+    await goTo(user, /设置/);
+    prompt
+      .mockReturnValueOnce("Nameless Store Product")
+      .mockReturnValueOnce("");
+    await user.click(screen.getByRole("button", { name: "新增产品" }));
+
     expect(screen.getByRole("status")).toHaveTextContent(
-      "创建产品前必须选择已有店铺 / 品牌。",
+      "创建产品前需要填写店铺 / 品牌名称。",
     );
   });
 

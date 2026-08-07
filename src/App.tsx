@@ -52,6 +52,7 @@ import {
   saveCampaigns,
   normalizeStoreId,
   normalizeStoreName,
+  storeIdFromName,
 } from "./campaignData";
 import type {
   Campaign,
@@ -3606,20 +3607,23 @@ function App() {
       if (!targetStore) {
         const storeName = window
           .prompt(
-            "请选择该产品所属店铺 / 品牌（输入现有店铺名称）：",
+            "该产品属于哪个店铺 / 品牌？输入现有名称可归入该店铺，输入新名称会创建新店铺：",
             stores[0]?.name ?? DEFAULT_STORE_NAME,
           )
           ?.trim();
+        if (!storeName) {
+          setToast({
+            tone: "warning",
+            text: "创建产品前需要填写店铺 / 品牌名称。",
+          });
+          return;
+        }
+        // A store the operator has not used before is created here. Stores are
+        // derived from the campaigns and rows that reference them, so naming one
+        // on a new campaign is the only way to bring it into existence.
         targetStore = stores.find(
-          (store) => store.name.toLowerCase() === storeName?.toLowerCase(),
-        );
-      }
-      if (!targetStore) {
-        setToast({
-          tone: "warning",
-          text: "创建产品前必须选择已有店铺 / 品牌。",
-        });
-        return;
+          (store) => store.name.toLowerCase() === storeName.toLowerCase(),
+        ) ?? { id: storeIdFromName(storeName), name: storeName };
       }
       if (
         mergedCampaigns.some(
