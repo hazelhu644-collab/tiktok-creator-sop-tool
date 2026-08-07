@@ -11,6 +11,7 @@ import {
   saveCampaigns,
 } from "./campaignData";
 import {
+  demoAiDraft,
   demoCampaigns,
   demoCreatorRows,
   exitDemoModeUrl,
@@ -141,5 +142,19 @@ describe("demo mode storage isolation", () => {
     expect(restored).toHaveLength(1);
     expect(restored[0].username).toBe("real_creator");
     expect(restored[0].notes).toBe("真实达人备注");
+  });
+});
+
+describe("demo AI draft", () => {
+  it("keeps the requested product name and covers both draft sections", () => {
+    const draft = demoAiDraft("Demo 宠物蒸汽梳");
+
+    expect(draft.productName).toBe("Demo 宠物蒸汽梳");
+    expect(draft.requirements.length).toBeGreaterThan(0);
+    expect(draft.priorities.length).toBeGreaterThan(0);
+  });
+
+  it("falls back to the demo product when no name is given", () => {
+    expect(demoAiDraft("").productName).toBe("Demo 宠物蒸汽梳");
   });
 });

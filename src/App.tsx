@@ -72,7 +72,12 @@ import type {
 } from "./features/campaigns/campaignSettingsTypes";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
-import { exitDemoModeUrl, isDemoMode } from "./demoMode";
+import {
+  DEMO_AI_DRAFT_DELAY_MS,
+  demoAiDraft,
+  exitDemoModeUrl,
+  isDemoMode,
+} from "./demoMode";
 import type {
   SettingsAiDraft,
   SettingsPromptHelperField,
@@ -2619,14 +2624,28 @@ function App() {
     setAiDraftLoading(true);
     setAiDraftError("");
     setAiDraftAppliedTo("");
+
+    const productName =
+      settingsTargetCampaign?.productName ||
+      activeFilmingRequirements.productName;
+
+    // Every other paid or destructive path is already blocked in demo mode; this
+    // one goes out over the network, so it has to be stopped before the fetch.
+    if (demoMode) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, DEMO_AI_DRAFT_DELAY_MS),
+      );
+      setAiDraft(demoAiDraft(productName));
+      setAiDraftLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/generate-filming-requirements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productName:
-            settingsTargetCampaign?.productName ||
-            activeFilmingRequirements.productName,
+          productName,
           sellingPoints: promptHelperForm.sellingPoints,
           videoCount: promptHelperForm.videoCount || String(requiredVideos),
           durationRequirement: promptHelperForm.durationRequirement,

@@ -1,3 +1,4 @@
+import type { SettingsAiDraft } from "./features/settings/settingsTypes";
 import type { Campaign, CreatorRow } from "./types";
 
 /**
@@ -6,7 +7,8 @@ import type { Campaign, CreatorRow } from "./types";
  * Activated with `?demo=1`. While it is on, nothing is read from or written to
  * localStorage — `creatorData` and `campaignData` treat storage as unavailable,
  * so a demo session can never see or overwrite real creator records. Edits made
- * during a demo live in React state only and disappear on reload.
+ * during a demo live in React state only and disappear on reload. Paid API
+ * calls are stubbed too, so showing the app to someone costs nothing.
  *
  * This module deliberately imports nothing but types: `creatorData` and
  * `campaignData` both depend on it, so any import back into them would be a
@@ -186,3 +188,33 @@ export function demoCampaigns(): Campaign[] {
     },
   ];
 }
+
+/**
+ * Stand-in for the OpenAI-backed filming-requirements draft.
+ *
+ * The real endpoint costs money per call. A demo should be able to click the
+ * button and show a result without spending anything, so demo mode returns this
+ * instead of calling out. The short delay is deliberate: the loading state is
+ * part of what the button does, and a demo should show it.
+ */
+export function demoAiDraft(productName: string): SettingsAiDraft {
+  return {
+    productName: productName || DEMO_PRODUCT_NAME,
+    requirements: [
+      "每位达人 2 条视频",
+      "每条视频 60 秒以上",
+      "必须 tag 品牌账号",
+      "必须挂 TikTok Shop 产品链接",
+      "发布前请先确认成片符合拍摄要求",
+    ],
+    priorities: [
+      "开场 3 秒内出现产品使用画面",
+      "展示蒸汽雾化的瞬间",
+      "特写梳下来的浮毛",
+      "拍到宠物放松的真实反应",
+      "结尾引导点击购物车",
+    ],
+  };
+}
+
+export const DEMO_AI_DRAFT_DELAY_MS = 700;
