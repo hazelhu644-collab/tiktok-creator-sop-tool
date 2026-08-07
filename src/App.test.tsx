@@ -3405,3 +3405,59 @@ describe("settings and prompt helper", () => {
     expect(csv).toContain("fail_creator");
   });
 });
+
+describe("safe demo mode", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("serves an AI draft without calling the paid endpoint", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState({}, "", "/?demo=1");
+
+    render(<App />);
+
+    expect(screen.getByText("演示模式")).toBeInTheDocument();
+
+    await goTo(user, /设置/);
+    await user.click(screen.getByRole("button", { name: "展开辅助生成" }));
+    await user.click(
+      screen.getByRole("button", { name: "用 AI 直接生成草稿" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "应用到当前产品项目" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/AI 草稿：/)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("still calls the endpoint outside demo mode", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: "AI 生成失败：测试桩。" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(screen.queryByText("演示模式")).not.toBeInTheDocument();
+
+    await goTo(user, /设置/);
+    await user.click(screen.getByRole("button", { name: "展开辅助生成" }));
+    await user.click(
+      screen.getByRole("button", { name: "用 AI 直接生成草稿" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "AI 生成失败：测试桩。",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
