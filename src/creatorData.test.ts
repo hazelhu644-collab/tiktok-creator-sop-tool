@@ -331,3 +331,53 @@ describe("editable creator data helpers", () => {
     ).toBe("2026-06-13");
   });
 });
+
+describe("rounds and duplicate detection", () => {
+  function contactRow(id: string, round?: number): CreatorRow {
+    return {
+      id,
+      username: "same_creator",
+      profileLink: "",
+      contactMethod: "",
+      storeId: "terrapaw",
+      storeName: "TerraPaw",
+      product: "Pet Brush",
+      currentStatus: "",
+      sampleShippingStatus: "",
+      sampleDeliveredDate: "",
+      videoProgress: "0/2",
+      firstVideoPostedDate: "",
+      lastContactDate: "",
+      lastFollowUpCount: 0,
+      notes: "",
+      round,
+    };
+  }
+
+  it("flags the same creator twice inside one round", () => {
+    const result = getDuplicateCheck(contactRow("b", 1), [contactRow("a", 1)]);
+
+    expect(result.possibleDuplicate).toBe(true);
+  });
+
+  it("allows the same creator again in a later round", () => {
+    const result = getDuplicateCheck(contactRow("b", 2), [contactRow("a", 1)]);
+
+    // Re-contacting a creator is the point of a new round, so this must not
+    // read as a duplicate — but it is still the same person, and the earlier
+    // round is reported so the operator can be told about the history.
+    expect(result.possibleDuplicate).toBe(false);
+    expect(result.duplicateCreator).toBe(true);
+    expect(result.earlierRound).toBe(true);
+    expect(result.earlierRoundRows.map((r) => r.id)).toEqual(["a"]);
+    expect(result.multiSample).toBe(false);
+  });
+
+  it("keeps pre-round records comparable with round 1", () => {
+    const result = getDuplicateCheck(contactRow("b", 1), [
+      contactRow("a", undefined),
+    ]);
+
+    expect(result.possibleDuplicate).toBe(true);
+  });
+});

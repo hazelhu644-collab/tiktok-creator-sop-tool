@@ -219,3 +219,40 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
   font-size: 0.8rem;
   line-height: 1.5;
 }
+
+.round-block {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  grid-column: 1 / -1;
+  padding: 14px 16px;
+  border: 1px solid rgba(218, 207, 190, 0.62);
+  border-radius: 18px;
+  background: rgba(255, 251, 245, 0.72);
+}
+
+.round-block strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #123c43;
+}
+
+.round-block p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.round-block button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+tr.row-incomplete > td {
+  background: #fff6f5;
+}
+
+tr.row-incomplete > td:first-child {
+  box-shadow: inset 3px 0 0 #c1554f;
+}

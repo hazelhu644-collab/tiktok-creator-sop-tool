@@ -20,6 +20,7 @@ const COLUMN_ALIASES: Record<
     | "followUpHistory"
     | "archivedAt"
     | "archiveReason"
+    | "round"
   >,
   string[]
 > = {

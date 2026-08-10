@@ -34,6 +34,7 @@ function createProps(
           updateVideoLength: vi.fn(),
           updateVideoCount: vi.fn(),
           syncVideoCount: vi.fn(),
+          endCurrentRound: vi.fn(),
           updateAvoidShots: vi.fn(),
           updateProductLinkRequirement: vi.fn(),
           updateReferenceLinks: vi.fn(),

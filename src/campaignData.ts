@@ -381,3 +381,42 @@ export function campaignToFilmingRequirements(
     referenceLinks,
   };
 }
+
+/**
+ * Rounds.
+ *
+ * Creator outreach runs in waves: contact a set of creators for a product,
+ * close the round when they are done, then start the next one — which may
+ * include the same creators again.
+ *
+ * Rows and campaigns saved before rounds existed carry no number, so every
+ * reader goes through these helpers and treats "missing" as round 1. That
+ * keeps existing data on round 1 rather than in a separate unnumbered bucket.
+ */
+export const FIRST_ROUND = 1;
+
+export function roundOf(value: { round?: number } | undefined): number {
+  const round = value?.round;
+  return Number.isSafeInteger(round) && (round as number) >= FIRST_ROUND
+    ? (round as number)
+    : FIRST_ROUND;
+}
+
+export function currentRoundOf(campaign: Campaign | undefined): number {
+  const round = campaign?.currentRound;
+  return Number.isSafeInteger(round) && (round as number) >= FIRST_ROUND
+    ? (round as number)
+    : FIRST_ROUND;
+}
+
+/** Rows of one campaign in one round, whether or not they are archived. */
+export function rowsInRound(
+  rows: CreatorRow[],
+  campaign: Campaign,
+  round: number,
+): CreatorRow[] {
+  return rows.filter(
+    (row) =>
+      rowMatchesCampaignIdentity(row, campaign) && roundOf(row) === round,
+  );
+}

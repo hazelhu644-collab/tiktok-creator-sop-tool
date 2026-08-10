@@ -53,6 +53,9 @@ import {
   normalizeStoreId,
   normalizeStoreName,
   storeIdFromName,
+  currentRoundOf,
+  roundOf,
+  rowsInRound,
 } from "./campaignData";
 import type {
   Campaign,
@@ -554,6 +557,23 @@ function inferStatus(row: CreatorRow, requiredVideos: number): CreatorStatus {
 
 function statusTone(status: CreatorStatus) {
   return `status-pill status-${status.toLowerCase().replace(/\s+/g, "-")}`;
+}
+
+/**
+ * Whether a creator delivered what the round asked for. Same rule the follow-up
+ * engine uses: an explicit Completed status, or enough posted videos.
+ */
+function isRoundCreatorCompleted(
+  row: CreatorRow,
+  requiredVideos: number,
+): boolean {
+  if (hasAny(`${row.currentStatus} ${row.trackingStatus ?? ""}`, ["completed"]))
+    return true;
+  const posted = normalizeVideoProgress(
+    row.videoProgress,
+    requiredVideos,
+  ).postedCount;
+  return typeof posted === "number" && posted >= requiredVideos;
 }
 
 function isArchivedCollaboration(
@@ -1447,6 +1467,11 @@ function App() {
           row: entry.row,
           displayName: displayName(entry.row),
           archived: isArchivedCollaboration(entry.row),
+          // Closing a round archives its stragglers as Failed; those are the
+          // rows the review pass needs to spot at a glance.
+          roundIncomplete:
+            Boolean(entry.row.archivedAt) &&
+            entry.row.archiveReason === "Failed",
           canRestore:
             isArchivedCollaboration(entry.row) &&
             entry.row.archiveReason === "Manual",
@@ -1724,15 +1749,22 @@ function App() {
           : (stores.find((store) => store.id === selectedStore)?.name ??
               DEFAULT_STORE_NAME),
       );
-      const summary = buildDuplicateImportSummary(parsedRows, rows);
+      // Imported creators join whichever round their product is currently on,
+      // so a fresh CSV after 结束本轮 lands in the new round rather than
+      // colliding with the closed one.
+      const parsedRowsWithRound = parsedRows.map((row) => ({
+        ...row,
+        round: currentRoundOf(campaignForRow(row)),
+      }));
+      const summary = buildDuplicateImportSummary(parsedRowsWithRound, rows);
       const summaryText = `检测到 ${summary.possibleDuplicateCount} 个可能重复达人；检测到 ${summary.multiSampleCount} 个同达人多样品记录。`;
-      setRows((currentRows) => [...parsedRows, ...currentRows]);
+      setRows((currentRows) => [...parsedRowsWithRound, ...currentRows]);
       setImportSummary(summaryText);
       setFileName(file.name);
       setSelectedIds([]);
       setToast({
         tone: "success",
-        text: `导入成功，已追加 ${parsedRows.length} 条记录。${summaryText}`,
+        text: `导入成功，已追加 ${parsedRowsWithRound.length} 条记录。${summaryText}`,
       });
       if (parsedRows.length === 0)
         setError("没有找到达人数据。请检查表头和表格内容。");
@@ -2019,8 +2051,29 @@ function App() {
           ),
       ),
       username: creatorName,
+      round: currentRoundOf(matchedCampaign),
     };
     const duplicate = getDuplicateCheck(draft, rows);
+    // Re-contacting someone from a closed round is the normal way a new round
+    // starts, so it is added straight away — only same-round or cross-product
+    // matches are worth stopping for.
+    if (
+      creatorName &&
+      duplicate.earlierRound &&
+      !duplicate.possibleDuplicate &&
+      !duplicate.multiSample &&
+      !duplicate.crossStoreCreator
+    ) {
+      const previousRounds = Array.from(
+        new Set(duplicate.earlierRoundRows.map((item) => roundOf(item))),
+      ).sort((a, b) => a - b);
+      addCreatorDraft(draft);
+      setToast({
+        tone: "success",
+        text: `已加入第 ${roundOf(draft)} 轮。该达人在第 ${previousRounds.join("、")} 轮合作过，历史记录仍保留。`,
+      });
+      return;
+    }
     if (
       creatorName &&
       duplicate.duplicateCreator &&
@@ -3708,6 +3761,82 @@ function App() {
         text: `目标视频数量：${targetRequiredVideos}；已同步 ${updatedCount} 条达人记录；保留 ${preservedPublishedCount} 条已有发布进度；跳过 ${skippedCount} 条需要手动检查。`,
       });
     };
+    /**
+     * Closes the product's current outreach round and opens the next one.
+     *
+     * Every record in the round is archived, whether or not the creator
+     * delivered — the round is over either way. Those who did not finish are
+     * archived as Failed so the review view and the table can pick them out.
+     * New creators added afterwards land in the next round, which is what lets
+     * the same creator be contacted again without counting as a duplicate.
+     */
+    const endCurrentRound = (campaign: Campaign) => {
+      const round = currentRoundOf(campaign);
+      const roundRows = rowsInRound(rows, campaign, round).filter(
+        (row) => !row.archivedAt,
+      );
+      if (roundRows.length === 0) {
+        setToast({
+          tone: "warning",
+          text: `第 ${round} 轮没有进行中的达人记录，无需结束。`,
+        });
+        return;
+      }
+
+      const requiredVideos = campaignRequiredVideoCount(
+        campaign,
+        activeFilmingRequirements,
+      );
+      const finished = roundRows.filter((row) =>
+        isRoundCreatorCompleted(row, requiredVideos),
+      );
+      if (
+        !window.confirm(
+          `结束「${campaign.productName}」第 ${round} 轮？\n\n` +
+            `共 ${roundRows.length} 位达人，其中 ${finished.length} 位已完成、` +
+            `${roundRows.length - finished.length} 位未完成。\n` +
+            `全部会被归档（不会删除），未完成的会标红。之后新增的达人进入第 ${round + 1} 轮。`,
+        )
+      )
+        return;
+
+      const today = todayString();
+      const roundRowIds = new Set(roundRows.map((row) => row.id));
+      setRows(
+        rows.map((row) => {
+          if (!roundRowIds.has(row.id)) return row;
+          const completed = isRoundCreatorCompleted(row, requiredVideos);
+          return {
+            ...row,
+            round,
+            archivedAt: today,
+            archiveReason: completed ? "Completed" : "Failed",
+            followUpHistory: [
+              ...(row.followUpHistory ?? []),
+              {
+                date: today,
+                action: completed
+                  ? ("Completed" as const)
+                  : ("Failed" as const),
+                note: `第 ${round} 轮结束${completed ? "" : "，未完成履约"}。`,
+              },
+            ],
+          };
+        }),
+      );
+      setCampaigns(
+        mergedCampaigns.map((item) =>
+          campaignOptionValue(item) === campaignOptionValue(campaign)
+            ? { ...item, currentRound: round + 1 }
+            : item,
+        ),
+      );
+      setToast({
+        tone: finished.length === roundRows.length ? "success" : "warning",
+        text: `第 ${round} 轮已结束：${finished.length} 位完成、${roundRows.length - finished.length} 位未完成。现在是第 ${round + 1} 轮。`,
+      });
+    };
+
     const duplicateCampaign = (campaign: Campaign) => {
       const id = `${campaign.id}-copy-${Date.now()}`;
       const storeId = normalizeStoreId(campaign.storeId, campaign.storeName);
@@ -3764,6 +3893,12 @@ function App() {
       targetCampaign
         ? {
             campaign: targetCampaign,
+            currentRound: currentRoundOf(targetCampaign),
+            activeRoundCreatorCount: rowsInRound(
+              rows,
+              targetCampaign,
+              currentRoundOf(targetCampaign),
+            ).filter((row) => !row.archivedAt).length,
             selectValue: campaignSelectValue(targetCampaign),
             storeId: normalizeStoreId(
               targetCampaign.storeId,
@@ -3855,6 +3990,9 @@ function App() {
                 updateCampaign({ videoCount: value }),
               syncVideoCount: () => {
                 if (targetCampaign) syncCampaignVideoCount(targetCampaign);
+              },
+              endCurrentRound: () => {
+                if (targetCampaign) endCurrentRound(targetCampaign);
               },
               updateAvoidShots: (value) =>
                 updateCampaign({ avoidShots: value }),

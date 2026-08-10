@@ -173,6 +173,25 @@ export function CampaignSettingsPage({
                 会更新 0/2 → 0/1 等安全记录，并保留已发布视频数量。
               </span>
             </div>
+            <div className="round-block">
+              <div>
+                <strong>当前第 {target.currentRound} 轮建联</strong>
+                <p className="muted">
+                  本轮还有 {target.activeRoundCreatorCount} 位达人在进行中。
+                  结束本轮会把这些记录全部归档（不会删除），未完成的标红；
+                  之后新增的达人进入第 {target.currentRound + 1} 轮，
+                  同一个达人可以再次建联而不算重复。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                onClick={actions.endCurrentRound}
+                disabled={target.activeRoundCreatorCount === 0}
+              >
+                结束第 {target.currentRound} 轮
+              </button>
+            </div>
             <label>
               不希望达人这样拍
               <textarea

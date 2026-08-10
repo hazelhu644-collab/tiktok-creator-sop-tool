@@ -75,6 +75,11 @@ export type CreatorRow = {
   followUpHistory?: FollowUpHistoryEntry[];
   archivedAt?: string;
   archiveReason?: "Completed" | "Failed" | string;
+  /**
+   * Which outreach round of the product this record belongs to. Rows saved
+   * before rounds existed have none and count as round 1.
+   */
+  round?: number;
 };
 
 export type Task = CreatorRow & {
@@ -142,4 +147,9 @@ export type Campaign = {
   defaultMessageSetting: string;
   notes: string;
   archivedAt?: string;
+  /**
+   * The outreach round new creators for this product join. Campaigns saved
+   * before rounds existed have none and count as round 1.
+   */
+  currentRound?: number;
 };
