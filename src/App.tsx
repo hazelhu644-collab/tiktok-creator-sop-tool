@@ -10,6 +10,7 @@ import {
   buildDuplicateImportSummary,
   clearSavedCreatorRows,
   copyCreatorBaseFields,
+  creatorIdentityKeys,
   countActiveCreatorSamples,
   createBlankCreatorRow,
   downloadCreatorRowsCsv,
@@ -76,6 +77,8 @@ import type {
 } from "./features/campaigns/campaignSettingsTypes";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { RoundReviewPage } from "./features/rounds/RoundReviewPage";
+import type { RoundSummary } from "./features/rounds/roundReviewTypes";
 import {
   DEMO_AI_DRAFT_DELAY_MS,
   demoAiDraft,
@@ -122,6 +125,7 @@ type ModuleKey =
   | "templates"
   | "samples"
   | "followup"
+  | "rounds"
   | "review"
   | "ads"
   | "settings";
@@ -205,6 +209,7 @@ const navIcons: Record<ModuleKey, string> = {
   templates: "✦",
   samples: "◇",
   followup: "↗",
+  rounds: "⟳",
   review: "✓",
   ads: "◆",
   settings: "⚙",
@@ -214,6 +219,7 @@ const navItems: Array<{ key: ModuleKey; label: string; helper: string }> = [
   { key: "dashboard", label: "今日工作台", helper: "产品优先日常跟进" },
   { key: "followup", label: "达人跟进中心", helper: "同工作台处理队列" },
   { key: "creators", label: "达人数据库", helper: "搜索、筛选、批量更新" },
+  { key: "rounds", label: "轮次复盘", helper: "历史轮次与未完成达人" },
   { key: "samples", label: "样品追踪", helper: "物流与到货跟进" },
   { key: "templates", label: "沟通话术模板", helper: "标准英文话术库" },
   { key: "review", label: "内容审核", helper: "视频验收清单" },
@@ -793,6 +799,7 @@ function App() {
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => loadCampaigns());
   const [selectedStore, setSelectedStore] = useState(ALL_STORES);
   const [selectedCampaign, setSelectedCampaign] = useState("ALL");
+  const [expandedRound, setExpandedRound] = useState<number | null>(null);
   const [isPromptHelperOpen, setIsPromptHelperOpen] = useState(false);
   const [promptHelperForm, setPromptHelperForm] = useState({
     sellingPoints: "",
@@ -3265,6 +3272,103 @@ function App() {
     );
   }
 
+  /**
+   * Groups a product's creator records by round for the review view. Rounds
+   * belong to one product, so this only has an answer when a single product is
+   * selected.
+   */
+  function buildRoundSummaries(): RoundSummary[] {
+    if (!activeCampaign) return [];
+
+    const campaign = activeCampaign;
+    const productRows = rows.filter((row) => rowMatchesCampaign(row, campaign));
+    if (productRows.length === 0) return [];
+
+    const requiredVideos = campaignRequiredVideoCount(
+      campaign,
+      activeFilmingRequirements,
+    );
+    const current = currentRoundOf(campaign);
+    const roundsPresent = new Set(productRows.map((row) => roundOf(row)));
+    roundsPresent.add(current);
+
+    // Which rounds each creator shows up in, so a repeat can be spotted from
+    // either round without hunting through the database.
+    const roundsByCreator = new Map<string, Set<number>>();
+    productRows.forEach((row) => {
+      const key = creatorIdentityKeys(row)[0] ?? row.id;
+      const seen = roundsByCreator.get(key) ?? new Set<number>();
+      seen.add(roundOf(row));
+      roundsByCreator.set(key, seen);
+    });
+
+    return Array.from(roundsPresent)
+      .sort((a, b) => b - a)
+      .map((round) => {
+        const roundRows = productRows.filter((row) => roundOf(row) === round);
+        const creators = roundRows.map((row) => {
+          const completed = isRoundCreatorCompleted(row, requiredVideos);
+          const key = creatorIdentityKeys(row)[0] ?? row.id;
+          return {
+            rowId: row.id,
+            displayName: displayName(row),
+            completed,
+            statusLabel:
+              row.currentStatus ||
+              displayStatus(inferStatus(row, requiredVideos)),
+            videoProgress: row.videoProgress || `0/${requiredVideos}`,
+            followUpCount: row.lastFollowUpCount,
+            notes: row.notes.trim(),
+            alsoInRounds: Array.from(roundsByCreator.get(key) ?? [])
+              .filter((item) => item !== round)
+              .sort((a, b) => a - b),
+          };
+        });
+
+        return {
+          round,
+          isCurrent: round === current,
+          total: creators.length,
+          completed: creators.filter((item) => item.completed).length,
+          incomplete: creators.filter((item) => !item.completed).length,
+          active: roundRows.filter((row) => !row.archivedAt).length,
+          creators,
+        };
+      });
+  }
+
+  function renderRounds() {
+    return (
+      <>
+        {renderPageHeader(
+          "轮次复盘",
+          "按轮次回看每一批达人的结果，未完成履约的会标红。",
+        )}
+        <RoundReviewPage
+          data={{
+            productName: activeCampaign?.productName ?? "",
+            rounds: buildRoundSummaries(),
+            needsProductSelection: !activeCampaign,
+          }}
+          uiState={{ expandedRound }}
+          actions={{
+            toggleRound: (round) =>
+              setExpandedRound((current) => (current === round ? null : round)),
+            openCreatorInDatabase: (rowId) => {
+              const row = rows.find((item) => item.id === rowId);
+              if (!row) return;
+              // Closed rounds are archived, so the database has to be showing
+              // archived records for the search to land on anything.
+              setSearch(displayName(row));
+              setShowArchivedCollaborations(true);
+              setActiveModule("creators");
+            },
+          }}
+        />
+      </>
+    );
+  }
+
   function renderSamples() {
     return (
       <>
@@ -4068,6 +4172,7 @@ function App() {
     if (activeModule === "dashboard") return renderDashboard();
     if (activeModule === "creators") return renderCreatorDatabase();
     if (activeModule === "templates") return renderTemplates();
+    if (activeModule === "rounds") return renderRounds();
     if (activeModule === "samples") return renderSamples();
     if (activeModule === "followup") return renderFollowup();
     if (activeModule === "review") return renderReview();

@@ -256,3 +256,77 @@ tr.row-incomplete > td {
 tr.row-incomplete > td:first-child {
   box-shadow: inset 3px 0 0 #c1554f;
 }
+
+.round-list {
+  display: grid;
+  gap: 12px;
+}
+
+.round-card {
+  border: 1px solid rgba(220, 210, 194, 0.8);
+  border-radius: 20px;
+  background: rgba(255, 253, 250, 0.86);
+  overflow: hidden;
+}
+
+.round-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.round-current-tag {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e7f6eb;
+  color: #28633a;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.round-card-stats {
+  color: #5b6676;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.round-bad {
+  color: #a63a3a;
+}
+
+.round-creator-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0 16px 16px;
+  list-style: none;
+}
+
+.round-creator-list li {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  padding: 10px 12px;
+  border: 1px solid rgba(221, 210, 192, 0.8);
+  border-left: 4px solid #9fb8ae;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.round-creator-list li.round-bad-row {
+  border-left-color: #c1554f;
+  background: #fff6f5;
+}
+
+.round-creator-meta {
+  color: #5b6676;
+  font-size: 0.82rem;
+}
