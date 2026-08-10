@@ -7,6 +7,10 @@ export type CampaignSettingsOption = {
 
 export type CampaignSettingsTargetView = {
   campaign: Campaign;
+  /** Outreach round this product is currently on. */
+  currentRound: number;
+  /** Creators in that round who have not been archived yet. */
+  activeRoundCreatorCount: number;
   selectValue: string;
   storeId: string;
   keyContentPointsText: string;
@@ -47,6 +51,7 @@ export type CampaignSettingsActions = {
   updateVideoLength: (value: string) => void;
   updateVideoCount: (value: string) => void;
   syncVideoCount: () => void;
+  endCurrentRound: () => void;
   updateAvoidShots: (value: string) => void;
   updateProductLinkRequirement: (value: string) => void;
   updateReferenceLinks: (value: string) => void;

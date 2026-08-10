@@ -10,6 +10,8 @@ export type CreatorDatabaseRowView = {
   row: CreatorRow;
   displayName: string;
   archived: boolean;
+  /** Archived at the end of a round without delivering — shown in red. */
+  roundIncomplete: boolean;
   canRestore: boolean;
   duplicate: {
     possibleDuplicate: boolean;

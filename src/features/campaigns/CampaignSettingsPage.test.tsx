@@ -36,6 +36,8 @@ function createProps(
     data: {
       target: {
         campaign: targetCampaign,
+        currentRound: 1,
+        activeRoundCreatorCount: 3,
         selectValue: "terrapaw::pet-brush",
         storeId: "terrapaw",
         keyContentPointsText: "Show steam",
@@ -71,6 +73,7 @@ function createProps(
       updateVideoLength: vi.fn(),
       updateVideoCount: vi.fn(),
       syncVideoCount: vi.fn(),
+      endCurrentRound: vi.fn(),
       updateAvoidShots: vi.fn(),
       updateProductLinkRequirement: vi.fn(),
       updateReferenceLinks: vi.fn(),

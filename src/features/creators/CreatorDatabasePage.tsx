@@ -260,7 +260,10 @@ export function CreatorDatabasePage({
               </thead>
               <tbody>
                 {data.rows.map((entry) => (
-                  <tr key={entry.row.id}>
+                  <tr
+                    key={entry.row.id}
+                    className={entry.roundIncomplete ? "row-incomplete" : ""}
+                  >
                     <td>
                       <input
                         aria-label={`选择 ${entry.displayName}`}

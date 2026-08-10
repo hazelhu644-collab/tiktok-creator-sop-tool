@@ -37,6 +37,7 @@ function createProps(
           row,
           displayName: "alpha_creator",
           archived: false,
+          roundIncomplete: false,
           canRestore: false,
           duplicate: {
             possibleDuplicate: false,
@@ -185,6 +186,7 @@ describe("CreatorDatabasePage", () => {
             row,
             displayName: "alpha_creator",
             archived: true,
+            roundIncomplete: false,
             canRestore: true,
             duplicate: {
               possibleDuplicate: false,

@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
-  campaignIdentity,
+  FIRST_ROUND,
   campaignIdFromName,
+  campaignIdentity,
   campaignToFilmingRequirements,
   createCampaignFromName,
+  currentRoundOf,
   detectCampaignNames,
   mergeDetectedCampaigns,
+  normalizeStoreId,
   productIdForCampaign,
+  roundOf,
   rowMatchesCampaignIdentity,
+  rowsInRound,
 } from "./campaignData";
 import { defaultCreatorFilmingRequirements } from "./messageGenerator";
 import type { CreatorRow } from "./types";
@@ -187,5 +192,57 @@ describe("campaign data helpers", () => {
     expect(wandRequirements.requiredScenes).not.toBe(
       brushRequirements.requiredScenes,
     );
+  });
+});
+
+describe("outreach rounds", () => {
+  const campaign = createCampaignFromName("Pet Brush", undefined, "TerraPaw");
+
+  function row(patch: Partial<CreatorRow> & { id: string }): CreatorRow {
+    return {
+      username: patch.id,
+      profileLink: "",
+      contactMethod: "",
+      storeId: normalizeStoreId(campaign.storeId, campaign.storeName),
+      storeName: campaign.storeName,
+      campaignId: campaign.id,
+      productId: campaign.productId,
+      product: campaign.productName,
+      currentStatus: "",
+      sampleShippingStatus: "",
+      sampleDeliveredDate: "",
+      videoProgress: "0/2",
+      firstVideoPostedDate: "",
+      lastContactDate: "",
+      lastFollowUpCount: 0,
+      notes: "",
+      ...patch,
+    };
+  }
+
+  it("treats data saved before rounds existed as round 1", () => {
+    expect(roundOf(undefined)).toBe(FIRST_ROUND);
+    expect(roundOf({})).toBe(FIRST_ROUND);
+    expect(currentRoundOf(undefined)).toBe(FIRST_ROUND);
+    expect(currentRoundOf(campaign)).toBe(FIRST_ROUND);
+  });
+
+  it("ignores round numbers that are not usable", () => {
+    expect(roundOf({ round: 0 })).toBe(FIRST_ROUND);
+    expect(roundOf({ round: -3 })).toBe(FIRST_ROUND);
+    expect(roundOf({ round: 2.5 })).toBe(FIRST_ROUND);
+    expect(roundOf({ round: 4 })).toBe(4);
+  });
+
+  it("selects the rows of one round, archived or not", () => {
+    const rows = [
+      row({ id: "a" }),
+      row({ id: "b", round: 1 }),
+      row({ id: "c", round: 2 }),
+      row({ id: "d", round: 2, archivedAt: "2026-08-05" }),
+    ];
+
+    expect(rowsInRound(rows, campaign, 1).map((r) => r.id)).toEqual(["a", "b"]);
+    expect(rowsInRound(rows, campaign, 2).map((r) => r.id)).toEqual(["c", "d"]);
   });
 });

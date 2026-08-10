@@ -2,6 +2,7 @@ import type { CreatorRow } from "./types";
 import {
   DEFAULT_STORE_ID,
   DEFAULT_STORE_NAME,
+  roundOf,
   normalizeStoreId,
   normalizeStoreName,
   campaignIdFromName,
@@ -41,8 +42,11 @@ export type DuplicateCheckResult = {
   possibleDuplicate: boolean;
   multiSample: boolean;
   crossStoreCreator: boolean;
+  /** Same creator and product, but from a round that is already closed. */
+  earlierRound: boolean;
   matchingRows: CreatorRow[];
   sameProductRows: CreatorRow[];
+  earlierRoundRows: CreatorRow[];
   differentProductRows: CreatorRow[];
 };
 
@@ -118,9 +122,21 @@ export function getDuplicateCheck(
   const sameStoreRows = matchingRows.filter((candidate) =>
     sameStore(row, candidate),
   );
+  // Contacting the same creator again for the same product is how a new round
+  // works, so only a match inside the same round counts as a duplicate.
   const sameProductRows = sameStoreRows.filter(
     (candidate) =>
-      normalizeProductKey(candidate.product) === productKey && productKey,
+      normalizeProductKey(candidate.product) === productKey &&
+      productKey &&
+      roundOf(candidate) === roundOf(row),
+  );
+  // Same product, earlier round: the creator worked with this product before.
+  // That is history worth mentioning, not a duplicate to resolve.
+  const earlierRoundRows = sameStoreRows.filter(
+    (candidate) =>
+      normalizeProductKey(candidate.product) === productKey &&
+      productKey &&
+      roundOf(candidate) !== roundOf(row),
   );
   const differentProductRows = sameStoreRows.filter(
     (candidate) =>
@@ -135,8 +151,10 @@ export function getDuplicateCheck(
     possibleDuplicate: sameProductRows.length > 0,
     multiSample: differentProductRows.length > 0,
     crossStoreCreator: crossStoreRows.length > 0,
+    earlierRound: earlierRoundRows.length > 0,
     matchingRows,
     sameProductRows,
+    earlierRoundRows,
     differentProductRows,
   };
 }
