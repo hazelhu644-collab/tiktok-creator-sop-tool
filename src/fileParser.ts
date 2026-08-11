@@ -342,6 +342,22 @@ function looksBinary(bytes: Uint8Array): boolean {
 type Grid = unknown[][];
 
 /**
+ * A real date cell in a workbook arrives as a Date. Excel stores dates without
+ * a timezone, so the conversion can land a millisecond either side of midnight
+ * — rounding to the nearest day keeps the calendar date right wherever the
+ * import runs.
+ */
+function cellToText(cell: unknown): string {
+  if (cell instanceof Date) {
+    const dayMs = 86_400_000;
+    return new Date(Math.round(cell.getTime() / dayMs) * dayMs)
+      .toISOString()
+      .slice(0, 10);
+  }
+  return String(cell ?? "");
+}
+
+/**
  * Real workbooks open on a cover or instructions tab as often as on the data,
  * so pick the sheet with the most recognisable headers rather than the first.
  */
@@ -403,7 +419,7 @@ function gridToRecords(
   grid: Grid,
   headerRow: number,
 ): { records: Record<string, unknown>[]; headers: string[] } {
-  const headers = (grid[headerRow] ?? []).map((cell) => String(cell ?? ""));
+  const headers = (grid[headerRow] ?? []).map(cellToText);
   const records: Record<string, unknown>[] = [];
 
   for (let index = headerRow + 1; index < grid.length; index += 1) {
@@ -411,7 +427,7 @@ function gridToRecords(
     if (row.every((cell) => String(cell ?? "").trim() === "")) continue;
     const record: Record<string, unknown> = {};
     headers.forEach((header, column) => {
-      if (header.trim()) record[header] = row[column] ?? "";
+      if (header.trim()) record[header] = cellToText(row[column]);
     });
     records.push(record);
   }
@@ -438,7 +454,10 @@ export async function parseCreatorFile(
   } else {
     const decoded = decodeText(buffer);
     encoding = decoded.encoding;
-    workbook = XLSX.read(decoded.text, { type: "string" });
+    // Without raw, the CSV reader guesses types: "2026-08-05" becomes an Excel
+    // serial number and "0/2" is read as a date, so both arrive as meaningless
+    // floats. Keeping the text as written is what the field parsers expect.
+    workbook = XLSX.read(decoded.text, { type: "string", raw: true });
   }
 
   const gridOf = (name: string): Grid =>

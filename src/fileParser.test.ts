@@ -129,6 +129,37 @@ describe("real-world spreadsheet shapes", () => {
     expect(report.unmatchedColumns).toEqual(["佣金比例"]);
   });
 
+  it("keeps dates and video progress as written in a CSV", async () => {
+    // The CSV reader guesses types unless told not to: "2026-08-05" turns into
+    // an Excel serial number and "0/2" is read as a date, so both used to
+    // arrive as floats and every follow-up rule downstream misfired.
+    const { rows } = await parseCreatorFile(
+      textFile("达人账号,样品到货日期,视频进度\nalice,2026-08-05,0/2\n"),
+      2,
+    );
+
+    expect(rows[0].sampleDeliveredDate).toBe("2026-08-05");
+    expect(rows[0].videoProgress).toBe("0/2");
+  });
+
+  it("turns a workbook date cell into a plain calendar date", async () => {
+    const { rows } = await parseCreatorFile(
+      xlsxFile([
+        [
+          "Sheet1",
+          [
+            ["达人账号", "样品到货日期", "视频进度"],
+            ["alice", new Date("2026-08-05T00:00:00Z"), "0/2"],
+          ],
+        ],
+      ]),
+      2,
+    );
+
+    expect(rows[0].sampleDeliveredDate).toBe("2026-08-05");
+    expect(rows[0].videoProgress).toBe("0/2");
+  });
+
   it("rejects an empty file with a message that says what to do", async () => {
     await expect(parseCreatorFile(textFile(""))).rejects.toThrow(
       "这个文件是空的",
