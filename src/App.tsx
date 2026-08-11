@@ -1748,7 +1748,7 @@ function App() {
     if (!file) return;
     try {
       setError("");
-      const parsedRows = await parseCreatorFile(
+      const { rows: parsedRows, report } = await parseCreatorFile(
         file,
         requiredVideos,
         selectedStore === ALL_STORES
@@ -1763,18 +1763,57 @@ function App() {
         ...row,
         round: currentRoundOf(campaignForRow(row)),
       }));
+      // What the parser understood, so a bad import can be diagnosed from the
+      // screen instead of guessed at.
+      const readNotes = [
+        report.sheetCount > 1
+          ? `读取工作表「${report.sheetName}」（共 ${report.sheetCount} 个表）`
+          : "",
+        report.headerRow > 1 ? `表头在第 ${report.headerRow} 行` : "",
+        report.encoding && report.encoding !== "UTF-8"
+          ? `编码 ${report.encoding}`
+          : "",
+        report.unmatchedColumns.length > 0
+          ? `未识别的列：${report.unmatchedColumns.join("、")}`
+          : "",
+      ].filter(Boolean);
+
+      if (parsedRows.length === 0) {
+        setFileName(file.name);
+        setError(
+          `没有读到达人数据。已读取「${report.sheetName}」，表头在第 ${report.headerRow} 行，识别到 ${report.matchedColumns.length} 个已知列，但表头下方没有数据行。${readNotes.length ? `（${readNotes.join("；")}）` : ""}`,
+        );
+        return;
+      }
+
       const summary = buildDuplicateImportSummary(parsedRowsWithRound, rows);
       const summaryText = `检测到 ${summary.possibleDuplicateCount} 个可能重复达人；检测到 ${summary.multiSampleCount} 个同达人多样品记录。`;
       setRows((currentRows) => [...parsedRowsWithRound, ...currentRows]);
-      setImportSummary(summaryText);
+      setImportSummary(
+        [
+          `识别到 ${report.matchedColumns.length + report.unmatchedColumns.length} 列，其中 ${report.matchedColumns.length} 列已匹配。`,
+          ...readNotes,
+          summaryText,
+        ].join(" "),
+      );
       setFileName(file.name);
       setSelectedIds([]);
-      setToast({
-        tone: "success",
-        text: `导入成功，已追加 ${parsedRowsWithRound.length} 条记录。${summaryText}`,
-      });
-      if (parsedRows.length === 0)
-        setError("没有找到达人数据。请检查表头和表格内容。");
+      // A file whose creator column was not recognised imports as Creator 1,
+      // Creator 2 … — say so rather than reporting a clean success.
+      const namedCreators = parsedRows.filter(
+        (row) => !/^Creator \d+$/.test(row.username),
+      ).length;
+      setToast(
+        namedCreators === 0
+          ? {
+              tone: "warning",
+              text: `已导入 ${parsedRowsWithRound.length} 条，但没认出「达人账号」这一列，名字暂时用编号代替。请检查表头。`,
+            }
+          : {
+              tone: "success",
+              text: `导入成功，已追加 ${parsedRowsWithRound.length} 条记录。${summaryText}`,
+            },
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "无法解析该文件。");
     }
