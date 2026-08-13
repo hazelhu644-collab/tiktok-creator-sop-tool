@@ -701,10 +701,7 @@ function fullFilmingBriefLine(
     "Please follow the filming guidelines we shared in this product-specific filming brief",
   ];
 
-  if (contentPoints.length)
-    pieces.push(
-      `show the main product use case clearly, including ${joinEnglishList(contentPoints)}`,
-    );
+  if (contentPoints.length) pieces.push(joinEnglishList(contentPoints));
   if (sellingPoints) pieces.push(`highlight ${sellingPoints}`);
   if (videoLength) pieces.push(`video length: ${videoLength}`);
   if (videoCount) pieces.push(`video quantity: ${videoCount}`);
