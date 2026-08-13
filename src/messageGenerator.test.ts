@@ -959,7 +959,8 @@ describe("creator reply follow-up generator", () => {
     );
 
     expect(message.english).toContain("main filming direction");
-    expect(message.english).toContain("show the main product use case");
+    expect(message.english).toContain("show the mist feature");
+    expect(message.english).not.toContain("including show");
     expect(message.english).toContain("https://example.com/ref-video");
     expect(message.english).not.toMatch(chineseCharacterPattern);
   });
