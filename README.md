@@ -6,6 +6,8 @@ This tool helps TikTok Shop sellers manage creator outreach, sample follow-up, v
 
 Built with ChatGPT + Codex for creator collaboration operations.
 
+**Using the tool day to day?** See [使用手册](docs/使用手册.md) — a step-by-step operator guide in Chinese, from setting up a product through running a round to closing it out. The rest of this README is for people working on the code.
+
 ---
 
 ## Features
