@@ -58,6 +58,7 @@ export type MessageComposerActions = {
   cycleMessageVariant: () => void;
   updateEnglishMessage: (value: string) => void;
   copyEnglishMessage: () => void;
+  copyEmailSubject: () => void;
   markMessageSent: () => void;
   markCreatorReplied: () => void;
   markCreatorNoReply: () => void;

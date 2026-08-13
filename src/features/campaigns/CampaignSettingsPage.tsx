@@ -2,6 +2,7 @@ import {
   PRODUCT_CATEGORIES,
   type ProductCategoryId,
 } from "../../productCategories";
+import type { CollabModel, OrderMethod } from "../../types";
 import type { CampaignSettingsPageProps } from "./campaignSettingsTypes";
 
 export function CampaignSettingsPage({
@@ -265,6 +266,113 @@ export function CampaignSettingsPage({
           </div>
         )}
       </section>
+      {target && (
+        <section className="panel sop-card">
+          <div className="section-heading">
+            <div>
+              <h2>合作模式与条款</h2>
+              <p className="muted">
+                决定话术里怎么说佣金、折扣码和下单方式，也决定跟进队列走「品牌直发」还是「达人自下单」流程。
+              </p>
+            </div>
+          </div>
+          <div className="settings-form campaign-settings">
+            <label>
+              合作模式
+              <select
+                value={target.collabModel}
+                onChange={(event) =>
+                  actions.selectCollabModel(event.target.value as CollabModel)
+                }
+              >
+                <option value="affiliate-link">
+                  挂车联盟（TikTok Shop 商品链接）
+                </option>
+                <option value="discount-code">折扣码寄样（达人专属码）</option>
+              </select>
+            </label>
+            <label>
+              下单方式
+              <select
+                value={target.orderMethod}
+                onChange={(event) =>
+                  actions.selectOrderMethod(event.target.value as OrderMethod)
+                }
+              >
+                <option value="brand-ships">品牌直发</option>
+                <option value="creator-orders">达人自己下单</option>
+              </select>
+            </label>
+            {target.collabModel === "discount-code" && (
+              <label>
+                达人折扣码
+                <input
+                  value={target.discountCode}
+                  placeholder="例如 JAMIE10"
+                  onChange={(event) =>
+                    actions.updateDiscountCode(event.target.value)
+                  }
+                />
+              </label>
+            )}
+            {target.collabModel === "discount-code" && (
+              <label>
+                粉丝折扣
+                <input
+                  value={target.audienceDiscount}
+                  placeholder="例如 10%"
+                  onChange={(event) =>
+                    actions.updateAudienceDiscount(event.target.value)
+                  }
+                />
+              </label>
+            )}
+            <label>
+              达人佣金
+              <input
+                value={target.creatorCommission}
+                placeholder="例如 10%"
+                onChange={(event) =>
+                  actions.updateCreatorCommission(event.target.value)
+                }
+              />
+            </label>
+            <label>
+              佣金归因窗口
+              <input
+                value={target.commissionWindow}
+                placeholder="例如 6 months"
+                onChange={(event) =>
+                  actions.updateCommissionWindow(event.target.value)
+                }
+              />
+            </label>
+            <label>
+              内容授权月数
+              <input
+                value={target.contentUsageMonths}
+                placeholder="例如 12，留空则不写进 brief"
+                onChange={(event) =>
+                  actions.updateContentUsageMonths(event.target.value)
+                }
+              />
+            </label>
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                checked={target.requiresDisclosure}
+                onChange={(event) =>
+                  actions.setRequiresDisclosure(event.target.checked)
+                }
+              />
+              brief 中要求 #ad / 品牌合作标注
+            </label>
+            <p className="ai-status">
+              佣金、折扣和归因窗口留空时话术会自动省略，不会出现空档。金额相关字段会原样写进发给达人的英文邮件，填写前请确认无误。
+            </p>
+          </div>
+        </section>
+      )}
       <section className="panel sop-card">
         <div className="section-heading">
           <div>

@@ -771,13 +771,15 @@ describe("creator database redesigned table", () => {
     const headers = within(screen.getByRole("table"))
       .getAllByRole("columnheader")
       .map((header) => header.textContent ?? "");
-    expect(headers.slice(1, 18)).toEqual([
+    expect(headers.slice(1, 20)).toEqual([
       "达人账号",
       "主页链接",
       "联系渠道",
+      "达人来源",
       "店铺 / 品牌",
       "产品",
       "合作状态",
+      "订单号",
       "样品到货日期",
       "视频进度",
       "首条视频发布日期",

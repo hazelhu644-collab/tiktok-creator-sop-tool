@@ -1,5 +1,5 @@
 import type { ProductCategoryId } from "../../productCategories";
-import type { Campaign, Store } from "../../types";
+import type { Campaign, CollabModel, OrderMethod, Store } from "../../types";
 
 export type CampaignSettingsOption = {
   value: string;
@@ -21,6 +21,15 @@ export type CampaignSettingsTargetView = {
   categoryId: ProductCategoryId;
   /** True when the category was inferred rather than chosen by the operator. */
   categoryIsDetected: boolean;
+  /** Commercial terms, with defaults already applied for display. */
+  collabModel: CollabModel;
+  discountCode: string;
+  audienceDiscount: string;
+  creatorCommission: string;
+  commissionWindow: string;
+  orderMethod: OrderMethod;
+  contentUsageMonths: string;
+  requiresDisclosure: boolean;
 };
 
 export type CampaignStoreCleanupView = {
@@ -54,6 +63,14 @@ export type CampaignSettingsActions = {
   selectCategory: (categoryId: ProductCategoryId) => void;
   /** Overwrite the filming fields with the current category's preset. */
   applyCategoryPreset: () => void;
+  selectCollabModel: (value: CollabModel) => void;
+  selectOrderMethod: (value: OrderMethod) => void;
+  updateDiscountCode: (value: string) => void;
+  updateAudienceDiscount: (value: string) => void;
+  updateCreatorCommission: (value: string) => void;
+  updateCommissionWindow: (value: string) => void;
+  updateContentUsageMonths: (value: string) => void;
+  setRequiresDisclosure: (value: boolean) => void;
   updateKeyContentPoints: (value: string) => void;
   updateSellingPoints: (value: string) => void;
   updateVideoLength: (value: string) => void;

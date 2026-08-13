@@ -33,6 +33,7 @@ import {
 } from "./sopRules";
 import {
   CHANNELS,
+  defaultCollaborationTerms,
   defaultCreatorFilmingRequirements,
   generateMessage,
   type CreatorFilmingRequirements,
@@ -1749,6 +1750,8 @@ function App() {
             cycleMessageVariant: handleCycleMessageVariant,
             updateEnglishMessage: updateGeneratedEnglishMessage,
             copyEnglishMessage: () => void handleCopyGeneratedMessage(),
+            copyEmailSubject: () =>
+              void copyText(message?.emailSubject ?? "", "已复制邮件主题。"),
             markMessageSent: handleMarkMessageSent,
             markCreatorReplied: handleMarkCreatorReplied,
             markCreatorNoReply,
@@ -4102,6 +4105,20 @@ function App() {
                 targetCampaign.keyContentPoints,
               ),
             categoryIsDetected: !targetCampaign.categoryId,
+            collabModel:
+              targetCampaign.collabModel ??
+              defaultCollaborationTerms.collabModel,
+            discountCode: targetCampaign.discountCode ?? "",
+            audienceDiscount: targetCampaign.audienceDiscount ?? "",
+            creatorCommission: targetCampaign.creatorCommission ?? "",
+            commissionWindow: targetCampaign.commissionWindow ?? "",
+            orderMethod:
+              targetCampaign.orderMethod ??
+              defaultCollaborationTerms.orderMethod,
+            contentUsageMonths: targetCampaign.contentUsageMonths ?? "",
+            requiresDisclosure:
+              targetCampaign.requiresDisclosure ??
+              defaultCollaborationTerms.requiresDisclosure,
           }
         : null;
 
@@ -4189,6 +4206,22 @@ function App() {
                   text: `已套用「${category.label}」预设拍摄要求。`,
                 });
               },
+              selectCollabModel: (collabModel) =>
+                updateCampaign({ collabModel }),
+              selectOrderMethod: (orderMethod) =>
+                updateCampaign({ orderMethod }),
+              updateDiscountCode: (discountCode) =>
+                updateCampaign({ discountCode }),
+              updateAudienceDiscount: (audienceDiscount) =>
+                updateCampaign({ audienceDiscount }),
+              updateCreatorCommission: (creatorCommission) =>
+                updateCampaign({ creatorCommission }),
+              updateCommissionWindow: (commissionWindow) =>
+                updateCampaign({ commissionWindow }),
+              updateContentUsageMonths: (contentUsageMonths) =>
+                updateCampaign({ contentUsageMonths }),
+              setRequiresDisclosure: (requiresDisclosure) =>
+                updateCampaign({ requiresDisclosure }),
               updateKeyContentPoints: (value) =>
                 updateCampaign({ keyContentPoints: normalizeListText(value) }),
               updateSellingPoints: (value) =>

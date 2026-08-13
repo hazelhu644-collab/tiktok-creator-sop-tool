@@ -15,6 +15,7 @@ import {
 } from "./productCategories";
 import {
   DEFAULT_CREATOR_TIER,
+  emailSubjectFor,
   getScriptVariant,
   getScriptVariants,
   isTierAwareScenario,
@@ -26,6 +27,7 @@ import {
 } from "./messageVariants";
 import type {
   Channel,
+  CollaborationTerms,
   CommunicationAction,
   FollowUpHistoryEntry,
   GeneratedMessage,
@@ -57,7 +59,39 @@ export type CreatorFilmingRequirements = {
    * saved before categories existed leave this unset and get auto-detected.
    */
   categoryId?: ProductCategoryId;
+  /**
+   * Commercial terms the scripts may state. Absent on campaigns saved before
+   * collaboration models existed; `resolveTerms` fills in the affiliate-link
+   * defaults the tool has always assumed.
+   */
+  terms?: Partial<CollaborationTerms>;
 };
+
+/** What the tool assumed before collaboration models were configurable. */
+export const defaultCollaborationTerms: CollaborationTerms = {
+  collabModel: "affiliate-link",
+  discountCode: "",
+  audienceDiscount: "",
+  creatorCommission: "",
+  commissionWindow: "",
+  orderMethod: "brand-ships",
+  contentUsageMonths: "",
+  requiresDisclosure: true,
+};
+
+function resolveTerms(
+  filmingRequirements: CreatorFilmingRequirements,
+): CollaborationTerms {
+  // Explicitly-undefined keys must not overwrite the defaults. A plain spread
+  // would turn `requiresDisclosure: undefined` into a falsy value and silently
+  // drop the FTC line from every campaign that never set the field.
+  const configured = Object.fromEntries(
+    Object.entries(filmingRequirements.terms ?? {}).filter(
+      ([, value]) => value !== undefined,
+    ),
+  );
+  return { ...defaultCollaborationTerms, ...configured };
+}
 
 export type MessageGenerationOptions = {
   /**
@@ -256,6 +290,34 @@ function isReturningCreator(task: Task): boolean {
   );
 }
 
+/** A creator who opted in on TikTok Creator Marketplace rather than by replying to outreach. */
+function isTcmCreator(task: Task): boolean {
+  return (task.source ?? "").trim().toUpperCase() === "TCM";
+}
+
+/**
+ * Stage of the self-order flow, for campaigns where the creator places the
+ * order themselves with a 100%-off code instead of the brand shipping a sample.
+ * Returns null when the flow does not apply or has already moved past ordering.
+ */
+function creatorOrderStage(
+  task: Task,
+  terms: CollaborationTerms,
+): "confirm-details" | "send-order-instructions" | "chase-order-number" | null {
+  if (terms.orderMethod !== "creator-orders") return null;
+  // Once the order exists the normal shipping and filming stages take over.
+  if (task.orderNumber?.trim()) return null;
+  if (hasSampleDeliveredEvidence(task) || hasSampleInTransitEvidence(task))
+    return null;
+
+  if (task.lastMessageScenario === "Order Instructions")
+    return "chase-order-number";
+  if (statusIncludes(task, ["sample requested", "sample approved"]))
+    return "send-order-instructions";
+  if (statusIncludes(task, ["replied"])) return "confirm-details";
+  return null;
+}
+
 /** The sample is blocked on shipping details rather than on the creator's interest. */
 function needsAddressConfirmation(task: Task): boolean {
   const haystack = `${task.currentStatus} ${task.notes}`.toLowerCase();
@@ -269,6 +331,7 @@ function needsAddressConfirmation(task: Task): boolean {
 export function classifyCreatorFollowUp(
   task: Task,
   configuredRequiredVideos = 2,
+  terms: CollaborationTerms = defaultCollaborationTerms,
 ): CreatorFollowUpClassification {
   const progress = progressForTask(task, configuredRequiredVideos);
   const postedCount = progress.postedCount ?? 0;
@@ -437,11 +500,48 @@ export function classifyCreatorFollowUp(
     };
   }
 
-  if (needsAddressConfirmation(task)) {
+  const orderStage = creatorOrderStage(task, terms);
+  if (orderStage === "chase-order-number") {
+    return {
+      urgencyLevel: "高",
+      communicationAction: "催订单号",
+      reason: `下单方式已发送但还没有收到订单号，样品无法发出，需要先拿到订单号才能给运单号。`,
+      highRisk: false,
+    };
+  }
+  if (orderStage === "send-order-instructions") {
+    return {
+      urgencyLevel: "高",
+      communicationAction: "发送下单方式",
+      reason: `本 campaign 由达人自己下单，合作内容已确认，需要发送下单链接和折扣码并说明留 TikTok 账号。`,
+      highRisk: false,
+    };
+  }
+  if (orderStage === "confirm-details") {
+    return {
+      urgencyLevel: "中",
+      communicationAction: "确认合作内容",
+      reason: `达人已表示有兴趣，需要先确认产品数量和交付时间，再进入下单环节。`,
+      highRisk: false,
+    };
+  }
+
+  // Only brand-shipped samples need an address from us; a creator placing the
+  // order enters their own at checkout.
+  if (terms.orderMethod === "brand-ships" && needsAddressConfirmation(task)) {
     return {
       urgencyLevel: "中",
       communicationAction: "确认收货信息",
       reason: `当前状态或备注显示收货信息尚未确认，样品无法发出，需要先确认收件人、地址和联系方式。`,
+      highRisk: false,
+    };
+  }
+
+  if (isTcmCreator(task) && !hasDeliveredEvidence && !hasInTransitEvidence) {
+    return {
+      urgencyLevel: "中",
+      communicationAction: "TCM 达人跟进",
+      reason: `该达人来自 TikTok Creator Marketplace 且已接受邀请，应直接跟进合作细节，不要用冷启动邀约话术。`,
       highRisk: false,
     };
   }
@@ -493,6 +593,7 @@ export function classifyCreatorFollowUp(
 function scenarioForTask(
   task: Task,
   configuredRequiredVideos: number,
+  terms: CollaborationTerms,
 ): MessageScenario {
   const progress = progressForTask(task, configuredRequiredVideos);
   const postedCount = progress.postedCount ?? 0;
@@ -504,6 +605,7 @@ function scenarioForTask(
   const classification = classifyCreatorFollowUp(
     task,
     configuredRequiredVideos,
+    terms,
   );
   const withClassification = (
     scenario: string,
@@ -521,6 +623,14 @@ function scenarioForTask(
     return withClassification("Creator Reply Follow-up");
   if (classification.communicationAction === "老达人再建联")
     return withClassification("Re-engagement Outreach");
+  if (classification.communicationAction === "TCM 达人跟进")
+    return withClassification("TCM Follow-up");
+  if (classification.communicationAction === "确认合作内容")
+    return withClassification("Collaboration Details Confirmation");
+  if (classification.communicationAction === "发送下单方式")
+    return withClassification("Order Instructions");
+  if (classification.communicationAction === "催订单号")
+    return withClassification("Order Number Reminder");
   if (classification.communicationAction === "确认收货信息")
     return withClassification("Address Confirmation");
   if (classification.communicationAction === "合作失败归档")
@@ -776,6 +886,7 @@ function fullFilmingBriefLine(
   task: Task,
   filmingRequirements: CreatorFilmingRequirements,
   categoryId: ProductCategoryId,
+  terms: CollaborationTerms,
 ): string {
   const contentSource =
     filmingRequirements.requiredScenes &&
@@ -821,6 +932,16 @@ function fullFilmingBriefLine(
   if (videoCount) pieces.push(`video quantity: ${videoCount}`);
   if (avoidShots) pieces.push(`avoid: ${avoidShots}`);
   if (linkRequirement) pieces.push(linkRequirement);
+  // Required for US creators under FTC endorsement guidance, and easy for a
+  // creator to forget, so it belongs in the brief rather than in a side note.
+  if (terms.requiresDisclosure)
+    pieces.push(
+      "disclose the partnership in the post using #ad or the branded-content label",
+    );
+  if (terms.contentUsageMonths)
+    pieces.push(
+      `content usage: by taking part you allow us to reuse this content on our own channels — website, social, paid ads, and email — for ${terms.contentUsageMonths} months`,
+    );
 
   return `${pieces.join("; ")}.`;
 }
@@ -829,12 +950,13 @@ function filmingGuidelinesLine(
   task: Task,
   filmingRequirements: CreatorFilmingRequirements,
   categoryId: ProductCategoryId,
+  terms: CollaborationTerms,
   mode: "short" | "full",
   hasReferenceLinks = false,
 ): string {
   if (mode === "short")
     return shortFilmingReminder(filmingRequirements, hasReferenceLinks);
-  return fullFilmingBriefLine(task, filmingRequirements, categoryId);
+  return fullFilmingBriefLine(task, filmingRequirements, categoryId, terms);
 }
 
 function creatorGreeting(username: string): string {
@@ -882,7 +1004,12 @@ export function generateMessage(
   options: MessageGenerationOptions = {},
 ): GeneratedMessage {
   const configuredRequiredVideos = parseRequiredVideos(filmingRequirements);
-  const scenarioSelection = scenarioForTask(task, configuredRequiredVideos);
+  const terms = resolveTerms(filmingRequirements);
+  const scenarioSelection = scenarioForTask(
+    task,
+    configuredRequiredVideos,
+    terms,
+  );
   const { scenario, highRisk } = scenarioSelection;
   const name = creatorGreeting(task.username);
   const categoryId = resolveCategoryId(
@@ -903,6 +1030,7 @@ export function generateMessage(
           task,
           filmingRequirements,
           categoryId,
+          terms,
           /what to film|film|requirements|brief|拍什么|要求|brief/i.test(
             `${userReplyFocus} ${task.lastCreatorResponse ?? ""} ${task.notes}`,
           )
@@ -923,6 +1051,7 @@ export function generateMessage(
                 task,
                 filmingRequirements,
                 categoryId,
+                terms,
                 scenario === "Sample In Transit Reminder" ||
                   scenario === "Sample Delivered Follow-up"
                   ? "full"
@@ -955,6 +1084,11 @@ export function generateMessage(
     remainingVideos,
     requiredVideos: configuredRequiredVideos,
     reminder: filmingRequirementsReminder,
+    terms,
+    productLink:
+      englishOnly(filmingRequirements.productLinkRequirement).match(
+        /https?:\/\/\S+/,
+      )?.[0] ?? "",
   };
   const variant = getScriptVariant(scenario, variantIndex);
 
@@ -993,6 +1127,7 @@ export function generateMessage(
       userReplyFocus,
       filmingRequirementsReminder,
       replyPersonalization,
+      terms,
     );
   } else if (scenario === "Partial Video Completion Follow-up") {
     english = partialCompletionMessage(
@@ -1026,6 +1161,7 @@ export function generateMessage(
       label,
       angle,
     })),
+    ...(channel === "Email" ? emailSubjectFor(scenario, scriptContext) : {}),
   };
 }
 
@@ -1175,6 +1311,7 @@ type CreatorReplyIntent =
   | "filming-brief"
   | "cannot-continue"
   | "commission-question"
+  | "tcm-fee-question"
   | "rate-negotiation"
   | "declining"
   | "busy-later"
@@ -1233,6 +1370,16 @@ function detectCreatorReplyIntent(value: string): CreatorReplyIntent {
   // Checked before "cannot-continue" because a creator quoting a rate or
   // turning the campaign down reads as "can't do it" to the looser pattern
   // below, and those three need very different replies.
+
+  // TCM's own fee field is a separate question from "what do you pay?" — the
+  // creator is asking why the marketplace shows a specific number.
+  if (
+    /\btcm\b|creator marketplace/i.test(normalized) &&
+    /\b(?:rate|fee|amount|price|offer|budget|number)\b|金额|报价|费用/.test(
+      normalized,
+    )
+  )
+    return "tcm-fee-question";
   if (
     /\b(?:my rate|rates? (?:are|is)|flat fee|upfront|paid post|posting fee|charge|budget)\b|\$\s?\d|\d+\s?(?:usd|dollars)\b|报价|坑位费|费用/.test(
       normalized,
@@ -1764,11 +1911,27 @@ function addUserDirection(lines: string[], context: CreatorReplyContext) {
 function businessIntentLines(
   context: CreatorReplyContext,
   product: string,
+  terms: CollaborationTerms,
 ): string[] {
+  const commission = terms.creatorCommission
+    ? `${terms.creatorCommission} commission`
+    : "commission";
+  const window = terms.commissionWindow
+    ? ` for ${terms.commissionWindow} after the video goes live`
+    : "";
+
   switch (context.intent) {
+    case "tcm-fee-question":
+      return [
+        "Happy to explain the number. The amount shown on TikTok Creator Marketplace matches the value of the products we send you — TikTok requires brands to enter a collaboration fee, so we enter the product price there.",
+        `On top of that, you earn ${commission} on any order placed with your code${window}, and we promote the video ourselves when it fits the campaign, which puts your code in front of more people.`,
+        "The campaign brief and our brand media kit are attached — take a look and tell me if anything is unclear.",
+      ];
     case "commission-question":
       return [
-        `Happy to lay out the terms. This collaboration is sample-based: we send the ${product} free of charge and you keep it, and you earn the standard TikTok Shop affiliate commission on every sale made through your product link.`,
+        terms.collabModel === "discount-code"
+          ? `Happy to lay out the terms. We send the ${product} free of charge and it's yours to keep, you earn ${commission} on every order placed with your code${window}${terms.audienceDiscount ? `, and your audience saves ${terms.audienceDiscount} when they use it` : ""}.`
+          : `Happy to lay out the terms. This collaboration is sample-based: we send the ${product} free of charge and you keep it, and you earn ${terms.creatorCommission ? `${terms.creatorCommission} ` : "the standard TikTok Shop affiliate "}commission on every sale made through your product link.`,
         "There is no separate posting fee on this campaign, so what you earn scales with how the video performs.",
       ];
     case "rate-negotiation":
@@ -1802,6 +1965,7 @@ function creatorReplyLines(
   userReplyFocus: string,
   filmingRequirementsReminder: string,
   personalization: CreatorReplyPersonalization,
+  terms: CollaborationTerms,
 ): string[] {
   const context = buildCreatorReplyContext(
     task,
@@ -1814,7 +1978,7 @@ function creatorReplyLines(
     context,
     filmingRequirementsReminder,
   );
-  const businessLines = businessIntentLines(context, product);
+  const businessLines = businessIntentLines(context, product, terms);
   const hasSpecificFocus = hasSpecificReplyIntent(context);
 
   if (hasSpecificFocus) {
@@ -1893,6 +2057,7 @@ function creatorReplyMessage(
   userReplyFocus: string,
   filmingRequirementsReminder: string,
   personalization: CreatorReplyPersonalization,
+  terms: CollaborationTerms,
 ): string {
   const lines = creatorReplyLines(
     product,
@@ -1900,6 +2065,7 @@ function creatorReplyMessage(
     userReplyFocus,
     filmingRequirementsReminder,
     personalization,
+    terms,
   );
   const body = lines.join(" ");
 

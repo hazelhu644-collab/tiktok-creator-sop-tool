@@ -310,6 +310,31 @@ export function MessageComposer({
               {activeVariant && (
                 <p className="muted compact-helper">{activeVariant.angle}</p>
               )}
+              {message.emailSubject && (
+                <div className="email-subject" data-testid="email-subject">
+                  <label htmlFor="generated-email-subject">邮件主题</label>
+                  <input
+                    id="generated-email-subject"
+                    readOnly
+                    value={message.emailSubject}
+                  />
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={actions.copyEmailSubject}
+                  >
+                    复制主题
+                  </button>
+                </div>
+              )}
+              {message.emailThreadNote && (
+                <p
+                  className="muted compact-helper"
+                  data-testid="email-thread-note"
+                >
+                  {message.emailThreadNote}
+                </p>
+              )}
               <label className="sr-only" htmlFor="generated-english-message">
                 英文话术
               </label>

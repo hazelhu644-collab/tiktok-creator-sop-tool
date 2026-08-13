@@ -163,6 +163,7 @@ function createMessageComposerProps(): MessageComposerProps {
       cycleMessageVariant: vi.fn(),
       updateEnglishMessage: vi.fn(),
       copyEnglishMessage: vi.fn(),
+      copyEmailSubject: vi.fn(),
       markMessageSent: vi.fn(),
       markCreatorReplied: vi.fn(),
       markCreatorNoReply: vi.fn(),

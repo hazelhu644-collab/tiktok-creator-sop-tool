@@ -4,7 +4,7 @@ import {
 } from "./messageGenerator";
 import { demoCampaigns, isDemoMode } from "./demoMode";
 import { detectProductCategory, getProductCategory } from "./productCategories";
-import type { CreatorRow, Campaign, Store } from "./types";
+import type { CollaborationTerms, CreatorRow, Campaign, Store } from "./types";
 
 export const CAMPAIGNS_STORAGE_KEY = "tiktok-creator-sop-tool.campaigns.v1";
 export const DEFAULT_STORE_ID = "default-store";
@@ -392,6 +392,34 @@ export function campaignToFilmingRequirements(
       : fallback.keyContentPoints,
     referenceLinks,
     categoryId: campaign.categoryId ?? fallback.categoryId,
+    terms: campaignTerms(campaign, fallback),
+  };
+}
+
+/**
+ * Commercial terms for a campaign. Anything the campaign leaves unset falls
+ * through to the saved fallback and then to the affiliate-link defaults, so
+ * campaigns created before collaboration models existed keep their behavior.
+ */
+function campaignTerms(
+  campaign: Campaign,
+  fallback: CreatorFilmingRequirements,
+): Partial<CollaborationTerms> {
+  const fallbackTerms = fallback.terms ?? {};
+  return {
+    collabModel: campaign.collabModel ?? fallbackTerms.collabModel,
+    discountCode: campaign.discountCode ?? fallbackTerms.discountCode,
+    audienceDiscount:
+      campaign.audienceDiscount ?? fallbackTerms.audienceDiscount,
+    creatorCommission:
+      campaign.creatorCommission ?? fallbackTerms.creatorCommission,
+    commissionWindow:
+      campaign.commissionWindow ?? fallbackTerms.commissionWindow,
+    orderMethod: campaign.orderMethod ?? fallbackTerms.orderMethod,
+    contentUsageMonths:
+      campaign.contentUsageMonths ?? fallbackTerms.contentUsageMonths,
+    requiresDisclosure:
+      campaign.requiresDisclosure ?? fallbackTerms.requiresDisclosure,
   };
 }
 

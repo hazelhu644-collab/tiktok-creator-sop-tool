@@ -87,6 +87,54 @@ Tone is layered on top of the angle for outreach-stage messages only:
 Logistics, revision, and final-confirmation messages stay neutral at every
 tier. Softening a "this video breaks the brief" message makes it unclear.
 
+## Collaboration Models
+
+A campaign runs on one of two models, set in campaign settings:
+
+- `affiliate-link`: the creator posts a TikTok Shop product link and earns the platform affiliate commission on it. The brand ships the sample.
+- `discount-code`: the creator gets a personal code, their audience saves money with it, and commission is attributed through the code.
+
+Order method is separate from the model:
+
+- `brand-ships`: we send the sample and chase the shipping address when it is missing.
+- `creator-orders`: the creator places the order themselves with a code that covers the full cost. They must leave their TikTok handle on the order, then send the order number so we can match it and return tracking.
+
+The self-order path adds three stages between "interested" and "shipped":
+confirm quantity and timing, send the order link and code, then chase the order
+number. Nothing ships until the order number exists.
+
+Never state a commission rate, audience discount, attribution window, or
+discount code that is not configured on the campaign. Blank fields are omitted
+from the copy rather than guessed at.
+
+## Creator Source
+
+- `Outreach`: found and contacted by us. Cold-outreach wording applies.
+- `TCM`: accepted the invitation on TikTok Creator Marketplace. They have already opted in, so introduce the details rather than pitching from scratch.
+
+TCM creators frequently ask why the marketplace shows a specific fee. The answer
+is that the amount matches the value of the products sent — TikTok requires a
+number in the collaboration-fee field — and that commission on their code
+applies on top of it. Do not treat that question as a rate negotiation.
+
+## Email Subjects
+
+Email is the only channel with a subject line. First outreach, re-engagement,
+TCM follow-up, completion, and archive get a fresh subject. Every follow-up
+stays in the existing thread: the composer shows a note instead of a subject,
+because a new subject splits the conversation and reads as a fresh cold email.
+
+## Compliance
+
+Every full brief asks for an `#ad` or branded-content disclosure. This is
+required of US creators under FTC endorsement guidance and is easy for a creator
+to forget, so it belongs in the brief rather than in a side note. It can be
+switched off per campaign for markets where it does not apply.
+
+When a campaign sets a content-usage window, the brief states it plainly: the
+brand may reuse the content on its own channels — website, social, paid ads,
+email — for that number of months.
+
 ## Commercial Questions
 
 Answer these directly instead of deflecting to "I'll note that on our side":
@@ -139,10 +187,14 @@ Creators should avoid only filming unboxing, only filming the product on a table
 
 - First Outreach: not contacted yet, no prior collaboration.
 - Re-engagement Outreach: not contacted this round, but a past round or a completed collaboration exists.
+- TCM Follow-up: creator source is TCM and no sample activity yet.
 - Light Follow-up: contacted 2 days ago, no reply, no sample sent.
 - Sample Request Reminder: invited, sample not requested yet.
 - Sample Request Confirmation: sample requested, awaiting approval or shipping.
-- Address Confirmation: sample blocked on missing or unusable shipping details.
+- Collaboration Details Confirmation: creator-orders campaign, creator has replied, quantity and timing not yet agreed.
+- Order Instructions: creator-orders campaign, details agreed, order not yet placed.
+- Order Number Reminder: order instructions sent, no order number received.
+- Address Confirmation: brand-ships campaign blocked on missing or unusable shipping details.
 - Sample In Transit Reminder: shipped, not delivered.
 - Logistics Exception Confirmation: in transit longer than expected, or delivery risk flagged.
 - Sample Delivered Follow-up: sample delivered, no video posted yet.

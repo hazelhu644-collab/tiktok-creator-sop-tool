@@ -241,9 +241,11 @@ export function CreatorDatabasePage({
                   <th>达人账号</th>
                   <th>主页链接</th>
                   <th>联系渠道</th>
+                  <th>达人来源</th>
                   <th>店铺 / 品牌</th>
                   <th>产品</th>
                   <th>合作状态</th>
+                  <th>订单号</th>
                   <th>样品到货日期</th>
                   <th>视频进度</th>
                   <th>首条视频发布日期</th>
@@ -327,6 +329,22 @@ export function CreatorDatabasePage({
                       />
                     </td>
                     <td>
+                      <select
+                        aria-label="达人来源"
+                        value={entry.row.source === "TCM" ? "TCM" : "Outreach"}
+                        onChange={(event) =>
+                          actions.updateRow(
+                            entry.row.id,
+                            "source",
+                            event.target.value,
+                          )
+                        }
+                      >
+                        <option value="Outreach">主动建联</option>
+                        <option value="TCM">TCM 接单</option>
+                      </select>
+                    </td>
+                    <td>
                       <input
                         aria-label="店铺 / 品牌"
                         value={entry.row.storeName || data.defaultStoreName}
@@ -366,6 +384,20 @@ export function CreatorDatabasePage({
                             event.target.value,
                           )
                         }
+                      />
+                    </td>
+                    <td>
+                      <input
+                        aria-label="订单号"
+                        value={entry.row.orderNumber ?? ""}
+                        onChange={(event) =>
+                          actions.updateRow(
+                            entry.row.id,
+                            "orderNumber",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="达人自下单时填写"
                       />
                     </td>
                     <td>

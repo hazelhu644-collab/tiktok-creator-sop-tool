@@ -10,6 +10,7 @@
  */
 
 import type { ProductCategory } from "./productCategories";
+import type { CollaborationTerms } from "./types";
 
 /** How established the relationship is. Drives tone, not content. */
 export const CREATOR_TIERS = [
@@ -33,7 +34,48 @@ export type ScriptContext = {
   requiredVideos: number;
   /** Filming-requirements reminder, already assembled and English-only. */
   reminder: string;
+  /** Commercial terms the copy is allowed to state. */
+  terms: CollaborationTerms;
+  /** TikTok Shop product link, when the campaign has one. */
+  productLink: string;
 };
+
+/**
+ * Renders the offer the way the campaign is actually set up. Discount-code
+ * campaigns state the commission and the audience discount; affiliate-link
+ * campaigns describe the TikTok Shop link. Percentages left blank in the
+ * campaign are simply omitted rather than printed as an empty gap.
+ */
+export function offerSummary(context: ScriptContext): string {
+  const { terms } = context;
+  const parts = ["free product sent to you, and it is yours to keep"];
+
+  if (terms.collabModel === "discount-code") {
+    parts.push(
+      terms.creatorCommission
+        ? `${terms.creatorCommission} commission on every sale through your code`
+        : "commission on every sale through your code",
+    );
+    if (terms.audienceDiscount) {
+      parts.push(`${terms.audienceDiscount} off for your audience`);
+    }
+  } else {
+    parts.push(
+      terms.creatorCommission
+        ? `${terms.creatorCommission} commission on every sale through your TikTok Shop link`
+        : "commission on every sale through your TikTok Shop product link",
+    );
+  }
+
+  return parts.join("; ");
+}
+
+/** How the creator’s code is referred to when one has been issued. */
+export function codePhrase(context: ScriptContext): string {
+  return context.terms.discountCode
+    ? `your code ${context.terms.discountCode}`
+    : "your code";
+}
 
 export type ScriptVariant = {
   id: string;
@@ -135,6 +177,26 @@ const SCRIPT_VARIANTS: Record<string, ScriptVariant[]> = {
       request: ({ product }) =>
         `Quick question — would you be open to a paid-commission TikTok Shop collaboration for the ${product}? If so, we’ll send the product and the brief.`,
     },
+    {
+      id: "first-outreach-full-email",
+      label: "完整邮件版（自用模板1）",
+      angle:
+        "你现用的直接邀请邮件：自我介绍 + 夸内容 + 三条条件 + 明确交付要求。",
+      request: (context) => {
+        const { product, terms } = context;
+        const perProduct =
+          "Please note that a separate video is required for each product.";
+        return [
+          `Nice to e-meet you. I came across your account and was impressed by your videos, so I wanted to ask whether you’d be open to reviewing one of our products.`,
+          `The product is the ${product}. Here is what we provide: ${offerSummary(context)}.`,
+          terms.collabModel === "discount-code"
+            ? `We’ll send the product details and your personal code once you’re in.`
+            : `We’ll share the product link and the content requirements once you’re in.`,
+          perProduct,
+          `Feel free to reach out anytime if you’re interested or have any questions.`,
+        ].join(" ");
+      },
+    },
   ],
 
   "Re-engagement Outreach": [
@@ -203,6 +265,139 @@ const SCRIPT_VARIANTS: Record<string, ScriptVariant[]> = {
       angle: "最后一次，主动放手，为以后留余地。",
       request: ({ product }) =>
         `Last note from us on the ${product} campaign — we don’t want to keep filling your inbox. We’ll close this one out, and if the timing is better on a future product, we’d be glad to reach out again.`,
+    },
+    {
+      id: "no-reply-email-bump",
+      label: "邮件回访（自用模板2）",
+      angle:
+        "你现用的再次联系邮件，短、客气、不重复条件。邮件渠道请直接回复上一封。",
+      request: () =>
+        `Just writing to see if you’re still interested in the collaboration. Your content is a good match for these products, and we think it would work well. I’d appreciate hearing what you think either way.`,
+    },
+  ],
+
+  "TCM Follow-up": [
+    {
+      id: "tcm-standard",
+      label: "TCM 接单跟进（自用模板3）",
+      angle: "达人已在 TCM 接受邀请，直接推进合作细节，不要用冷启动措辞。",
+      request: (context) => {
+        const { product } = context;
+        return [
+          `Thanks for accepting the collaboration invitation on TikTok Creator Marketplace — I’m following up with the details.`,
+          `The product is the ${product}. Here is what we provide: ${offerSummary(context)}.`,
+          `Let me know if you’re ready to move forward or have any questions about the campaign.`,
+        ].join(" ");
+      },
+    },
+    {
+      id: "tcm-brief-attached",
+      label: "TCM + 直接给 brief",
+      angle: "接单后一次把 brief 给足，减少一轮往返。",
+      request: ({ product }) =>
+        `Following up on the TikTok Creator Marketplace collaboration you accepted. The campaign is for the ${product}, and the filming brief is below so you can see exactly what’s expected before we ship. If it all looks workable, reply and we’ll get the product moving.`,
+    },
+    {
+      id: "tcm-confirm-deliverables",
+      label: "TCM 确认交付量",
+      angle: "TCM 上的交付条款有时和实际不一致，先对齐再发货。",
+      request: ({ product, requiredVideos }) =>
+        `Following up on the ${product} collaboration from TikTok Creator Marketplace. Before we ship, could you confirm the deliverables on your side — we have ${requiredVideos} ${requiredVideos === 1 ? "video" : "videos"} for this campaign. Once that’s confirmed we’ll send the product straight out.`,
+    },
+  ],
+
+  "Collaboration Details Confirmation": [
+    {
+      id: "details-standard",
+      label: "确认数量和时间（自用模板5）",
+      angle: "你现用的确认邮件：问要几件产品 + 收到后两周内交付。",
+      request: () =>
+        `Glad this is moving forward. Two things to confirm before we set it up: how many products would you like to review, and can you post the review within two weeks of receiving them? The filming brief is below — if it works for you, let me know which product or products you’d like and I’ll send the links.`,
+    },
+    {
+      id: "details-single-product",
+      label: "只确认时间",
+      angle: "只有一款产品时用，省掉选品那一步。",
+      request: ({ product }) =>
+        `Glad this is moving forward. The campaign is for the ${product}, so the only thing to confirm is timing — can you post the review within two weeks of receiving it? Once you confirm, we’ll get it sent out.`,
+    },
+    {
+      id: "details-with-deadline",
+      label: "带 campaign 截止日",
+      angle: "campaign 有硬性截止时使用，把时间压力说清楚。",
+      request: () =>
+        `Glad this is moving forward. Could you confirm how many products you’d like and roughly when you’d be able to post? This campaign round closes on a fixed date on our side, so knowing your timing helps us make sure your content lands inside the window.`,
+    },
+  ],
+
+  "Order Instructions": [
+    {
+      id: "order-standard",
+      label: "发送下单方式（自用模板6）",
+      angle: "你现用的下单邮件：给链接和码，强调留 TikTok 账号，要订单号。",
+      request: (context) => {
+        const { terms, productLink } = context;
+        const linkLine = productLink
+          ? `Order link: ${productLink}`
+          : `The order link is below.`;
+        const codeLine = terms.discountCode
+          ? `Code: ${terms.discountCode}`
+          : `Your code is below.`;
+        return [
+          `Welcome aboard — glad to have you on this campaign.`,
+          `Please place the order using the link and code below; the code covers the cost, so there is nothing to pay at checkout.`,
+          `${linkLine} ${codeLine}`,
+          `Please leave your TikTok handle on the order so we can match it to you, then send me the order number and I’ll follow up with a tracking number.`,
+        ].join(" ");
+      },
+    },
+    {
+      id: "order-step-by-step",
+      label: "分步说明",
+      angle: "达人不熟悉自助下单流程时用，把步骤拆开。",
+      request: (context) => {
+        const { terms, productLink } = context;
+        return [
+          `Here’s how to get the product — it takes about two minutes.`,
+          `1) Open the order link${productLink ? ` (${productLink})` : ""}.`,
+          `2) Apply the code${terms.discountCode ? ` ${terms.discountCode}` : ""} at checkout — it brings the total to zero, so you won’t be charged.`,
+          `3) Put your TikTok handle in the order notes so we can match the order to you.`,
+          `4) Send me the order number and I’ll come back with tracking.`,
+        ].join(" ");
+      },
+    },
+    {
+      id: "order-resend",
+      label: "重发链接和码",
+      angle: "达人说没收到或码失效时使用。",
+      request: (context) => {
+        const { terms, productLink } = context;
+        return `Resending the order details in case the last message got buried. ${productLink ? `Link: ${productLink}. ` : ""}${terms.discountCode ? `Code: ${terms.discountCode}. ` : ""}The code covers the full cost, so there’s nothing to pay. Please add your TikTok handle to the order and send me the order number once it’s placed. If the code doesn’t apply at checkout, tell me and I’ll issue a new one.`;
+      },
+    },
+  ],
+
+  "Order Number Reminder": [
+    {
+      id: "order-number-standard",
+      label: "催订单号",
+      angle: "下单方式已发但没拿到订单号，样品发不出去。",
+      request: () =>
+        `Following up on the order — I haven’t received an order number yet, and I need it to match the order to you and send the tracking. Could you send it over when you get a chance? If something went wrong at checkout, tell me and I’ll sort it out.`,
+    },
+    {
+      id: "order-number-check-blocker",
+      label: "先问是否卡住",
+      angle: "怀疑达人卡在下单环节，主动排查。",
+      request: (context) =>
+        `Checking in on the order. If the code didn’t apply, the item showed as out of stock, or anything else got in the way, let me know and I’ll fix it on our side${context.terms.discountCode ? ` or issue a new code` : ""}. If the order did go through, just send me the order number and we’ll get it shipped.`,
+    },
+    {
+      id: "order-number-deadline",
+      label: "带发货批次",
+      angle: "用发货批次给一个自然的时间点。",
+      request: () =>
+        `Quick reminder about the order number — we ship this batch shortly, and I can’t include your order without it. Send it over and I’ll make sure yours goes out with this batch rather than the next one.`,
     },
   ],
 
@@ -281,6 +476,24 @@ const SCRIPT_VARIANTS: Record<string, ScriptVariant[]> = {
       angle: "运输期间就锁定拍摄档期，适合进度紧的 campaign。",
       request: ({ product, category }) =>
         `The ${product} sample is in transit. While you wait, could you let us know roughly which day you’d plan to film once it lands? Most creators shoot this inside ${category.useCasePhrase}, so it doesn’t need a dedicated setup — having the date helps us plan the campaign schedule.`,
+    },
+    {
+      id: "in-transit-tracking-and-tips",
+      label: "运单号 + 拍摄参考（自用模板7）",
+      angle: "你现用的发货后邮件：给运单号、参考视频、以及粉丝口播 CTA 范例。",
+      request: (context) => {
+        const { product, terms } = context;
+        const ctaExample =
+          terms.collabModel === "discount-code"
+            ? `Here’s an example of how to point your audience to the code: "Use ${terms.discountCode || "[your code]"} to save ${terms.audienceDiscount || "10%"} sitewide — link in my bio."`
+            : `Here’s an example of how to point your audience to the product: "Tap the product link on screen to grab it — it’s linked below."`;
+        return [
+          `The ${product} is on its way — the tracking number is below.`,
+          `The reference videos below show the format that performs best for this product, and the filming tips are worth a skim before you shoot.`,
+          ctaExample,
+          `Please send me the link to your video once it’s posted.`,
+        ].join(" ");
+      },
     },
   ],
 
@@ -459,6 +672,24 @@ const SCRIPT_VARIANTS: Record<string, ScriptVariant[]> = {
       request: ({ product }) =>
         `Thanks for completing the ${product} collaboration. The content is performing well enough that we’re looking at putting ad spend behind it, which typically means more reach and more commission on your side. We’ll keep you posted, and we’d be glad to work together on the next product.`,
     },
+    {
+      id: "completed-commission-note",
+      label: "感谢 + 佣金结算（自用模板8）",
+      angle: "你现用的完成感谢信：说明佣金什么时候结、请达人反馈用码情况。",
+      request: (context) => {
+        const { terms } = context;
+        const window = terms.commissionWindow
+          ? ` Attribution runs for ${terms.commissionWindow} from the post date.`
+          : "";
+        return [
+          `Thank you for putting together such a great review.`,
+          terms.collabModel === "discount-code"
+            ? `I’ll reach out as soon as we see orders come through with ${codePhrase(context)}, and commission is paid out the following month once sales land.${window}`
+            : `I’ll reach out as soon as we see orders come through your product link, and commission is paid out the following month once sales land.${window}`,
+          `If anyone in your audience mentions they used it, do let me know so I can double-check it was tracked.`,
+        ].join(" ");
+      },
+    },
   ],
 
   "Failed Archive Confirmation": [
@@ -534,13 +765,73 @@ const SCRIPT_VARIANTS: Record<string, ScriptVariant[]> = {
   ],
 };
 
+/**
+ * Scenarios that continue an existing email thread. Giving these a fresh
+ * subject line splits the conversation and loses the context the creator
+ * already has, so the composer shows a note instead.
+ */
+const IN_THREAD_SCENARIOS = new Set([
+  "No Reply Follow-up",
+  "Second Follow-up",
+  "Collaboration Details Confirmation",
+  "Order Instructions",
+  "Order Number Reminder",
+  "Address Confirmation",
+  "Sample In Transit Reminder",
+  "Logistics Exception Confirmation",
+  "Sample Delivered Follow-up",
+  "Partial Video Completion Follow-up",
+  "Needs Revision Reminder",
+  "Final Follow-up Before Failed Candidate",
+  "Creator Reply Follow-up",
+  "Light Follow-up",
+]);
+
+const SUBJECT_BUILDERS: Record<string, (context: ScriptContext) => string> = {
+  "First Outreach": ({ product }) => `Collab invitation — ${product}`,
+  "Re-engagement Outreach": ({ product }) => `New campaign round — ${product}`,
+  "TCM Follow-up": ({ product }) => `TikTok collab invitation — ${product}`,
+  "Completed Thank You": ({ product }) =>
+    `Thank you — ${product} collaboration`,
+  "Failed Archive Confirmation": ({ product }) =>
+    `Closing out the ${product} collaboration`,
+};
+
+/**
+ * Keys match `GeneratedMessage` exactly, because the result is spread straight
+ * into it — a mismatch here would silently produce no subject at all.
+ */
+export type EmailSubjectResult = {
+  emailSubject?: string;
+  /** Chinese instruction shown when the message belongs in an existing thread. */
+  emailThreadNote?: string;
+};
+
+/**
+ * The subject line for an email, or the reason there isn’t one. Only meaningful
+ * for the Email channel; other channels have no subject.
+ */
+export function emailSubjectFor(
+  scenario: string,
+  context: ScriptContext,
+): EmailSubjectResult {
+  if (IN_THREAD_SCENARIOS.has(scenario)) {
+    return {
+      emailThreadNote:
+        "直接回复上一封邮件，保持同一个线程，不要新开主题。收件人更容易接上上下文，也不容易被当成新的推广邮件。",
+    };
+  }
+  const builder = SUBJECT_BUILDERS[scenario];
+  return builder ? { emailSubject: builder(context) } : {};
+}
+
 export function getScriptVariants(scenario: string): ScriptVariant[] {
   return SCRIPT_VARIANTS[scenario] ?? [];
 }
 
 /**
  * Resolves a requested variant index against what the scenario actually has.
- * Wraps around so the UI's "换一个说法" button can increment forever, and
+ * Wraps around so the UI’s "换一个说法" button can increment forever, and
  * returns 0 for scenarios with no variant table.
  */
 export function resolveVariantIndex(scenario: string, index: number): number {

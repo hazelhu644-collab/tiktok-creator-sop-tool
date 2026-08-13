@@ -17,6 +17,10 @@ Built with ChatGPT + Codex for creator collaboration operations.
 - Multiple script angles per scenario, switchable per creator
 - Relationship-tier tone layering for outreach messages
 - Product-category presets covering pet, beauty, home, kitchen, apparel, electronics, baby, food, and fitness
+- Two collaboration models: TikTok Shop affiliate link, or discount code with creator-placed orders
+- TikTok Creator Marketplace intake as a distinct outreach path
+- Email subject lines, with in-thread follow-ups kept on the original subject
+- FTC disclosure and content-usage clauses in every filming brief
 - SOP-based collaboration status management
 - Multi-stage creator pipeline
 - Local creator workflow and message generation without required API keys
@@ -222,6 +226,35 @@ Outreach-stage messages take an extra tone layer chosen per creator — 冷启�
 Logistics, revision, and final-confirmation messages stay neutral at every tier
 so the required action stays unambiguous.
 
+Collaboration models:
+
+A campaign is either `affiliate-link` (TikTok Shop product link, brand ships the
+sample) or `discount-code` (personal creator code, audience discount, commission
+attributed through the code). Order method is configured separately: the brand
+ships, or the creator places the order themselves with a code covering the full
+cost and sends back an order number before anything is shipped. Commission
+rates, discounts, attribution windows, and codes are stated in the copy only
+when the campaign has actually set them.
+
+Creator source:
+
+Creators are either found by outreach or arrive through TikTok Creator
+Marketplace. TCM creators have already opted in, so they get a follow-up on the
+accepted invitation rather than a cold pitch — including a direct answer to the
+common question about why the marketplace shows a particular fee.
+
+Email subjects:
+
+Email is the only channel with a subject line. First contact and campaign
+milestones get a fresh subject; follow-ups deliberately get none, and the
+composer shows a note to reply inside the existing thread instead.
+
+Compliance:
+
+Every full brief asks for an `#ad` or branded-content disclosure, which US
+creators need under FTC endorsement guidance. Campaigns that set a content-usage
+window also state it in the brief. Both are configurable per campaign.
+
 Product categories:
 
 A campaign's category preset supplies the default filming requirements and the
@@ -339,6 +372,10 @@ Demo mode is the recommended way to give public demonstrations, take screenshots
 - Multi-angle script library with a per-creator variant switcher
 - Relationship-tier tone layering for outreach scripts
 - Product-category presets and lexicons for non-pet campaigns
+- Discount-code collaboration model with a creator-placed-order pipeline
+- TikTok Creator Marketplace source field and dedicated follow-up scripts
+- Email subject-line generation and in-thread follow-up handling
+- FTC disclosure and content-usage clauses in the filming brief
 
 ### Planned
 
