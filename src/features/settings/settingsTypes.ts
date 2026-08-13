@@ -4,7 +4,7 @@ export type SettingsPromptHelperField =
   | "sellingPoints"
   | "videoCount"
   | "durationRequirement"
-  | "targetPetOrScene"
+  | "targetSceneOrAudience"
   | "mustShowShots"
   | "avoidShots"
   | "referenceLinks";

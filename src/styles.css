@@ -87,6 +87,9 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
   font-size: .78rem;
   font-weight: 900;
 }
+.variant-switcher { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 8px; }
+.variant-switcher label { display: grid; gap: 6px; min-width: 200px; color: #536071; font-size: .82rem; font-weight: 850; }
+.variant-switcher .variant-count { font-variant-numeric: tabular-nums; padding-bottom: 10px; }
 .spreadsheet-wrap { border-radius: 10px; max-height: calc(100vh - 260px); }
 .spreadsheet-table { min-width: 1900px; border-collapse: collapse; border-spacing: 0; }
 .spreadsheet-table th, .spreadsheet-table td { padding: 5px 7px; vertical-align: middle; }

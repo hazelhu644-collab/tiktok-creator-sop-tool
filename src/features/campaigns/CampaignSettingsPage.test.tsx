@@ -43,6 +43,8 @@ function createProps(
         keyContentPointsText: "Show steam",
         productLinkRequirementText: "Tag the product",
         referenceLinksText: "https://example.com/reference",
+        categoryId: "pet",
+        categoryIsDetected: false,
       },
       campaignOptions: [
         { value: "terrapaw::pet-brush", label: "TerraPaw · Pet Brush" },
@@ -68,6 +70,8 @@ function createProps(
       deleteCampaign: vi.fn(),
       assignStore: vi.fn(),
       renameProduct: vi.fn(),
+      selectCategory: vi.fn(),
+      applyCategoryPreset: vi.fn(),
       updateKeyContentPoints: vi.fn(),
       updateSellingPoints: vi.fn(),
       updateVideoLength: vi.fn(),

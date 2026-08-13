@@ -1,3 +1,7 @@
+import {
+  PRODUCT_CATEGORIES,
+  type ProductCategoryId,
+} from "../../productCategories";
 import type { CampaignSettingsPageProps } from "./campaignSettingsTypes";
 
 export function CampaignSettingsPage({
@@ -122,6 +126,38 @@ export function CampaignSettingsPage({
                 onChange={(event) => actions.renameProduct(event.target.value)}
               />
             </label>
+            <label>
+              产品品类
+              <select
+                value={target.categoryId}
+                onChange={(event) =>
+                  actions.selectCategory(
+                    event.target.value as ProductCategoryId,
+                  )
+                }
+              >
+                {PRODUCT_CATEGORIES.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={actions.applyCategoryPreset}
+              >
+                套用品类预设
+              </button>
+              <span className="muted">
+                {target.categoryIsDetected
+                  ? "当前品类由产品名称自动识别，选择后即固定。"
+                  : "品类决定英文话术里的用词和默认拍摄要求。"}
+                套用预设会覆盖必须展示内容、卖点、时长数量和避免事项。
+              </span>
+            </div>
             <label>
               必须展示内容
               <textarea

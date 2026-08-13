@@ -54,7 +54,7 @@ export function SettingsPage({ data, uiState, actions }: SettingsPageProps) {
             {textField("sellingPoints", "产品卖点")}
             {textField("videoCount", "目标视频数量")}
             {textField("durationRequirement", "单条视频时长要求")}
-            {textField("targetPetOrScene", "目标宠物 / 使用场景")}
+            {textField("targetSceneOrAudience", "目标使用场景 / 人群")}
             {textField("mustShowShots", "必须展示的画面")}
             {textField("avoidShots", "不希望达人这样拍")}
             <label>

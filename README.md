@@ -14,6 +14,9 @@ Built with ChatGPT + Codex for creator collaboration operations.
 - Daily creator follow-up task list
 - Sample delivery and video progress tracking
 - AI-assisted creator message generation
+- Multiple script angles per scenario, switchable per creator
+- Relationship-tier tone layering for outreach messages
+- Product-category presets covering pet, beauty, home, kitchen, apparel, electronics, baby, food, and fitness
 - SOP-based collaboration status management
 - Multi-stage creator pipeline
 - Local creator workflow and message generation without required API keys
@@ -204,6 +207,29 @@ Channel style:
 - Email: more complete and structured
 - WhatsApp: conversational but slightly more detailed than TikTok DM
 
+Script angles:
+
+Each scenario carries several angles instead of one fixed template, so a batch
+of creators does not receive byte-identical messages. Angle 1 is the neutral
+default and matches the wording the tool has always produced; the composer's
+"换一个说法" button cycles through the rest. Angles change the approach, never
+the campaign facts.
+
+Relationship tiers:
+
+Outreach-stage messages take an extra tone layer chosen per creator — 冷启动,
+腰部达人, 头部达人, or 老合作达人 — which adjusts the opening and closing only.
+Logistics, revision, and final-confirmation messages stay neutral at every tier
+so the required action stays unambiguous.
+
+Product categories:
+
+A campaign's category preset supplies the default filming requirements and the
+Chinese-to-English lexicon used to build the brief. The category is chosen in
+campaign settings, or inferred from the product name for campaigns saved before
+categories existed. A Chinese content point that has no translation falls back
+to the category's English wording rather than being dropped from the message.
+
 ---
 
 ## Tech Stack
@@ -310,6 +336,9 @@ Demo mode is the recommended way to give public demonstrations, take screenshots
 - Multi-store and multi-product campaign configuration
 - Safe Demo Mode with isolated fake data (`?demo=1`)
 - Direct in-app OpenAI filming-requirements draft generation
+- Multi-angle script library with a per-creator variant switcher
+- Relationship-tier tone layering for outreach scripts
+- Product-category presets and lexicons for non-pet campaigns
 
 ### Planned
 

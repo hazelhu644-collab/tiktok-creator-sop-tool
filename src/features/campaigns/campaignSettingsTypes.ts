@@ -1,3 +1,4 @@
+import type { ProductCategoryId } from "../../productCategories";
 import type { Campaign, Store } from "../../types";
 
 export type CampaignSettingsOption = {
@@ -16,6 +17,10 @@ export type CampaignSettingsTargetView = {
   keyContentPointsText: string;
   productLinkRequirementText: string;
   referenceLinksText: string;
+  /** Explicit category if set, otherwise the one detected from the product. */
+  categoryId: ProductCategoryId;
+  /** True when the category was inferred rather than chosen by the operator. */
+  categoryIsDetected: boolean;
 };
 
 export type CampaignStoreCleanupView = {
@@ -46,6 +51,9 @@ export type CampaignSettingsActions = {
   deleteCampaign: () => void;
   assignStore: (storeId: string) => void;
   renameProduct: (productName: string) => void;
+  selectCategory: (categoryId: ProductCategoryId) => void;
+  /** Overwrite the filming fields with the current category's preset. */
+  applyCategoryPreset: () => void;
   updateKeyContentPoints: (value: string) => void;
   updateSellingPoints: (value: string) => void;
   updateVideoLength: (value: string) => void;

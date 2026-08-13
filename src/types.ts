@@ -1,3 +1,5 @@
+import type { ProductCategoryId } from "./productCategories";
+
 export type Priority = "Highest" | "High" | "Medium" | "Low" | "None";
 
 export type Channel =
@@ -106,6 +108,8 @@ export type UrgencyLevel = "极高" | "高" | "中" | "低" | "归档";
 
 export type CommunicationAction =
   | "未合作邀约"
+  | "老达人再建联"
+  | "确认收货信息"
   | "样品运输中，提前沟通拍摄要求"
   | "样品在路上，提醒达人提前规划拍摄内容"
   | "提醒达人注意签收并准备拍摄"
@@ -120,6 +124,15 @@ export type CommunicationAction =
   | "合作完成维护"
   | "合作失败归档";
 
+/** One selectable script angle for the current scenario. */
+export type MessageVariantOption = {
+  id: string;
+  /** Chinese label shown on the variant switcher. */
+  label: string;
+  /** One-line Chinese description of when to pick this angle. */
+  angle: string;
+};
+
 export type GeneratedMessage = {
   english: string;
   chineseExplanation: string;
@@ -127,6 +140,10 @@ export type GeneratedMessage = {
   scenarioReason: string;
   urgencyLevel: UrgencyLevel;
   communicationAction: CommunicationAction;
+  /** Which angle produced `english`. 0 when the scenario has no variants. */
+  variantIndex: number;
+  /** Every angle available for this scenario, in switcher order. */
+  variants: MessageVariantOption[];
 };
 
 export type Campaign = {
@@ -134,6 +151,12 @@ export type Campaign = {
   productId?: string;
   storeId?: string;
   storeName?: string;
+  /**
+   * Which product-category preset supplies the English lexicon and filming
+   * defaults. Campaigns saved before categories existed leave this unset and
+   * the category is inferred from the product name and content.
+   */
+  categoryId?: ProductCategoryId;
   productName: string;
   sellingPoints: string;
   requirements: string[];

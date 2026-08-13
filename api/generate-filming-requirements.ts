@@ -3,11 +3,18 @@ type GenerateFilmingRequirementsRequest = {
   sellingPoints?: string;
   videoCount?: string;
   durationRequirement?: string;
+  targetSceneOrAudience?: string;
+  /** Former name of `targetSceneOrAudience`, still sent by already-loaded tabs. */
   targetPetOrScene?: string;
   mustShowShots?: string;
   avoidShots?: string;
   referenceLinks?: string;
 };
+
+/** The request with every field resolved, minus the legacy alias. */
+type NormalizedRequest = Required<
+  Omit<GenerateFilmingRequirementsRequest, "targetPetOrScene">
+>;
 
 type GenerateFilmingRequirementsResponse = {
   productName: string;
@@ -53,21 +60,22 @@ function fallbackProductName(productName: string): string {
   return productName || "未命名产品";
 }
 
-function buildPrompt(
-  input: Required<GenerateFilmingRequirementsRequest>,
-): string {
-  return `请基于以下产品信息，为美国 TikTok Shop 达人生成一版「达人拍摄要求」草稿。\n\n产品名称：${input.productName}\n产品卖点：${input.sellingPoints}\n目标视频数量：${input.videoCount}\n单条视频时长要求：${input.durationRequirement}\n目标宠物 / 使用场景：${input.targetPetOrScene}\n必须展示的画面：${input.mustShowShots}\n不希望达人这样拍：${input.avoidShots}\n参考视频链接（可选）：${input.referenceLinks}\n\n输出要求：\n- 只输出 JSON，不要 Markdown，不要解释。\n- JSON 结构必须是 {"productName":"string","requirements":["string"],"priorities":["string"]}。\n- productName 使用表单里的产品名称。\n- requirements 必须包含：每位达人 X 条视频、每条视频 XX 秒以上、必须 tag 品牌账号、必须挂 TikTok Shop 产品链接。\n- requirements 可加入其它必要要求，但总数控制在 5 到 8 条。\n- priorities 生成 5 到 8 条简洁内容重点，基于卖点、场景、必须展示画面和避免事项。\n- 全部使用简体中文。\n- 风格清晰、实用、适合 TikTok Shop 达人沟通，不要像正式合同。`;
+function buildPrompt(input: NormalizedRequest): string {
+  return `请基于以下产品信息，为美国 TikTok Shop 达人生成一版「达人拍摄要求」草稿。\n\n产品名称：${input.productName}\n产品卖点：${input.sellingPoints}\n目标视频数量：${input.videoCount}\n单条视频时长要求：${input.durationRequirement}\n目标使用场景 / 人群：${input.targetSceneOrAudience}\n必须展示的画面：${input.mustShowShots}\n不希望达人这样拍：${input.avoidShots}\n参考视频链接（可选）：${input.referenceLinks}\n\n输出要求：\n- 只输出 JSON，不要 Markdown，不要解释。\n- JSON 结构必须是 {"productName":"string","requirements":["string"],"priorities":["string"]}。\n- productName 使用表单里的产品名称。\n- requirements 必须包含：每位达人 X 条视频、每条视频 XX 秒以上、必须 tag 品牌账号、必须挂 TikTok Shop 产品链接。\n- requirements 可加入其它必要要求，但总数控制在 5 到 8 条。\n- priorities 生成 5 到 8 条简洁内容重点，基于卖点、场景、必须展示画面和避免事项。\n- 全部使用简体中文。\n- 风格清晰、实用、适合 TikTok Shop 达人沟通，不要像正式合同。`;
 }
 
 function buildRequiredInput(
   body: GenerateFilmingRequirementsRequest,
-): Required<GenerateFilmingRequirementsRequest> {
+): NormalizedRequest {
   return {
     productName: fallbackProductName(cleanText(body.productName)),
     sellingPoints: cleanText(body.sellingPoints) || "未提供",
     videoCount: cleanText(body.videoCount) || "2",
     durationRequirement: cleanText(body.durationRequirement) || "60 秒以上",
-    targetPetOrScene: cleanText(body.targetPetOrScene) || "日常真实使用场景",
+    targetSceneOrAudience:
+      cleanText(body.targetSceneOrAudience) ||
+      cleanText(body.targetPetOrScene) ||
+      "日常真实使用场景",
     mustShowShots: cleanText(body.mustShowShots) || "产品使用过程和效果",
     avoidShots: cleanText(body.avoidShots) || "避免夸大效果或过度硬广",
     referenceLinks: cleanText(body.referenceLinks) || "未提供",
@@ -84,7 +92,7 @@ function normalizeStringList(value: unknown): string[] {
 
 function ensureCoreRequirements(
   requirements: string[],
-  input: Required<GenerateFilmingRequirementsRequest>,
+  input: NormalizedRequest,
 ): string[] {
   const coreRequirements = [
     `每位达人 ${input.videoCount} 条视频`,
@@ -105,7 +113,7 @@ function ensureCoreRequirements(
 
 function validateGeneratedJson(
   value: unknown,
-  input: Required<GenerateFilmingRequirementsRequest>,
+  input: NormalizedRequest,
 ): GenerateFilmingRequirementsResponse | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -125,7 +133,7 @@ function validateGeneratedJson(
 }
 
 async function requestOpenAiDraft(
-  input: Required<GenerateFilmingRequirementsRequest>,
+  input: NormalizedRequest,
 ): Promise<GenerateFilmingRequirementsResponse> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {

@@ -23,6 +23,8 @@ function createProps(
         scenarioReason: "达人确认可以发布",
         urgencyLevel: "中",
         communicationAction: "回复达人消息",
+        variantIndex: 0,
+        variants: [],
       },
       messageSource: "local",
       chineseExplanation: "",
@@ -41,6 +43,7 @@ function createProps(
       replyTone: "中立专业",
       replyGoal: "确认发布时间",
       replyConcession: "可以周五发布",
+      creatorTier: "冷启动",
       showNextCreatorPrompt: false,
       messageOutputRef: createRef<HTMLDivElement>(),
     },
@@ -59,6 +62,9 @@ function createProps(
       setRelationshipNote: vi.fn(),
       setReplyGoal: vi.fn(),
       setReplyConcession: vi.fn(),
+      setCreatorTier: vi.fn(),
+      selectMessageVariant: vi.fn(),
+      cycleMessageVariant: vi.fn(),
       updateEnglishMessage: vi.fn(),
       copyEnglishMessage: vi.fn(),
       markMessageSent: vi.fn(),
@@ -219,5 +225,59 @@ describe("MessageComposer", () => {
 
     await user.click(screen.getByRole("button", { name: "留在当前达人" }));
     expect(props.actions.stayOnCurrentCreator).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the variant switcher when the scenario has only one angle", () => {
+    render(<MessageComposer {...createProps()} />);
+
+    expect(screen.queryByTestId("variant-switcher")).not.toBeInTheDocument();
+  });
+
+  it("lists every script angle and forwards switcher callbacks", async () => {
+    const user = userEvent.setup();
+    const base = createProps();
+    const props = createProps({
+      data: {
+        ...base.data,
+        message: {
+          ...base.data.message!,
+          variantIndex: 1,
+          variants: [
+            { id: "a", label: "标准介绍", angle: "中立说明合作机会。" },
+            {
+              id: "b",
+              label: "直接给条件",
+              angle: "开门见山讲达人能拿到什么。",
+            },
+            { id: "c", label: "极简低压", angle: "两句话问是否有兴趣。" },
+          ],
+        },
+      },
+    });
+    render(<MessageComposer {...props} />);
+
+    const switcher = screen.getByTestId("variant-switcher");
+    expect(switcher).toBeInTheDocument();
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    // The angle hint describes the currently selected variant, not the first.
+    expect(screen.getByText("开门见山讲达人能拿到什么。")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("话术角度"), {
+      target: { value: "2" },
+    });
+    expect(props.actions.selectMessageVariant).toHaveBeenCalledWith(2);
+
+    await user.click(screen.getByRole("button", { name: "换一个说法" }));
+    expect(props.actions.cycleMessageVariant).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards the creator tier selection", () => {
+    const props = createProps();
+    render(<MessageComposer {...props} />);
+
+    fireEvent.change(screen.getByLabelText("达人关系层级"), {
+      target: { value: "头部达人" },
+    });
+    expect(props.actions.setCreatorTier).toHaveBeenCalledWith("头部达人");
   });
 });
