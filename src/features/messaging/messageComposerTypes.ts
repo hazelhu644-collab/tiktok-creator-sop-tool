@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import type { ReplyTone } from "../../messageGenerator";
+import type { CreatorTier } from "../../messageVariants";
 import type { Channel, GeneratedMessage } from "../../types";
 
 export type MessageComposerLoadingAction =
@@ -30,6 +31,7 @@ export type MessageComposerUiState = {
   replyTone: ReplyTone;
   replyGoal: string;
   replyConcession: string;
+  creatorTier: CreatorTier;
   showNextCreatorPrompt: boolean;
   messageOutputRef: RefObject<HTMLDivElement | null>;
 };
@@ -49,8 +51,14 @@ export type MessageComposerActions = {
   setRelationshipNote: (value: string) => void;
   setReplyGoal: (value: string) => void;
   setReplyConcession: (value: string) => void;
+  setCreatorTier: (value: CreatorTier) => void;
+  /** Jump to a specific script angle for the current scenario. */
+  selectMessageVariant: (index: number) => void;
+  /** Advance to the next script angle, wrapping at the end. */
+  cycleMessageVariant: () => void;
   updateEnglishMessage: (value: string) => void;
   copyEnglishMessage: () => void;
+  copyEmailSubject: () => void;
   markMessageSent: () => void;
   markCreatorReplied: () => void;
   markCreatorNoReply: () => void;

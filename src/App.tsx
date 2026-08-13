@@ -33,11 +33,14 @@ import {
 } from "./sopRules";
 import {
   CHANNELS,
+  defaultCollaborationTerms,
   defaultCreatorFilmingRequirements,
   generateMessage,
   type CreatorFilmingRequirements,
   type ReplyTone,
 } from "./messageGenerator";
+import { DEFAULT_CREATOR_TIER, type CreatorTier } from "./messageVariants";
+import { detectProductCategory, getProductCategory } from "./productCategories";
 import {
   ALL_STORES,
   DEFAULT_STORE_ID,
@@ -788,6 +791,14 @@ function App() {
   const [replyTone, setReplyTone] = useState<ReplyTone>("中立专业");
   const [replyGoal, setReplyGoal] = useState("");
   const [replyConcession, setReplyConcession] = useState("");
+  /**
+   * Which script angle the local generator should use. Reset whenever the
+   * selected creator changes so a new creator starts from the default wording
+   * rather than inheriting the previous creator's angle.
+   */
+  const [messageVariantIndex, setMessageVariantIndex] = useState(0);
+  const [creatorTier, setCreatorTier] =
+    useState<CreatorTier>(DEFAULT_CREATOR_TIER);
   const [templateForm, setTemplateForm] = useState<TemplateForm>(
     () => emptyTemplateForm,
   );
@@ -805,7 +816,7 @@ function App() {
     sellingPoints: "",
     videoCount: "",
     durationRequirement: "",
-    targetPetOrScene: "",
+    targetSceneOrAudience: "",
     mustShowShots: "",
     avoidShots: "",
     referenceLinks: "",
@@ -967,6 +978,7 @@ function App() {
           replyGoal,
           acceptableConcession: replyConcession,
         },
+        { variantIndex: messageVariantIndex, creatorTier },
       ),
     [
       channel,
@@ -977,6 +989,8 @@ function App() {
       replyTone,
       replyGoal,
       replyConcession,
+      messageVariantIndex,
+      creatorTier,
     ],
   );
   const scopedRows = useMemo(
@@ -1226,6 +1240,7 @@ function App() {
     setIsTranslationEditing(false);
     // The message for the newly selected creator is derived, not assigned.
     setMessageOverride(null);
+    setMessageVariantIndex(0);
     scrollToCurrentCreator();
   }
 
@@ -1707,6 +1722,7 @@ function App() {
             replyTone,
             replyGoal,
             replyConcession,
+            creatorTier,
             showNextCreatorPrompt,
             messageOutputRef: messageAreaRef,
           },
@@ -1729,8 +1745,13 @@ function App() {
             setRelationshipNote: setReplyRelationshipNote,
             setReplyGoal,
             setReplyConcession,
+            setCreatorTier: handleSelectCreatorTier,
+            selectMessageVariant: handleSelectMessageVariant,
+            cycleMessageVariant: handleCycleMessageVariant,
             updateEnglishMessage: updateGeneratedEnglishMessage,
             copyEnglishMessage: () => void handleCopyGeneratedMessage(),
+            copyEmailSubject: () =>
+              void copyText(message?.emailSubject ?? "", "已复制邮件主题。"),
             markMessageSent: handleMarkMessageSent,
             markCreatorReplied: handleMarkCreatorReplied,
             markCreatorNoReply,
@@ -1984,6 +2005,7 @@ function App() {
     );
     setSelectedCreatorId(firstMatch?.id ?? "");
     setMessageOverride(null);
+    setMessageVariantIndex(0);
     setShowNextCreatorPrompt(false);
     scrollToQueue();
   }
@@ -2246,6 +2268,26 @@ function App() {
     setSelectedCreatorId(selectedTask.id);
     setIsQueueExpanded(false);
     scrollToMessageArea();
+  }
+
+  /**
+   * Switching angle or tier regenerates the local message, so any hand-edited
+   * override has to be dropped first — otherwise the override would keep
+   * showing the old wording and the switch would look broken.
+   */
+  function handleSelectMessageVariant(index: number) {
+    setMessageOverride(null);
+    setMessageVariantIndex(index);
+  }
+
+  function handleCycleMessageVariant() {
+    setMessageOverride(null);
+    setMessageVariantIndex((current) => current + 1);
+  }
+
+  function handleSelectCreatorTier(tier: CreatorTier) {
+    setMessageOverride(null);
+    setCreatorTier(tier);
   }
 
   function updateGeneratedEnglishMessage(english: string) {
@@ -2704,7 +2746,7 @@ function App() {
       sellingPoints: "",
       videoCount: String(parseRequiredVideos(helperRequirements)),
       durationRequirement: "",
-      targetPetOrScene: "",
+      targetSceneOrAudience: "",
       mustShowShots: "",
       avoidShots: "",
       referenceLinks:
@@ -2717,7 +2759,7 @@ function App() {
   }
 
   function buildChatGptPrompt() {
-    return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。\n\n【产品信息】\n- 产品名称：${activeFilmingRequirements.productName}\n- 产品卖点：${promptHelperForm.sellingPoints || "请补充"}\n- 目标视频数量：${promptHelperForm.videoCount || requiredVideos}\n- 单条视频时长要求：${promptHelperForm.durationRequirement || "40s+"}\n- 目标宠物 / 使用场景：${promptHelperForm.targetPetOrScene || "真实宠物使用场景"}\n- 必须展示的画面：${promptHelperForm.mustShowShots || "开箱、使用过程、CTA"}\n- 不希望达人这样拍：${promptHelperForm.avoidShots || "避免违规表述"}\n- 对标视频链接（可选）：${promptHelperForm.referenceLinks || "无"}\n\n请按以下结构输出，全部使用简体中文：\n1. 产品名称\n2. 达人拍摄要求\n3. 重点拍摄内容`;
+    return `请你作为熟悉美国 TikTok Shop 达人合作沟通的内容运营，基于下面的产品信息，生成一版可以直接发给达人的中文「达人拍摄要求」。\n\n【产品信息】\n- 产品名称：${activeFilmingRequirements.productName}\n- 产品卖点：${promptHelperForm.sellingPoints || "请补充"}\n- 目标视频数量：${promptHelperForm.videoCount || requiredVideos}\n- 单条视频时长要求：${promptHelperForm.durationRequirement || "40s+"}\n- 目标使用场景 / 人群：${promptHelperForm.targetSceneOrAudience || "真实日常使用场景"}\n- 必须展示的画面：${promptHelperForm.mustShowShots || "开箱、使用过程、CTA"}\n- 不希望达人这样拍：${promptHelperForm.avoidShots || "避免违规表述"}\n- 对标视频链接（可选）：${promptHelperForm.referenceLinks || "无"}\n\n请按以下结构输出，全部使用简体中文：\n1. 产品名称\n2. 达人拍摄要求\n3. 重点拍摄内容`;
   }
 
   async function generateFilmingRequirementsWithAi() {
@@ -2749,7 +2791,7 @@ function App() {
           sellingPoints: promptHelperForm.sellingPoints,
           videoCount: promptHelperForm.videoCount || String(requiredVideos),
           durationRequirement: promptHelperForm.durationRequirement,
-          targetPetOrScene: promptHelperForm.targetPetOrScene,
+          targetSceneOrAudience: promptHelperForm.targetSceneOrAudience,
           mustShowShots: promptHelperForm.mustShowShots,
           avoidShots: promptHelperForm.avoidShots,
           referenceLinks: promptHelperForm.referenceLinks,
@@ -4055,6 +4097,28 @@ function App() {
               .filter(Boolean)
               .join("\n"),
             referenceLinksText: listToText(targetCampaign.referenceLinks),
+            categoryId:
+              targetCampaign.categoryId ??
+              detectProductCategory(
+                targetCampaign.productName,
+                targetCampaign.sellingPoints,
+                targetCampaign.keyContentPoints,
+              ),
+            categoryIsDetected: !targetCampaign.categoryId,
+            collabModel:
+              targetCampaign.collabModel ??
+              defaultCollaborationTerms.collabModel,
+            discountCode: targetCampaign.discountCode ?? "",
+            audienceDiscount: targetCampaign.audienceDiscount ?? "",
+            creatorCommission: targetCampaign.creatorCommission ?? "",
+            commissionWindow: targetCampaign.commissionWindow ?? "",
+            orderMethod:
+              targetCampaign.orderMethod ??
+              defaultCollaborationTerms.orderMethod,
+            contentUsageMonths: targetCampaign.contentUsageMonths ?? "",
+            requiresDisclosure:
+              targetCampaign.requiresDisclosure ??
+              defaultCollaborationTerms.requiresDisclosure,
           }
         : null;
 
@@ -4123,6 +4187,41 @@ function App() {
                 if (targetCampaign)
                   updateCampaignProductName(targetCampaign, productName);
               },
+              selectCategory: (categoryId) => updateCampaign({ categoryId }),
+              applyCategoryPreset: () => {
+                if (!campaignSettingsTarget) return;
+                const category = getProductCategory(
+                  campaignSettingsTarget.categoryId,
+                );
+                updateCampaign({
+                  categoryId: category.id,
+                  keyContentPoints: category.defaultKeyContentPoints,
+                  sellingPoints: category.defaultSellingPoints,
+                  videoLength: category.defaultVideoLength,
+                  videoCount: category.defaultVideoCount,
+                  avoidShots: category.defaultAvoidShots,
+                });
+                setToast({
+                  tone: "success",
+                  text: `已套用「${category.label}」预设拍摄要求。`,
+                });
+              },
+              selectCollabModel: (collabModel) =>
+                updateCampaign({ collabModel }),
+              selectOrderMethod: (orderMethod) =>
+                updateCampaign({ orderMethod }),
+              updateDiscountCode: (discountCode) =>
+                updateCampaign({ discountCode }),
+              updateAudienceDiscount: (audienceDiscount) =>
+                updateCampaign({ audienceDiscount }),
+              updateCreatorCommission: (creatorCommission) =>
+                updateCampaign({ creatorCommission }),
+              updateCommissionWindow: (commissionWindow) =>
+                updateCampaign({ commissionWindow }),
+              updateContentUsageMonths: (contentUsageMonths) =>
+                updateCampaign({ contentUsageMonths }),
+              setRequiresDisclosure: (requiresDisclosure) =>
+                updateCampaign({ requiresDisclosure }),
               updateKeyContentPoints: (value) =>
                 updateCampaign({ keyContentPoints: normalizeListText(value) }),
               updateSellingPoints: (value) =>

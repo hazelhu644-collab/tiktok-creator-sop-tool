@@ -3,7 +3,8 @@ import {
   type CreatorFilmingRequirements,
 } from "./messageGenerator";
 import { demoCampaigns, isDemoMode } from "./demoMode";
-import type { CreatorRow, Campaign, Store } from "./types";
+import { detectProductCategory, getProductCategory } from "./productCategories";
+import type { CollaborationTerms, CreatorRow, Campaign, Store } from "./types";
 
 export const CAMPAIGNS_STORAGE_KEY = "tiktok-creator-sop-tool.campaigns.v1";
 export const DEFAULT_STORE_ID = "default-store";
@@ -46,6 +47,7 @@ export function normalizeStore(input: {
 
 const PRESET_REQUIREMENTS: Record<string, Partial<Campaign>> = {
   宠物蒸汽梳毛器: {
+    categoryId: "pet",
     sellingPoints: "蒸汽软化浮毛，梳毛同时收集毛发，日常护理场景自然。",
     requirements: [
       "每位达人 2 条视频",
@@ -64,6 +66,7 @@ const PRESET_REQUIREMENTS: Record<string, Partial<Campaign>> = {
     tagRequirement: "必须 tag 品牌账号；必须挂 TikTok Shop 产品链接",
   },
   逗猫棒: {
+    categoryId: "pet",
     sellingPoints: "弹性互动强，铃铛和羽毛/尾巴细节适合展示猫咪真实反应。",
     requirements: ["每位达人 2 条视频", "必须挂 TikTok Shop 产品链接"],
     keyContentPoints: [
@@ -76,6 +79,7 @@ const PRESET_REQUIREMENTS: Record<string, Partial<Campaign>> = {
     tagRequirement: "必须挂 TikTok Shop 产品链接",
   },
   宠物清洁手套: {
+    categoryId: "pet",
     sellingPoints: "适合外出回家、饭后、日常清洁等前后对比场景。",
     requirements: [
       "每位达人 2 条视频",
@@ -175,19 +179,26 @@ export function createCampaignFromName(
 ): Campaign {
   const productName = normalizeName(name) || fallback.productName;
   const preset = PRESET_REQUIREMENTS[productName] ?? {};
+  // Named product presets win; otherwise the detected category fills the
+  // filming fields so a new campaign in any category starts with usable
+  // defaults instead of the pet-specific fallback.
+  const category = getProductCategory(detectProductCategory(productName));
   return {
     id: campaignId,
     productId,
     storeId,
     storeName: normalizeStoreName(storeName),
+    categoryId: preset.categoryId ?? category.id,
     productName,
-    sellingPoints: preset.sellingPoints ?? "",
+    sellingPoints: preset.sellingPoints ?? category.defaultSellingPoints,
     requirements: preset.requirements ?? fallback.requirements,
-    keyContentPoints: preset.keyContentPoints ?? fallback.keyContentPoints,
-    avoidShots: preset.avoidShots ?? "",
+    keyContentPoints:
+      preset.keyContentPoints ?? category.defaultKeyContentPoints,
+    avoidShots: preset.avoidShots ?? category.defaultAvoidShots,
     videoCount:
       preset.videoCount ??
       fallback.videoCount ??
+      category.defaultVideoCount ??
       String(
         (preset.requirements ?? fallback.requirements)
           .join("\n")
@@ -199,6 +210,7 @@ export function createCampaignFromName(
       (preset.requirements ?? fallback.requirements).find((item) =>
         item.includes("秒"),
       ) ??
+      category.defaultVideoLength ??
       "",
     tagRequirement:
       preset.tagRequirement ??
@@ -379,6 +391,35 @@ export function campaignToFilmingRequirements(
       ? campaign.keyContentPoints
       : fallback.keyContentPoints,
     referenceLinks,
+    categoryId: campaign.categoryId ?? fallback.categoryId,
+    terms: campaignTerms(campaign, fallback),
+  };
+}
+
+/**
+ * Commercial terms for a campaign. Anything the campaign leaves unset falls
+ * through to the saved fallback and then to the affiliate-link defaults, so
+ * campaigns created before collaboration models existed keep their behavior.
+ */
+function campaignTerms(
+  campaign: Campaign,
+  fallback: CreatorFilmingRequirements,
+): Partial<CollaborationTerms> {
+  const fallbackTerms = fallback.terms ?? {};
+  return {
+    collabModel: campaign.collabModel ?? fallbackTerms.collabModel,
+    discountCode: campaign.discountCode ?? fallbackTerms.discountCode,
+    audienceDiscount:
+      campaign.audienceDiscount ?? fallbackTerms.audienceDiscount,
+    creatorCommission:
+      campaign.creatorCommission ?? fallbackTerms.creatorCommission,
+    commissionWindow:
+      campaign.commissionWindow ?? fallbackTerms.commissionWindow,
+    orderMethod: campaign.orderMethod ?? fallbackTerms.orderMethod,
+    contentUsageMonths:
+      campaign.contentUsageMonths ?? fallbackTerms.contentUsageMonths,
+    requiresDisclosure:
+      campaign.requiresDisclosure ?? fallbackTerms.requiresDisclosure,
   };
 }
 

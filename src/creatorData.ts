@@ -232,7 +232,9 @@ export type EditableCreatorField =
   | "lastMessageSentAt"
   | "lastHandledDate"
   | "nextFollowUpDate"
-  | "lastCreatorResponse";
+  | "lastCreatorResponse"
+  | "source"
+  | "orderNumber";
 
 function getBrowserStorage(): Storage | null {
   if (typeof window === "undefined") return null;

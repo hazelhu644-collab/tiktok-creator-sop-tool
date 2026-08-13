@@ -1,4 +1,5 @@
 import type { ReplyTone } from "../../messageGenerator";
+import { CREATOR_TIERS, type CreatorTier } from "../../messageVariants";
 import type { MessageComposerProps } from "./messageComposerTypes";
 
 export function MessageComposer({
@@ -30,9 +31,12 @@ export function MessageComposer({
     replyTone,
     replyGoal,
     replyConcession,
+    creatorTier,
     showNextCreatorPrompt,
     messageOutputRef,
   } = uiState;
+  const variants = message?.variants ?? [];
+  const activeVariant = variants[message?.variantIndex ?? 0];
 
   return (
     <section className="reply-panel" data-testid="reply-handling-panel">
@@ -194,7 +198,25 @@ export function MessageComposer({
                 <option>最后确认</option>
               </select>
             </label>
+            <label>
+              达人关系层级
+              <select
+                value={creatorTier}
+                onChange={(event) =>
+                  actions.setCreatorTier(event.target.value as CreatorTier)
+                }
+              >
+                {CREATOR_TIERS.map((tier) => (
+                  <option key={tier} value={tier}>
+                    {tier}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
+          <p className="muted compact-helper">
+            关系层级只调整建联类话术的开场和收尾语气，不改变物流、修改和最后确认这类需要明确表述的消息。
+          </p>
           <details
             className="advanced-reply-settings"
             open={advancedReplyOpen}
@@ -253,6 +275,66 @@ export function MessageComposer({
                   ? "DeepSeek 优化版"
                   : "免费本地话术"}
               </p>
+              {variants.length > 1 && (
+                <div
+                  className="variant-switcher"
+                  data-testid="variant-switcher"
+                >
+                  <label>
+                    话术角度
+                    <select
+                      value={message.variantIndex}
+                      onChange={(event) =>
+                        actions.selectMessageVariant(Number(event.target.value))
+                      }
+                    >
+                      {variants.map((variant, index) => (
+                        <option key={variant.id} value={index}>
+                          {variant.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={actions.cycleMessageVariant}
+                  >
+                    换一个说法
+                  </button>
+                  <span className="muted variant-count">
+                    {message.variantIndex + 1} / {variants.length}
+                  </span>
+                </div>
+              )}
+              {activeVariant && (
+                <p className="muted compact-helper">{activeVariant.angle}</p>
+              )}
+              {message.emailSubject && (
+                <div className="email-subject" data-testid="email-subject">
+                  <label htmlFor="generated-email-subject">邮件主题</label>
+                  <input
+                    id="generated-email-subject"
+                    readOnly
+                    value={message.emailSubject}
+                  />
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={actions.copyEmailSubject}
+                  >
+                    复制主题
+                  </button>
+                </div>
+              )}
+              {message.emailThreadNote && (
+                <p
+                  className="muted compact-helper"
+                  data-testid="email-thread-note"
+                >
+                  {message.emailThreadNote}
+                </p>
+              )}
               <label className="sr-only" htmlFor="generated-english-message">
                 英文话术
               </label>

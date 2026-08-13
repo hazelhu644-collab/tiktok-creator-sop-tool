@@ -152,7 +152,33 @@ const COLUMN_ALIASES: Record<
     "达人回复",
     "下一步备注",
   ],
+  source: ["source", "creator source", "达人来源", "来源", "渠道来源", "tcm"],
+  orderNumber: [
+    "order number",
+    "order no",
+    "order id",
+    "订单号",
+    "订单编号",
+    "下单号",
+  ],
 };
+
+/**
+ * Spreadsheets write the marketplace source many ways. Anything recognizable as
+ * TikTok Creator Marketplace becomes "TCM"; everything else stays as typed so a
+ * team's own labels survive the round trip.
+ */
+function normalizeCreatorSource(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) return "";
+  if (
+    /^(tcm|creator marketplace|tiktok creator marketplace)$/i.test(normalized)
+  )
+    return "TCM";
+  if (/creator\s*marketplace|创作者市场|达人广场/i.test(normalized))
+    return "TCM";
+  return normalized;
+}
 
 const FOLLOW_UP_ALIASES = [
   "last follow-up count",
@@ -256,6 +282,8 @@ export function normalizeRecord(
     lastHandledDate: pickValue(record, COLUMN_ALIASES.lastHandledDate),
     nextFollowUpDate: pickValue(record, COLUMN_ALIASES.nextFollowUpDate),
     lastCreatorResponse: pickValue(record, COLUMN_ALIASES.lastCreatorResponse),
+    source: normalizeCreatorSource(pickValue(record, COLUMN_ALIASES.source)),
+    orderNumber: pickValue(record, COLUMN_ALIASES.orderNumber),
     followUpHistory: [],
   };
 }
