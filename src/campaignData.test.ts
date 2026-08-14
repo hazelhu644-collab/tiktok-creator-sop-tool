@@ -246,3 +246,34 @@ describe("outreach rounds", () => {
     expect(rowsInRound(rows, campaign, 2).map((r) => r.id)).toEqual(["c", "d"]);
   });
 });
+
+describe("createCampaignFromName category defaults", () => {
+  it("starts a detected non-pet campaign from its own category preset", () => {
+    // The app-wide fallback is the pet configuration. Preferring it meant a
+    // kitchen product opened with the pet preset's 60-second requirement.
+    const campaign = createCampaignFromName("空气炸锅");
+
+    expect(campaign.categoryId).toBe("kitchen");
+    expect(campaign.videoLength).toBe("每条视频 45 秒以上");
+    expect(campaign.requirements).toContain("每条视频 45 秒以上");
+    expect(campaign.requirements).not.toContain("每条视频 60 秒以上");
+    expect(campaign.keyContentPoints).toContain("展示烹饪过程");
+  });
+
+  it("still honours a named product preset over the category", () => {
+    const campaign = createCampaignFromName("宠物蒸汽梳毛器");
+
+    expect(campaign.categoryId).toBe("pet");
+    expect(campaign.videoLength).toBe("每条视频 60 秒以上");
+    expect(campaign.keyContentPoints).toContain("展示开雾");
+  });
+
+  it("prefers a fallback the operator actually customised", () => {
+    const campaign = createCampaignFromName("空气炸锅", {
+      ...defaultCreatorFilmingRequirements,
+      videoLength: "每条视频 90 秒以上",
+    });
+
+    expect(campaign.videoLength).toBe("每条视频 90 秒以上");
+  });
+});

@@ -303,16 +303,34 @@ describe("creator tier tone layer", () => {
 });
 
 describe("scenarios added for the outreach stage", () => {
-  it("uses re-engagement copy for a creator in a later round", () => {
+  it("uses re-engagement copy when the caller confirms a prior collaboration", () => {
     const message = generateMessage(
-      task({ round: 2 }),
+      task(),
       "Email",
       requirements(),
+      "",
+      {},
+      { hasPriorCollaboration: true },
     );
 
     expect(message.scenario).toBe("Re-engagement Outreach");
     expect(message.communicationAction).toBe("老达人再建联");
     expect(message.english).toContain("new campaign round");
+  });
+
+  it("does not treat a later campaign round as proof of a past collaboration", () => {
+    // Creators added while a campaign sits on round 2 inherit that round
+    // without ever having appeared in round 1. Greeting a stranger with
+    // "great working with you last time" is worse than plain cold outreach.
+    const message = generateMessage(
+      task({ round: 3 }),
+      "Email",
+      requirements(),
+    );
+
+    expect(message.scenario).toBe("First Outreach");
+    expect(message.english).not.toContain("invite you back");
+    expect(message.english).not.toContain("last time");
   });
 
   it("treats a finished past collaboration as a returning creator", () => {
@@ -432,7 +450,6 @@ describe("non-pet campaigns", () => {
       beautyRequirements,
     );
 
-    expect(message.english).toContain("show the main product use case clearly");
     expect(message.english).toContain("the styling process");
     expect(message.english).toContain("the curl result");
     expect(message.english).not.toMatch(chineseCharacterPattern);

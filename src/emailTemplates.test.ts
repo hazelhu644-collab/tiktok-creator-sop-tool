@@ -382,3 +382,32 @@ describe("the imported templates stay English-only and unique", () => {
     });
   });
 });
+
+describe("sample request confirmation wording", () => {
+  it("never claims approval before the sample has been approved", () => {
+    // The scenario fires on "Sample Requested"; "Sample Approved" routes
+    // elsewhere. Promising approval here sets a false shipping expectation.
+    getScriptVariants("Sample Request Confirmation").forEach(
+      (_, variantIndex) => {
+        const { english, scenario } = generateMessage(
+          task({ currentStatus: "Sample Requested" }),
+          "Email",
+          requirements(),
+          "",
+          {},
+          { variantIndex },
+        );
+
+        expect(scenario).toBe("Sample Request Confirmation");
+        // "Once it's approved we'll ship it" is fine — explicitly conditional.
+        // Approval stated as an accomplished fact is not. Dropping the
+        // conditional clauses first keeps the check on the claims themselves.
+        const claims = english.replace(/\b(?:once|when|after)\b[^.]*\./gi, "");
+
+        expect(claims).not.toMatch(/approved/i);
+        expect(claims).not.toMatch(/request is confirmed/i);
+        expect(claims).not.toMatch(/moving into shipping/i);
+      },
+    );
+  });
+});

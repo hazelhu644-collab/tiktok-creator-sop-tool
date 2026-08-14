@@ -9,7 +9,7 @@ import {
   detectProductCategory,
   getProductCategory,
   translateAvoidShots,
-  translateContentPoints,
+  translateContentPointsDetailed,
   translateProductName,
   type ProductCategoryId,
 } from "./productCategories";
@@ -102,6 +102,12 @@ export type MessageGenerationOptions = {
   variantIndex?: number;
   /** Relationship tier driving how hard the message pushes. */
   creatorTier?: CreatorTier;
+  /**
+   * True when another creator record shows a finished collaboration with the
+   * same person. Only the caller can know this — it requires looking across
+   * rows, and a returning creator gets a fresh row for each outreach round.
+   */
+  hasPriorCollaboration?: boolean;
 };
 
 export type ReplyTone = "中立专业" | "友好一点" | "坚定推进" | "最后确认";
@@ -277,12 +283,21 @@ function clearlyMeetsFinalFailedCandidateConditions(
 }
 
 /**
- * A creator we have already worked with, either because the campaign has moved
- * to a later outreach round or because their history shows a finished
- * collaboration. Re-contacting them warrants a different opening than a cold DM.
+ * A creator we have actually worked with before. Re-contacting them warrants a
+ * different opening than a cold DM.
+ *
+ * The campaign's round number is deliberately NOT used: creators added while a
+ * campaign sits on round 2 inherit that round without ever having appeared in
+ * round 1, and telling a stranger "great working with you last time" is worse
+ * than sending them plain cold outreach. A genuine returning creator gets a
+ * fresh row each round, so the evidence lives either in this row's own history
+ * or in `hasPriorCollaboration`, which the caller derives from the other rows.
  */
-function isReturningCreator(task: Task): boolean {
-  if ((task.round ?? 1) > 1) return true;
+function isReturningCreator(
+  task: Task,
+  hasPriorCollaboration: boolean,
+): boolean {
+  if (hasPriorCollaboration) return true;
   return Boolean(
     task.followUpHistory?.some(
       (entry) => entry.action === "Completed" || entry.action === "Archived",
@@ -332,6 +347,8 @@ export function classifyCreatorFollowUp(
   task: Task,
   configuredRequiredVideos = 2,
   terms: CollaborationTerms = defaultCollaborationTerms,
+  /** True when another record shows a finished collaboration with this creator. */
+  hasPriorCollaboration = false,
 ): CreatorFollowUpClassification {
   const progress = progressForTask(task, configuredRequiredVideos);
   const postedCount = progress.postedCount ?? 0;
@@ -547,11 +564,11 @@ export function classifyCreatorFollowUp(
   }
 
   if (isFirstOutreach) {
-    if (isReturningCreator(task)) {
+    if (isReturningCreator(task, hasPriorCollaboration)) {
       return {
         urgencyLevel: "低",
         communicationAction: "老达人再建联",
-        reason: `该达人已有历史合作记录或属于第 ${task.round ?? 1} 轮建联，适合用老达人再建联话术而不是冷启动邀约。`,
+        reason: `该达人已有完成或归档的历史合作记录，适合用老达人再建联话术而不是冷启动邀约。`,
         highRisk: false,
       };
     }
@@ -594,6 +611,7 @@ function scenarioForTask(
   task: Task,
   configuredRequiredVideos: number,
   terms: CollaborationTerms,
+  hasPriorCollaboration: boolean,
 ): MessageScenario {
   const progress = progressForTask(task, configuredRequiredVideos);
   const postedCount = progress.postedCount ?? 0;
@@ -606,6 +624,7 @@ function scenarioForTask(
     task,
     configuredRequiredVideos,
     terms,
+    hasPriorCollaboration,
   );
   const withClassification = (
     scenario: string,
@@ -882,21 +901,29 @@ function shortFilmingReminder(
   return `Please follow the filming requirements we shared${referenceDirection}, and ${linkRequirement.replace(/^please\s+/i, "")}.`;
 }
 
+/** Which configured field the brief's content points come from. */
+function briefContentSource(
+  filmingRequirements: CreatorFilmingRequirements,
+): string[] {
+  return filmingRequirements.requiredScenes &&
+    filmingRequirements.requiredScenes !==
+      defaultCreatorFilmingRequirements.requiredScenes
+    ? filmingRequirements.requiredScenes.split(/[；;\n]/)
+    : filmingRequirements.keyContentPoints;
+}
+
 function fullFilmingBriefLine(
   task: Task,
   filmingRequirements: CreatorFilmingRequirements,
   categoryId: ProductCategoryId,
   terms: CollaborationTerms,
 ): string {
-  const contentSource =
-    filmingRequirements.requiredScenes &&
-    filmingRequirements.requiredScenes !==
-      defaultCreatorFilmingRequirements.requiredScenes
-      ? filmingRequirements.requiredScenes.split(/[；;\n]/)
-      : filmingRequirements.keyContentPoints;
   // Falls back to the category's English content points rather than dropping
   // the clause, which is what used to happen for every non-pet campaign.
-  const contentPoints = translateContentPoints(contentSource, categoryId);
+  const contentPoints = translateContentPointsDetailed(
+    briefContentSource(filmingRequirements),
+    categoryId,
+  ).points;
   const sellingPoints = englishOnly(filmingRequirements.sellingPoints);
   const videoLength =
     englishOnly(filmingRequirements.videoLength) ||
@@ -1006,6 +1033,7 @@ export function generateMessage(
     task,
     configuredRequiredVideos,
     terms,
+    options.hasPriorCollaboration ?? false,
   );
   const { scenario, highRisk } = scenarioSelection;
   const name = creatorGreeting(task.username);
@@ -1147,6 +1175,10 @@ export function generateMessage(
       hasReferenceLinks,
       variant?.label,
       tier,
+      translateContentPointsDetailed(
+        briefContentSource(filmingRequirements),
+        categoryId,
+      ).untranslated,
     ),
     scenario,
     scenarioReason: scenarioSelection.reason,
@@ -2159,6 +2191,7 @@ function buildChineseExplanation(
   hasReferenceLinks: boolean,
   variantLabel?: string,
   tier?: CreatorTier,
+  untranslatedContentPoints: string[] = [],
 ): string {
   const channelNote: Record<Channel, string> = {
     "TikTok DM": "TikTok DM 版本更短、更自然，适合快速提醒，不会显得强势。",
@@ -2211,7 +2244,15 @@ function buildChineseExplanation(
       ? ` 按「${tier}」调整了开场和收尾的语气强度。`
       : "";
 
-  return `这条消息用于「${scenarioNotes[scenario] ?? scenario}」场景。语气保持专业、冷静、直接，符合美国本地 TikTok Shop affiliate campaign management 的沟通方式。${channelNote[channel]}${referenceLinksNote}${variantNote}${tierNote}`;
+  // The operator is the only one who can fix an untranslatable content point,
+  // and they cannot fix what they cannot see — a silently shortened brief is
+  // how a required shot goes missing.
+  const untranslatedNote =
+    untranslatedContentPoints.length > 0 && isGuidelineScenario(scenario)
+      ? ` 注意：有 ${untranslatedContentPoints.length} 条「必须展示内容」无法翻译成英文（${untranslatedContentPoints.slice(0, 3).join("、")}），已用品类通用文案补位。建议在产品设置里改写成常见说法或直接写英文，否则达人收不到这几条要求。`
+      : "";
+
+  return `这条消息用于「${scenarioNotes[scenario] ?? scenario}」场景。语气保持专业、冷静、直接，符合美国本地 TikTok Shop affiliate campaign management 的沟通方式。${channelNote[channel]}${referenceLinksNote}${variantNote}${tierNote}${untranslatedNote}`;
 }
 
 function removeChineseCharacters(value: string): string {
