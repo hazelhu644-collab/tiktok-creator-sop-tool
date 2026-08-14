@@ -792,18 +792,57 @@ export function joinEnglishList(items: string[]): string {
  * This is the function that fixes the silent-drop bug: if nothing survives
  * translation the category's own English fallbacks are returned instead.
  */
+export type ContentPointTranslation = {
+  /** Points to put in the brief: what translated, topped up with fallbacks. */
+  points: string[];
+  /** The configured Chinese points that had no translation. */
+  untranslated: string[];
+};
+
+/**
+ * Translates a list of content points and reports what it could not handle.
+ *
+ * A partly-translatable brief is the dangerous case: if one point translates,
+ * the untranslatable ones used to disappear with no trace, so a
+ * safety-critical shot could silently never reach the creator. Any gap is now
+ * topped up with the category's own English guidance, and the dropped points
+ * are returned so the operator can be told to rewrite them.
+ */
+export function translateContentPointsDetailed(
+  points: string[],
+  categoryId: ProductCategoryId | string | undefined,
+  limit = 4,
+): ContentPointTranslation {
+  const category = getProductCategory(categoryId);
+  const translated: string[] = [];
+  const untranslated: string[] = [];
+
+  points.forEach((point) => {
+    if (!point.trim()) return;
+    const english = translateContentPoint(point, category.id);
+    if (english) translated.push(english);
+    else untranslated.push(point.trim());
+  });
+
+  const filled = [...translated];
+  // Only top up when something was actually lost, so a fully-translated brief
+  // is never padded with generic filler.
+  if (untranslated.length > 0) {
+    for (const fallback of category.fallbackContentPoints) {
+      if (filled.length >= limit) break;
+      if (!filled.includes(fallback)) filled.push(fallback);
+    }
+  }
+
+  return { points: filled.slice(0, limit), untranslated };
+}
+
 export function translateContentPoints(
   points: string[],
   categoryId: ProductCategoryId | string | undefined,
   limit = 4,
 ): string[] {
-  const category = getProductCategory(categoryId);
-  const translated = points
-    .map((point) => translateContentPoint(point, category.id))
-    .filter(Boolean);
-
-  if (translated.length > 0) return translated.slice(0, limit);
-  return category.fallbackContentPoints.slice(0, limit);
+  return translateContentPointsDetailed(points, categoryId, limit).points;
 }
 
 /**

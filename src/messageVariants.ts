@@ -444,15 +444,18 @@ const SCRIPT_VARIANTS: Record<string, ScriptVariant[]> = {
       id: "sample-confirm-with-prep",
       label: "确认 + 提前预告要求",
       angle: "趁等待期把拍摄要求先铺垫一遍，缩短到货后的沟通。",
+      // This scenario fires on "Sample Requested", before anyone has approved
+      // anything. Saying "approved" creates a shipping expectation we have not
+      // earned yet.
       request: ({ product }) =>
-        `Thanks for requesting the ${product} sample — it’s approved and being processed on our side. While it ships, it’s worth skimming the filming brief so you can plan the content in advance. Nothing needs to be posted until the sample arrives.`,
+        `Thanks for requesting the ${product} sample — it’s with us for review. While that’s in progress, it’s worth skimming the filming brief so you can plan the content in advance. Nothing needs to be posted until the sample arrives.`,
     },
     {
       id: "sample-confirm-timeline",
       label: "确认 + 给时间预期",
       angle: "主动给物流预期，减少达人反复来问。",
       request: ({ product }) =>
-        `Your ${product} sample request is confirmed and moving into shipping on our side. You’ll get the tracking update once it goes out. If it hasn’t moved after a few days, message us and we’ll check it.`,
+        `We have your ${product} sample request and it’s in the review queue on our side. Once it’s approved we’ll get it shipped and send you the tracking. If you haven’t heard anything after a few days, message us and we’ll chase it.`,
     },
   ],
 

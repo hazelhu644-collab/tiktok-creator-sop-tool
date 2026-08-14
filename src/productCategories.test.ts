@@ -3,6 +3,7 @@ import {
   PRODUCT_CATEGORIES,
   detectProductCategory,
   getProductCategory,
+  translateContentPointsDetailed,
   translateAvoidShots,
   translateContentPoint,
   translateContentPoints,
@@ -186,5 +187,44 @@ describe("translateAvoidShots", () => {
       "avoid studio lighting",
     );
     expect(translateAvoidShots("", "home")).toBe("");
+  });
+});
+
+describe("translateContentPointsDetailed", () => {
+  it("reports which points had no translation", () => {
+    const result = translateContentPointsDetailed(
+      ["展示开箱", "必须展示儿童防夹手设计"],
+      "general",
+    );
+
+    expect(result.untranslated).toEqual(["必须展示儿童防夹手设计"]);
+  });
+
+  it("tops up the gap when only some points translate", () => {
+    // The dangerous case: one good point used to make the untranslatable ones
+    // vanish with no trace, so a safety shot never reached the creator.
+    const result = translateContentPointsDetailed(
+      ["展示开箱", "必须展示儿童防夹手设计"],
+      "baby",
+    );
+
+    expect(result.points).toContain("show the unboxing");
+    expect(result.points.length).toBeGreaterThan(1);
+    result.points.forEach((point) =>
+      expect(point).not.toMatch(chineseCharacterPattern),
+    );
+  });
+
+  it("does not pad a brief that translated cleanly", () => {
+    const result = translateContentPointsDetailed(
+      ["展示开箱", "展示使用过程"],
+      "general",
+    );
+
+    expect(result.untranslated).toEqual([]);
+    expect(result.points).toEqual([
+      "show the unboxing",
+      "show the product in use",
+    ]);
   });
 });

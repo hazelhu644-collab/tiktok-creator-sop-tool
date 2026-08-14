@@ -959,6 +959,40 @@ function App() {
     [campaignForRow, activeFilmingRequirements],
   );
   /**
+   * Creators we have finished a collaboration with before, keyed by handle.
+   *
+   * A returning creator gets a fresh record each outreach round, so their new
+   * record carries no history of its own — only a sweep across every record can
+   * tell a genuine returning creator apart from someone newly added while the
+   * campaign happens to sit on a later round.
+   */
+  const priorCollaborationHandles = useMemo(() => {
+    const handles = new Set<string>();
+    rows.forEach((row) => {
+      const handle = row.username.trim().toLowerCase().replace(/^@/, "");
+      if (!handle) return;
+      const finished =
+        row.archiveReason === "Completed" ||
+        /completed/i.test(row.currentStatus) ||
+        row.followUpHistory?.some((entry) => entry.action === "Completed");
+      if (finished) handles.add(handle);
+    });
+    return handles;
+  }, [rows]);
+  const hasPriorCollaborationWith = useCallback(
+    (row: CreatorRow): boolean => {
+      const handle = row.username.trim().toLowerCase().replace(/^@/, "");
+      if (!handle || !priorCollaborationHandles.has(handle)) return false;
+      // The record that finished the earlier collaboration is not itself a
+      // returning creator, so ignore a match against the row we are looking at.
+      return !(
+        row.archiveReason === "Completed" ||
+        /completed/i.test(row.currentStatus)
+      );
+    },
+    [priorCollaborationHandles],
+  );
+  /**
    * Builds the message the local rules produce for a task. Memoized and hoisted
    * above `selectedTask` so the derived `localMessage` below can depend on it.
    */
@@ -978,7 +1012,11 @@ function App() {
           replyGoal,
           acceptableConcession: replyConcession,
         },
-        { variantIndex: messageVariantIndex, creatorTier },
+        {
+          variantIndex: messageVariantIndex,
+          creatorTier,
+          hasPriorCollaboration: hasPriorCollaborationWith(task),
+        },
       ),
     [
       channel,
@@ -991,6 +1029,7 @@ function App() {
       replyConcession,
       messageVariantIndex,
       creatorTier,
+      hasPriorCollaborationWith,
     ],
   );
   const scopedRows = useMemo(

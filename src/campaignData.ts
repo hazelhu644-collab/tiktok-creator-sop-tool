@@ -108,6 +108,15 @@ function normalizeName(name: string): string {
   return name.trim();
 }
 
+/** Whether a list still matches the app-wide default, i.e. was never customised. */
+function sameList(value: string[] | undefined, appDefault: string[]): boolean {
+  if (!value) return true;
+  return (
+    value.length === appDefault.length &&
+    value.every((item, index) => item === appDefault[index])
+  );
+}
+
 export function campaignIdFromName(name: string): string {
   const normalized = normalizeName(name) || "未命名产品";
   return (
@@ -179,10 +188,41 @@ export function createCampaignFromName(
 ): Campaign {
   const productName = normalizeName(name) || fallback.productName;
   const preset = PRESET_REQUIREMENTS[productName] ?? {};
-  // Named product presets win; otherwise the detected category fills the
-  // filming fields so a new campaign in any category starts with usable
-  // defaults instead of the pet-specific fallback.
   const category = getProductCategory(detectProductCategory(productName));
+  /**
+   * Precedence for a filming field: a named product preset, then anything the
+   * operator customised in the global fallback, then the detected category.
+   *
+   * The middle step matters because `fallback` is seeded from the app-wide pet
+   * defaults. Preferring it unconditionally meant a newly created air fryer was
+   * correctly detected as kitchen but still opened with the pet preset's
+   * 60-second requirement. Only a fallback the operator actually changed is
+   * more specific than the category preset.
+   */
+  const pick = (
+    presetValue: string | undefined,
+    fallbackValue: string | undefined,
+    appDefault: string,
+    categoryValue: string,
+  ): string => {
+    if (presetValue) return presetValue;
+    if (fallbackValue && fallbackValue !== appDefault) return fallbackValue;
+    return categoryValue || fallbackValue || appDefault;
+  };
+  const categoryRequirements = [
+    category.defaultVideoCount,
+    category.defaultVideoLength,
+    "必须 tag 品牌账号",
+    "必须挂 TikTok Shop 产品链接",
+  ].filter(Boolean);
+  const requirements =
+    preset.requirements ??
+    (sameList(
+      fallback.requirements,
+      defaultCreatorFilmingRequirements.requirements,
+    )
+      ? categoryRequirements
+      : fallback.requirements);
   return {
     id: campaignId,
     productId,
@@ -190,28 +230,28 @@ export function createCampaignFromName(
     storeName: normalizeStoreName(storeName),
     categoryId: preset.categoryId ?? category.id,
     productName,
-    sellingPoints: preset.sellingPoints ?? category.defaultSellingPoints,
-    requirements: preset.requirements ?? fallback.requirements,
+    sellingPoints: pick(
+      preset.sellingPoints,
+      fallback.sellingPoints,
+      defaultCreatorFilmingRequirements.sellingPoints,
+      category.defaultSellingPoints,
+    ),
+    requirements,
     keyContentPoints:
       preset.keyContentPoints ?? category.defaultKeyContentPoints,
     avoidShots: preset.avoidShots ?? category.defaultAvoidShots,
-    videoCount:
-      preset.videoCount ??
-      fallback.videoCount ??
-      category.defaultVideoCount ??
-      String(
-        (preset.requirements ?? fallback.requirements)
-          .join("\n")
-          .match(/(\d+)\s*条视频/)?.[1] ?? "2",
-      ),
-    videoLength:
-      preset.videoLength ??
-      fallback.videoLength ??
-      (preset.requirements ?? fallback.requirements).find((item) =>
-        item.includes("秒"),
-      ) ??
-      category.defaultVideoLength ??
-      "",
+    videoCount: pick(
+      preset.videoCount,
+      fallback.videoCount,
+      defaultCreatorFilmingRequirements.videoCount,
+      category.defaultVideoCount,
+    ),
+    videoLength: pick(
+      preset.videoLength,
+      fallback.videoLength,
+      defaultCreatorFilmingRequirements.videoLength,
+      category.defaultVideoLength,
+    ),
     tagRequirement:
       preset.tagRequirement ??
       fallback.productLinkRequirement ??
